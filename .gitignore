@@ -10,4 +10,4 @@ nul
 .freebuff/
 
 # generated at build time
-ssd_temp_monitor_version.rc
+ssd_temp_monitor_version.txt
