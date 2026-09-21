@@ -41,7 +41,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.10.0"         # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.11.0"         # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -58,6 +58,30 @@ TEMP_MIN, TEMP_MAX = -20, 100
 CONFIG_FILE = os.path.join(
     os.environ.get("APPDATA", os.path.expanduser("~")),
     "SSDTempMonitor", "config.json")
+# digit fonts offered in Settings (name shown -> (file, family) for PIL/tk).
+# "Segoe UI"/Tahoma ship with every Windows 10/11 install; the other two
+# gracefully fall back to Arial when absent.
+FONT_FILES = {
+    "auto": ("arialbd.ttf", "Segoe UI"),
+    "Arial": ("arialbd.ttf", "Arial"),
+    "Segoe UI": ("segoeuib.ttf", "Segoe UI"),
+    "Tahoma": ("tahoma.ttf", "Tahoma"),
+    "Verdana": ("verdanab.ttf", "Verdana"),
+}
+
+
+def _is_hex_color(value):
+    """True for "#rgb" or "#rrggbb" strings."""
+    s = str(value).strip()
+    if not s.startswith("#") or len(s) not in (4, 7):
+        return False
+    try:
+        int(s[1:], 16)
+        return True
+    except ValueError:
+        return False
+
+
 DEFAULT_SETTINGS = {
     "poll_seconds": 1,
     "alert_threshold": 65,
@@ -73,6 +97,10 @@ DEFAULT_SETTINGS = {
     "icon_size": 64,                          # tray icon edge in px
     "high_contrast_icon": False,              # black pill + white border
     "language": "en",                         # UI language: "en" or "th"
+    "icon_font": "auto",                     # digit font (auto = Arial bold)
+    "icon_digit_color": "auto",              # digit color (auto = by contrast)
+    "icon_text_dx": 0,                       # digit offset X in px (-50..50)
+    "icon_text_dy": 0,                       # digit offset Y in px (-50..50)
 }
 
 
@@ -99,6 +127,15 @@ def _validate_settings(cfg):
         out["icon_size"] = DEFAULT_SETTINGS["icon_size"]
     out["high_contrast_icon"] = bool(out["high_contrast_icon"])
     out["language"] = ("th" if out["language"] == "th" else "en")
+    out["icon_font"] = (out["icon_font"] if out["icon_font"] in FONT_FILES
+                        or out["icon_font"] == "auto" else "auto")
+    dc = str(out["icon_digit_color"]).strip()
+    out["icon_digit_color"] = dc if dc == "auto" or _is_hex_color(dc) else "auto"
+    for key in ("icon_text_dx", "icon_text_dy"):
+        try:
+            out[key] = min(50, max(-50, int(out[key])))
+        except (TypeError, ValueError):
+            out[key] = 0
     if not str(out["github_repo"]).strip():
         out["github_repo"] = DEFAULT_SETTINGS["github_repo"]
     else:
@@ -171,6 +208,7 @@ STRINGS = {
         "menu.updates": "Check for updates...",
         "menu.settings": "Settings...",
         "menu.about": "About",
+        "menu.language": "Language",
         "menu.history": "Record history",
         "menu.exit": "Exit",
         "notify.no_update": "No update information available.",
@@ -208,6 +246,13 @@ STRINGS = {
         "settings.cooldown": "Alert cooldown (minutes, 1-120)",
         "settings.history": "History window (minutes, 5-240)",
         "settings.check_interval": "Update check interval (minutes, 5-1440)",
+        "settings.font": "Digit font",
+        "settings.digit_color": "Digit color (auto or #rrggbb)",
+        "settings.dx": "Digit offset X (px, -50..50)",
+        "settings.dy": "Digit offset Y (px, -50..50)",
+        "settings.preview": "Preview:",
+        "settings.bad_color": ("Digit color must be 'auto' or a hex color\n"
+                               "like #ffd166."),
         "settings.record": "Record history on startup",
         "settings.channel": "Update channel",
         "settings.icon_size": "Icon size (px, 16-128)",
@@ -244,6 +289,7 @@ STRINGS = {
         "menu.updates": "ตรวจหาการอัปเดต...",
         "menu.settings": "ตั้งค่า...",
         "menu.about": "เกี่ยวกับ",
+        "menu.language": "ภาษา",
         "menu.history": "บันทึกประวัติ",
         "menu.exit": "ออกจากโปรแกรม",
         "notify.no_update": "ไม่พบข้อมูลการอัปเดต",
@@ -280,6 +326,13 @@ STRINGS = {
         "settings.cooldown": "ช่วงเว้นการแจ้งซ้ำ (นาที, 1-120)",
         "settings.history": "ความยาวประวัติ (นาที, 5-240)",
         "settings.check_interval": "ช่วงเวลาตรวจอัปเดต (นาที, 5-1440)",
+        "settings.font": "ฟอนต์ตัวเลข",
+        "settings.digit_color": "สีตัวเลข (auto หรือ #rrggbb)",
+        "settings.dx": "เลื่อนตัวเลขแกน X (px, -50..50)",
+        "settings.dy": "เลื่อนตัวเลขแกน Y (px, -50..50)",
+        "settings.preview": "ตัวอย่าง:",
+        "settings.bad_color": ("สีตัวเลขต้องเป็น 'auto' หรือโค้ดสี\n"
+                               "แบบ #ffd166"),
         "settings.record": "บันทึกประวัติตอนเปิดโปรแกรม",
         "settings.channel": "ช่องทางอัปเดต",
         "settings.icon_size": "ขนาดไอคอน (px, 16-128)",
@@ -785,13 +838,16 @@ def _pill_text_color(pill):
     return (17, 17, 27, 255) if lum > 150 else (255, 255, 255, 255)
 
 
-def _icon_font(size, text):
-    """Bold font scaled so the digits fill the pill but never overflow it.
+def _icon_font(size, text, font_key=None):
+    """Bold font for tray digits, scaled to fill the pill without overflow.
 
+    font_key selects the typeface (see FONT_FILES; "auto" = Arial bold).
     Three-digit temperatures (or a wide string) shrink to fit the pill's
-    inner width; everything else renders as large as the pill allows.
+    inner width. Results are cached per (size, text, font).
     """
-    key = ("font", size, text)
+    font_key = font_key or SETTINGS.get("icon_font", "auto")
+    font_file = FONT_FILES.get(font_key, FONT_FILES["auto"])[0]
+    key = ("font", size, text, font_file)
     cached = _ICON_CACHE.get(key)
     if cached is not None:
         return cached
@@ -799,11 +855,11 @@ def _icon_font(size, text):
     margin = max(4, size // 12)
     max_w = size - 2 * margin
     try:
-        font = ImageFont.truetype("arialbd.ttf", px)
+        font = ImageFont.truetype(font_file, px)
         bbox = font.getbbox(text)
         w = bbox[2] - bbox[0]
         if w > max_w:
-            font = ImageFont.truetype("arialbd.ttf",
+            font = ImageFont.truetype(font_file,
                                       max(8, int(px * max_w / w)))
     except OSError:
         font = ImageFont.load_default()
@@ -821,17 +877,25 @@ def make_icon(text, color, size=None, high_contrast=None):
     """Render the tray temperature icon.
 
     size: icon edge in px (default ICON_SIZE). The colored pill fills
-    nearly the whole icon so the temperature digits get maximum area;
-    digit color adapts to the pill (dark on green/orange, white on red)
-    and a subtle same-color stroke keeps the digits crisp at small sizes.
-    high_contrast swaps the pill for black with a white border so it stays
-    readable on light/white taskbars. Results are cached.
+    nearly the whole icon. Digit font, digit color and position all come
+    from Settings: "icon_font" (see FONT_FILES, "auto" = Arial bold),
+    "icon_digit_color" ("auto" = contrast-picked, or "#rrggbb") and
+    "icon_text_dx"/"icon_text_dy" pixel offsets from center.
+    Digit color adapts to the pill when auto (dark on green/orange, white
+    on red) and a subtle same-color stroke keeps digits crisp at small
+    sizes. high_contrast swaps the pill for black with a white border so
+    it stays readable on light/white taskbars. Results are cached.
     """
     if size is None:
         size = ICON_SIZE
     if high_contrast is None:
         high_contrast = bool(SETTINGS.get("high_contrast_icon"))
-    key = (text, color, size, high_contrast)
+    font_key = SETTINGS.get("icon_font", "auto")
+    digit_color_setting = str(SETTINGS.get("icon_digit_color", "auto"))
+    dx = int(SETTINGS.get("icon_text_dx", 0) or 0)
+    dy = int(SETTINGS.get("icon_text_dy", 0) or 0)
+    key = (text, color, size, high_contrast, font_key,
+           digit_color_setting, dx, dy)
     cached = _ICON_CACHE.get(key)
     if cached is not None:
         return cached
@@ -848,11 +912,25 @@ def make_icon(text, color, size=None, high_contrast=None):
         pill = color
         d.rounded_rectangle([margin, margin, size - 1 - margin, size - 1 - margin],
                             radius=max(4, size // 5), fill=pill)
-    font = _icon_font(size, text)
-    text_color = _pill_text_color(pill)
+    font = _icon_font(size, text, font_key)
+    if _is_hex_color(digit_color_setting):
+        h = digit_color_setting.lstrip("#")
+        rgb = tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+        text_color = (rgb + (255,)) if len(rgb) == 3 else rgb
+    else:
+        text_color = _pill_text_color(pill)
     stroke = max(1, size // 26)
     bbox = d.textbbox((0, 0), text, font=font, stroke_width=stroke)
-    d.text(_text_xy(size, bbox, size), text, font=font, fill=text_color,
+    w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    # center the INK box (not the layout box) inside the icon
+    cx = (size - w) / 2 - bbox[0]
+    cy = (size - h) / 2 - bbox[1]
+    # clamp the offset so the digits can never leave the pill entirely
+    slack_x = max(0.0, half - w / 2) if (half := size / 2 - 2) else 0.0
+    slack_y = max(0.0, half - h / 2)
+    cx += min(max(dx, -slack_x), slack_x)
+    cy += min(max(dy, -slack_y), slack_y)
+    d.text((cx, cy), text, font=font, fill=text_color,
            stroke_width=stroke, stroke_fill=text_color)
     _ICON_CACHE[key] = img
     return img
@@ -915,12 +993,33 @@ class App:
         )
         self._lock = threading.Lock()
 
+    def _apply_language(self):
+        """Retranslate what lives outside windows: tray title + menu."""
+        try:
+            self.icon.title = tr("app.title")
+            self.icon.menu = self._build_menu()
+            self.icon.update_menu()
+        except Exception:
+            pass
+
+    def set_language(self, item):
+        """Tray submenu handler: switch UI language and persist it."""
+        lang = str(item.text).split(" ", 1)[0]  # "English" / "ไทย (Thai)"
+        new_lang = "th" if lang == "ไทย" else "en"
+        if SETTINGS.get("language") == new_lang:
+            return
+        SETTINGS["language"] = new_lang
+        save_settings(SETTINGS)
+        self._apply_language()
+
     def _build_menu(self):
         """Assemble the tray menu from translated strings.
 
         Rebuilt after a language change: pystray menus cannot retranslate
         themselves in place, so we assign a fresh Menu object instead.
+        The Language submenu always shows both languages, natively labelled.
         """
+        current = SETTINGS.get("language", "en")
         return pystray.Menu(
             pystray.MenuItem(tr("menu.details"), self.show_details, default=True),
             pystray.MenuItem(tr("menu.graph"), self.show_graph),
@@ -933,6 +1032,14 @@ class App:
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(tr("menu.history"), self.toggle_history,
                              checked=lambda item: KEEP_HISTORY),
+            pystray.MenuItem(
+                tr("menu.language"),
+                pystray.Menu(
+                    pystray.MenuItem("English", self.set_language,
+                                     radio=lambda item: current == "en"),
+                    pystray.MenuItem("ไทย (Thai)", self.set_language,
+                                     radio=lambda item: current == "th"),
+                )),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(tr("menu.exit"), self.quit),
         )
@@ -1184,11 +1291,14 @@ class App:
     def _settings_window(self):
         """Settings dialog: edit values and save to config.json.
 
-        Every value applies immediately (icons re-render on the next poll,
-        the tray menu is rebuilt when the language changes).
+        The icon group (font, digit color, offsets, size, high-contrast)
+        has a live preview that re-renders as values change; everything
+        applies immediately on save (icons re-render on the next poll).
         """
         import tkinter as tk
         from tkinter import ttk, messagebox
+        import base64
+        import io
 
         with self._lock:
             current = dict(SETTINGS)
@@ -1209,6 +1319,8 @@ class App:
             (tr("settings.check_interval"),
              "update_check_interval_minutes", 5, 1440),
             (tr("settings.icon_size"), "icon_size", 16, 128),
+            (tr("settings.dx"), "icon_text_dx", -50, 50),
+            (tr("settings.dy"), "icon_text_dy", -50, 50),
         ]
         vars_ = {}
         for i, (label, key, lo, hi) in enumerate(rows):
@@ -1220,44 +1332,117 @@ class App:
             spin.grid(row=i, column=1, padx=(14, 0), pady=3)
             vars_[key] = var
 
+        r = len(rows)
+        tk.Label(frame, text=tr("settings.font"), font=("Segoe UI", 10),
+                 anchor="w").grid(row=r, column=0, sticky="w", pady=3)
+        font_var = tk.StringVar(value=current["icon_font"])
+        ttk.Combobox(frame, textvariable=font_var, width=12,
+                     values=tuple(FONT_FILES), state="readonly").grid(
+            row=r, column=1, padx=(14, 0), pady=3)
+
+        tk.Label(frame, text=tr("settings.digit_color"), font=("Segoe UI", 10),
+                 anchor="w").grid(row=r + 1, column=0, sticky="w", pady=3)
+        color_var = tk.StringVar(value=current["icon_digit_color"])
+        ttk.Combobox(frame, textvariable=color_var, width=12,
+                     values=("auto", "#ffffff", "#11111b", "#ffd166"),
+                     state="readonly").grid(
+            row=r + 1, column=1, padx=(14, 0), pady=3)
+
         record_var = tk.BooleanVar(value=current["record_history"])
         ttk.Checkbutton(frame, text=tr("settings.record"),
                         variable=record_var).grid(
-            row=len(rows), column=0, columnspan=2, sticky="w", pady=(8, 0))
+            row=r + 2, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
         hc_var = tk.BooleanVar(value=current["high_contrast_icon"])
         ttk.Checkbutton(frame, text=tr("settings.high_contrast"),
                         variable=hc_var).grid(
-            row=len(rows) + 1, column=0, columnspan=2, sticky="w", pady=(4, 0))
+            row=r + 3, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         tk.Label(frame, text=tr("settings.channel"), font=("Segoe UI", 10),
-                 anchor="w").grid(row=len(rows) + 2, column=0, sticky="w",
-                                  pady=3)
+                 anchor="w").grid(row=r + 4, column=0, sticky="w", pady=3)
         channel_var = tk.StringVar(value=current.get("update_channel", "stable"))
         ttk.Combobox(frame, textvariable=channel_var, width=14,
                      values=("stable", "pre-release"), state="readonly").grid(
-            row=len(rows) + 2, column=1, padx=(14, 0), pady=3)
+            row=r + 4, column=1, padx=(14, 0), pady=3)
 
         tk.Label(frame, text=tr("settings.language"), font=("Segoe UI", 10),
-                 anchor="w").grid(row=len(rows) + 3, column=0, sticky="w",
-                                  pady=3)
+                 anchor="w").grid(row=r + 5, column=0, sticky="w", pady=3)
         lang_var = tk.StringVar(value=current.get("language", "en"))
         ttk.Combobox(frame, textvariable=lang_var, width=14,
                      values=("en", "th"), state="readonly").grid(
-            row=len(rows) + 3, column=1, padx=(14, 0), pady=3)
+            row=r + 5, column=1, padx=(14, 0), pady=3)
+
+        # ---- live icon preview ---------------------------------------
+        preview_row = tk.Frame(frame)
+        preview_row.grid(row=r + 6, column=0, columnspan=2,
+                         sticky="w", pady=(10, 0))
+        tk.Label(preview_row, text=tr("settings.preview"),
+                 font=("Segoe UI", 10)).pack(side="left", padx=(0, 8))
+        preview_lbl = tk.Label(preview_row, bg="#0f172a", bd=1,
+                               relief="solid")
+        preview_lbl.pack(side="left")
+
+        def render_preview(*_):
+            """Re-render the preview icon from the current dialog values.
+
+            Overrides SETTINGS only for the render, then restores them -
+            the real settings stay untouched until Save.
+            """
+            try:
+                trial = dict(current)
+                for key, var in vars_.items():
+                    trial[key] = int(var.get())
+                trial["icon_font"] = font_var.get()
+                trial["icon_digit_color"] = color_var.get().strip() or "auto"
+                trial["high_contrast_icon"] = bool(hc_var.get())
+                trial["language"] = lang_var.get()
+                trial = _validate_settings(trial)
+            except (ValueError, tk.TclError):
+                return  # half-typed number: keep the previous preview
+            saved = {k: SETTINGS.get(k) for k in
+                     ("icon_size", "icon_font", "icon_digit_color",
+                      "icon_text_dx", "icon_text_dy", "high_contrast_icon")}
+            try:
+                for k in saved:
+                    SETTINGS[k] = trial[k]
+                img = make_icon("42", GREEN, size=trial["icon_size"])
+            finally:
+                for k, v in saved.items():
+                    SETTINGS[k] = v
+            with io.BytesIO() as buf:
+                img.save(buf, "PNG")
+                b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+            try:
+                preview_lbl.config(image=tk.PhotoImage(
+                    data=b64, master=preview_lbl))
+                preview_lbl.image = preview_lbl.image
+            except tk.TclError:
+                pass
+
+        for var in (list(vars_.values()) + [font_var, color_var,
+                                            hc_var, lang_var]):
+            var.trace_add("write", render_preview)
+        render_preview()
 
         note = tk.Label(frame, text=tr("settings.note"),
                         font=("Segoe UI", 8), fg="#64748b")
-        note.grid(row=len(rows) + 4, column=0, columnspan=2, sticky="w",
+        note.grid(row=r + 7, column=0, columnspan=2, sticky="w",
                   pady=(4, 0))
 
         def on_save():
             global POLL_SECONDS, KEEP_HISTORY
+            color = color_var.get().strip()
+            if color != "auto" and not _is_hex_color(color):
+                messagebox.showerror(tr("mb.title"), tr("settings.bad_color"),
+                                     parent=root)
+                return
             try:
                 for key, var in vars_.items():
                     current[key] = int(var.get())
                 current["record_history"] = bool(record_var.get())
                 current["high_contrast_icon"] = bool(hc_var.get())
+                current["icon_font"] = font_var.get()
+                current["icon_digit_color"] = color
                 current["update_channel"] = channel_var.get()
                 current["language"] = lang_var.get()
             except ValueError:
@@ -1279,15 +1464,10 @@ class App:
             root.destroy()
             # apply what cannot wait for the next poll: tray title and the
             # menu (pystray menus must be replaced wholesale on retranslate)
-            self.icon.title = tr("app.title")
-            try:
-                self.icon.menu = self._build_menu()
-                self.icon.update_menu()
-            except Exception:
-                pass
+            self._apply_language()
 
         btns = tk.Frame(frame)
-        btns.grid(row=len(rows) + 5, column=0, columnspan=2, pady=(12, 0))
+        btns.grid(row=r + 8, column=0, columnspan=2, pady=(12, 0))
         tk.Button(btns, text=tr("settings.save"), width=10, command=on_save,
                   font=("Segoe UI", 10)).pack(side="left", padx=4)
         tk.Button(btns, text=tr("settings.cancel"), width=10,

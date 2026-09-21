@@ -104,8 +104,12 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
 ## การทดสอบ
 
 - **รัน pytest ทุกครั้งที่แก้ logic** — `python -m pytest tests/ -v`
-  (150 เคส รันได้โดยไม่ต้องมี admin/PowerShell/GUI; PowerShell ถูก
+  (161 เคส รันได้โดยไม่ต้องมี admin/PowerShell/GUI; PowerShell ถูก
   monkeypatch ที่ `_run_powershell` เสมอ)
+- **การเทสพิกเซลของไอคอน** — ต้องกรอง `alpha > 0` ก่อนเสมอ (มุมโค้งนอก
+  เม็ดเป็น (0,0,0,0) ที่ดูเหมือนเลขดำได้) และระวังว่าฟอนต์ถูกย่อให้เต็ม
+  ความกว้างเม็ดแล้ว จึงเหลือ slack แนวตั้งมากกว่าแนวนอน (clamp ทำงานจริง
+  เฉพาะเมื่อมี slack — เทสขยับใช้ 128 px)
 - **UI ทุกข้อความต้องผ่าน `tr()` เท่านั้น** — ห้าม hardcode ข้อความภาษา
   อังกฤษ/ไทยในเมนู/หน้าต่าง/การแจ้งเตือน เพิ่ม key ใหม่ใน `STRINGS`
   ทั้งสองภาษาพร้อมกัน (เทส `TestI18n::test_strings_parity` จับถ้าลืม)

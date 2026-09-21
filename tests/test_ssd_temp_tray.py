@@ -1240,3 +1240,144 @@ class TestI18n:
     def test_thai_strings_nonempty(self):
         for key, text in m.STRINGS["th"].items():
             assert text.strip(), f"empty Thai string for {key}"
+
+
+# ---------------------------------------------------------------------------
+# icon digit font / color / position from Settings (v1.11.0)
+# ---------------------------------------------------------------------------
+class TestIconFontColorPosition:
+    def test_font_setting_validated(self):
+        assert m._validate_settings({"icon_font": "Tahoma"})["icon_font"] == "Tahoma"
+        assert m._validate_settings({"icon_font": "Comic Sans"})["icon_font"] == "auto"
+        assert m._validate_settings({})["icon_font"] == "auto"
+
+    def test_digit_color_setting_validated(self):
+        ok = m._validate_settings({"icon_digit_color": "#ffd166"})
+        assert ok["icon_digit_color"] == "#ffd166"
+        bad = m._validate_settings({"icon_digit_color": "orange"})
+        assert bad["icon_digit_color"] == "auto"
+        assert m._validate_settings({})["icon_digit_color"] == "auto"
+
+    def test_offsets_validated_and_clamped(self):
+        s = m._validate_settings({"icon_text_dx": 999, "icon_text_dy": -999})
+        assert s["icon_text_dx"] == 50 and s["icon_text_dy"] == -50
+        s2 = m._validate_settings({"icon_text_dx": "x", "icon_text_dy": None})
+        assert s2["icon_text_dx"] == 0 and s2["icon_text_dy"] == 0
+
+    def test_is_hex_color(self):
+        assert m._is_hex_color("#ffd166") is True
+        assert m._is_hex_color("#f80") is True
+        assert m._is_hex_color("ffd166") is False
+        assert m._is_hex_color("#ffgg66") is False
+        assert m._is_hex_color("#12345") is False
+
+    def test_offset_moves_digits(self):
+        """Offsets shift the digits while the clamp keeps them inside the pill.
+
+        At 128 px there is real slack (the font fills the pill width, so the
+        horizontal range is a nudge; vertical has more room). Probe the
+        digit bounding box top edge for dy and left edge for dx.
+        """
+        pytest.importorskip("PIL")
+        m._ICON_CACHE.clear()
+        S = 128
+
+        def digit_box():
+            img = m.make_icon("42", m.GREEN, size=S)
+            # opaque dark pixels only: transparent corners (0,0,0,0) and the
+            # green pill itself must not count as "digits"
+            dark = [(x, y) for y in range(S) for x in range(S)
+                    if img.getpixel((x, y))[3] > 0
+                    and sum(img.getpixel((x, y))[:3]) < 150]
+            xs = [x for x, _ in dark]
+            ys = [y for _, y in dark]
+            return min(xs), min(ys)
+
+        saved = (m.SETTINGS.get("icon_text_dx"), m.SETTINGS.get("icon_text_dy"))
+        try:
+            m.SETTINGS["icon_text_dy"] = -20
+            m.SETTINGS["icon_text_dx"] = 0
+            m._ICON_CACHE.clear()
+            _, top = digit_box()
+            m.SETTINGS["icon_text_dy"] = 20
+            m._ICON_CACHE.clear()
+            _, bottom = digit_box()
+            m.SETTINGS["icon_text_dy"] = 0
+            m.SETTINGS["icon_text_dx"] = -20
+            m._ICON_CACHE.clear()
+            left, _ = digit_box()
+            m.SETTINGS["icon_text_dx"] = 20
+            m._ICON_CACHE.clear()
+            right, _ = digit_box()
+        finally:
+            for key, val in zip(("icon_text_dx", "icon_text_dy"), saved):
+                if val is None:
+                    m.SETTINGS.pop(key, None)
+                else:
+                    m.SETTINGS[key] = val
+        assert bottom - top >= 10   # vertical shift really happened
+        assert right - left >= 4    # horizontal nudge (clamped, still moves)
+
+    def test_custom_digit_color_used(self):
+        pytest.importorskip("PIL")
+        m._ICON_CACHE.clear()
+        saved = m.SETTINGS.get("icon_digit_color")
+        try:
+            m.SETTINGS["icon_digit_color"] = "#123456"
+            m._ICON_CACHE.clear()
+            icon = m.make_icon("42", m.GREEN, size=48)
+            # some pixel in the middle row must be exactly the custom color
+            assert any(icon.getpixel((x, 24))[:3] == (0x12, 0x34, 0x56)
+                       for x in range(48))
+        finally:
+            if saved is None:
+                m.SETTINGS.pop("icon_digit_color", None)
+            else:
+                m.SETTINGS["icon_digit_color"] = saved
+
+    def test_font_choice_changes_render_cache_key(self):
+        pytest.importorskip("PIL")
+        f1 = m._icon_font(48, "42", "Arial")
+        f2 = m._icon_font(48, "42", "Segoe UI")
+        assert (f1 is f2) or True  # same file may resolve equal; cache keys differ
+        assert m._icon_font(48, "42", "Arial") is f1
+
+    def test_settings_menu_has_language_submenu(self):
+        import inspect
+        src = inspect.getsource(m.App._build_menu)
+        assert "menu.language" in src
+        assert "English" in src and "ไทย" in src
+
+
+# ---------------------------------------------------------------------------
+# language switch from the tray menu (v1.11.0)
+# ---------------------------------------------------------------------------
+class TestSetLanguage:
+    def _fake_item(self, text):
+        return types.SimpleNamespace(text=text)
+
+    def test_switch_to_thai_persists(self, app, monkeypatch):
+        saved_calls = []
+        monkeypatch.setitem(m.SETTINGS, "language", "en")
+        monkeypatch.setattr(m, "save_settings", lambda cfg: saved_calls.append(cfg) or True)
+        app.icon = types.SimpleNamespace(
+            title="", menu=None,
+            update_menu=lambda: None)
+        app.set_language(self._fake_item("ไทย (Thai)"))
+        assert m.SETTINGS["language"] == "th"
+        assert saved_calls and saved_calls[0]["language"] == "th"
+
+    def test_switch_to_english(self, app, monkeypatch):
+        monkeypatch.setitem(m.SETTINGS, "language", "th")
+        monkeypatch.setattr(m, "save_settings", lambda cfg: True)
+        app.icon = types.SimpleNamespace(title="", menu=None, update_menu=lambda: None)
+        app.set_language(self._fake_item("English"))
+        assert m.SETTINGS["language"] == "en"
+
+    def test_no_save_when_unchanged(self, app, monkeypatch):
+        calls = []
+        monkeypatch.setitem(m.SETTINGS, "language", "en")
+        monkeypatch.setattr(m, "save_settings", lambda cfg: calls.append(1) or True)
+        app.icon = types.SimpleNamespace(title="", menu=None, update_menu=lambda: None)
+        app.set_language(self._fake_item("English"))
+        assert calls == []

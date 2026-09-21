@@ -2,8 +2,8 @@
 
 [![CI](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/ci.yml)
 [![Release](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/release.yml/badge.svg)](https://github.com/NarDecH/ssd-temp-monitor/releases)
-![Version](https://img.shields.io/badge/version-1.10.0-orange)
-![Tests](https://img.shields.io/badge/tests-150%20passing-brightgreen)
+![Version](https://img.shields.io/badge/version-1.11.0-orange)
+![Tests](https://img.shields.io/badge/tests-161%20passing-brightgreen)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey)
 
 ![Banner](docs/img/banner.svg)
@@ -18,7 +18,10 @@ Shows your SSD temperature live on the system tray icon.
   to the pill (dark on green/orange ≈ 9:1 contrast, white + stroke on red), and
   3-digit temperatures shrink to fit.
 - **Bilingual UI** — switch the whole interface (menu, windows, notifications) between
-  English and Thai in **Settings → Language**; applies immediately.
+  English and Thai from the **Language tray submenu** or Settings; applies immediately.
+- **Customizable tray digits** — pick the font (Arial / Segoe UI / Tahoma / Verdana),
+  the digit color (`auto` contrast or any `#rrggbb`), and nudge the digit position
+  along X/Y — all with a live preview in Settings.
 - Right-click menu: *Show details*, *Show temperature graph* (last 30 min),
   *Show all disks (debug)*, *Copy diagnostics*, *Settings...*, *Check for updates...*, *About*,
   *Refresh now*, *Record history*, *Exit*.
