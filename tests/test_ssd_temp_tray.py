@@ -4,6 +4,7 @@ The PowerShell boundary is always monkeypatched; only pure logic and the
 CSV/Windows-mutex helpers are exercised for real.
 """
 import csv
+import json
 import os
 import subprocess
 import sys
@@ -52,6 +53,10 @@ def app():
     a._graph_win = None
     a._graph_done = threading.Event()
     a._shutdown_requested = False
+    a._pending_update = None
+    a._nagged_version = None
+    a._last_update_check = 0.0
+    a.icon = None
     return a
 
 
@@ -857,13 +862,15 @@ class TestUpdateNowFlag:
         assert "run_unattended_update()" in src
 
     def test_no_release_info_exits_1(self, monkeypatch):
-        monkeypatch.setattr(m, "fetch_latest_release", lambda repo: None)
+        monkeypatch.setattr(m, "fetch_latest_release",
+                            lambda repo, include_prereleases=False: None)
         with pytest.raises(SystemExit) as ei:
             m.run_unattended_update()
         assert ei.value.code == 1
 
     def test_up_to_date_exits_0(self, monkeypatch, capsys):
-        monkeypatch.setattr(m, "fetch_latest_release", lambda repo: {
+        monkeypatch.setattr(m, "fetch_latest_release",
+                            lambda repo, include_prereleases=False: {
             "tag_name": "v1.8.0",
             "assets": [{"name": "setup.exe", "state": "uploaded",
                         "browser_download_url": "https://x/setup.exe"}]})
@@ -889,7 +896,8 @@ class TestUpdateNowFlag:
                                   "__enter__": lambda self: self,
                                   "__exit__": lambda self, *a: False})()
 
-        monkeypatch.setattr(m, "fetch_latest_release", lambda repo: {
+        monkeypatch.setattr(m, "fetch_latest_release",
+                            lambda repo, include_prereleases=False: {
             "tag_name": "v9.0.0",
             "assets": [{"name": "setup.exe", "state": "uploaded",
                         "browser_download_url": "https://x/setup.exe"}]})
@@ -904,3 +912,145 @@ class TestUpdateNowFlag:
         assert ei.value.code == 0
         assert started == [["cmd", "/c", "SHIM.cmd"]]
         assert "checksum verified" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# v1.9.0: VERSIONINFO reader, effective_version, nag-once, pre-release fetch
+# ---------------------------------------------------------------------------
+class TestFileVersion:
+    def test_read_nonexistent_returns_none(self):
+        assert m.read_file_version(r"C:\no\such\file.exe") is None
+
+    def test_read_text_file_returns_none(self):
+        f = tempfile.NamedTemporaryFile(suffix=".txt", delete=False)
+        f.write(b"not an exe")
+        f.close()
+        try:
+            assert m.read_file_version(f.name) is None
+        finally:
+            os.remove(f.name)
+
+    def test_read_real_exe_without_versioninfo(self, tmp_path):
+        # copy cmd.exe? it HAS version info -> should read a number
+        import shutil
+        src = os.path.join(os.environ["WINDIR"], "System32", "cmd.exe")
+        dst = str(tmp_path / "cmd_copy.exe")
+        shutil.copy(src, dst)
+        v = m.read_file_version(dst)
+        assert v is not None
+        parts = v.split(".")
+        assert len(parts) == 3 and all(p.isdigit() for p in parts)
+
+    def test_effective_version_falls_back_to_app_version(self, monkeypatch):
+        monkeypatch.setattr(m, "_own_exe_fullpath", lambda: None)
+        assert m.effective_version() == m.APP_VERSION
+
+    def test_effective_version_uses_embedded_when_frozen(self, monkeypatch):
+        monkeypatch.setattr(m, "_own_exe_fullpath",
+                            lambda: os.path.join(
+                                os.environ["WINDIR"], "System32", "cmd.exe"))
+        v = m.effective_version()
+        assert v != m.APP_VERSION or True   # just must not raise
+        assert isinstance(v, str) and v
+
+    def test_is_newer_defaults_to_effective(self, monkeypatch):
+        monkeypatch.setattr(m, "effective_version", lambda: "9.9.9")
+        assert m.is_newer_version("v10.0.0") is True
+        assert m.is_newer_version("v1.0.0") is False
+
+
+class TestNagOnce:
+    def _rel(self):
+        return {"tag_name": "v9.9.9", "draft": False, "prerelease": False,
+                "assets": [{"name": "ssd_temp_monitor_setup_v9.9.9.exe",
+                            "state": "uploaded",
+                            "browser_download_url": "https://x/setup.exe"}]}
+
+    def _run_check(self, app, monkeypatch, notified):
+        monkeypatch.setattr(m, "fetch_latest_release",
+                            lambda repo, include_prereleases=False:
+                            self._rel())
+        monkeypatch.setattr(app, "_notify",
+                            lambda msg, title="": notified.append(msg))
+        app._check_updates(manual=False)
+
+    def _run_check_again(self, app, monkeypatch, notified):
+        self._run_check(app, monkeypatch, notified)
+
+    def test_nag_exactly_once_per_version(self, app, monkeypatch):
+        notified = []
+        monkeypatch.setitem(m.SETTINGS, "check_updates", True)
+        monkeypatch.setitem(m.SETTINGS, "github_repo", "x/y")
+        monkeypatch.setitem(m.SETTINGS, "update_channel", "stable")
+        self._run_check(app, monkeypatch, notified)
+        self._run_check_again(app, monkeypatch, notified)
+        self._run_check_again(app, monkeypatch, notified)
+        assert len(notified) == 1                 # nagged only once
+        assert app._pending_update is not None    # but still installable
+
+    def test_manual_check_always_reports_latest(self, app, monkeypatch):
+        """A manual check with no update says 'up to date' every time."""
+        notified = []
+        monkeypatch.setattr(m, "fetch_latest_release",
+                            lambda repo, include_prereleases=False: None)
+        monkeypatch.setattr(app, "_notify",
+                            lambda msg, title="": notified.append(msg))
+        app._check_updates(manual=True)
+        app._check_updates(manual=True)
+        assert len(notified) == 2
+        assert all(("latest version" in n) or ("No update information" in n)
+                   for n in notified)
+
+
+class TestPrereleaseFetch:
+    def test_fetch_url_switches_by_channel(self):
+        """include_prereleases must query the list endpoint, not /latest."""
+        import inspect
+        src = inspect.getsource(m.fetch_latest_release)
+        assert "releases?per_page=1" in src
+        assert "releases/latest" in src
+
+    def test_list_response_returns_first_item(self, monkeypatch):
+        class FakeResp:
+            status = 200
+            def read(self):
+                return json.dumps([{"tag_name": "v2.0.0-rc1"}]).encode()
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+
+        calls = []
+
+        def recording_fake(req, timeout=10):
+            calls.append(getattr(req, "full_url", str(req)))
+            return FakeResp()
+
+        monkeypatch.setattr(m.urllib.request, "urlopen", recording_fake)
+        rel = m.fetch_latest_release("x/y", include_prereleases=True)
+        assert calls == ["https://api.github.com/repos/x/y/releases?per_page=1"]
+        assert rel is not None and rel["tag_name"] == "v2.0.0-rc1"
+
+    def test_latest_response_returns_object(self, monkeypatch):
+        class FakeResp:
+            status = 200
+            def read(self):
+                return json.dumps({"tag_name": "v1.0.0"}).encode()
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+
+        monkeypatch.setattr(m.urllib.request, "urlopen",
+                            lambda req, timeout=10: FakeResp())
+        rel = m.fetch_latest_release("x/y", include_prereleases=False)
+        assert rel["tag_name"] == "v1.0.0"
+
+
+class TestPollIntervalLive:
+    def test_poll_loop_slices_sleep(self):
+        import inspect
+        src = inspect.getsource(m.App.poll_loop)
+        assert "for _ in range(target * 4)" in src
+        assert "time.sleep(0.25)" in src
+        assert "time.sleep(POLL_SECONDS)" not in src

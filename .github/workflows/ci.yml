@@ -43,10 +43,13 @@ jobs:
           pip install pystray Pillow pyinstaller
 
       - name: Build exe
-        run: >
+        run: |
+          python make_icon.py
+          python make_version_file.py
           python -m PyInstaller --noconfirm --clean --onefile --windowed
-          --uac-admin --name ssd_temp_monitor --icon app_icon.ico
-          --hidden-import pystray._win32 ssd_temp_tray.py
+            --uac-admin --name ssd_temp_monitor --icon app_icon.ico
+            --version-file ssd_temp_monitor_version.rc
+            --hidden-import pystray._win32 ssd_temp_tray.py
 
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress

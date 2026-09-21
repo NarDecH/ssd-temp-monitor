@@ -39,7 +39,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.8.1"          # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.9.0-rc1"      # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -194,6 +194,55 @@ def relaunch_elevated() -> None:
     sys.exit(0)
 
 
+def read_file_version(path):
+    """Read the embedded VERSIONINFO (File Version) of an exe.
+
+    Returns e.g. "1.8.1" or None when unavailable (script run, old exe).
+    """
+    try:
+        version_dll = ctypes.WinDLL("version", use_last_error=True)
+        size = version_dll.GetFileVersionInfoSizeW(path, None)
+        if not size:
+            return None
+        data = ctypes.create_string_buffer(size)
+        if not version_dll.GetFileVersionInfoW(path, 0, size, data):
+            return None
+        ptr = ctypes.c_void_p()
+        length = ctypes.c_uint()
+        if not version_dll.VerQueryValueW(
+                data, "\\", ctypes.byref(ptr), ctypes.byref(length)):
+            return None
+        # VS_FIXEDFILEINFO: dwSignature, dwStrucVersion, FileVersionMS, FileVersionLS
+        ffi = ctypes.cast(ptr, ctypes.POINTER(ctypes.c_uint * 4)).contents
+        if ffi[0] != 0xFEEF04BD:
+            return None
+        ms, ls = ffi[2], ffi[3]
+        parts = (ms >> 16, ms & 0xFFFF, ls >> 16, ls & 0xFFFF)
+        return ".".join(str(x) for x in parts[:3])
+    except Exception:
+        return None
+
+
+def _own_exe_fullpath():
+    """Full path of our own exe when frozen, else None."""
+    if getattr(sys, "frozen", False):
+        return sys.executable
+    return None
+
+
+def effective_version():
+    """Version the updater compares against: the installed exe's embedded
+    VERSIONINFO when available (survives the exe being replaced by an
+    update), otherwise APP_VERSION from this build.
+    """
+    path = _own_exe_fullpath()
+    if path:
+        v = read_file_version(path)
+        if v:
+            return v
+    return APP_VERSION
+
+
 # All disks, no reliability counters (fast, ~1 s). Used by the debug list.
 PS_LIST = (
     "$ErrorActionPreference='SilentlyContinue';"
@@ -321,8 +370,14 @@ def _parse_version(v):
         return (0,)
 
 
-def is_newer_version(remote, local=APP_VERSION):
-    """True when the remote version string is strictly newer than ours."""
+def is_newer_version(remote, local=None):
+    """True when the remote version string is strictly newer than ours.
+
+    local defaults to the installed exe's embedded version (effective
+    version), falling back to APP_VERSION.
+    """
+    if local is None:
+        local = effective_version()
     try:
         return _parse_version(remote) > _parse_version(local)
     except Exception:
@@ -363,13 +418,19 @@ def select_release_asset(release, prefer_prerelease=False):
     return chosen.get("browser_download_url"), str(version)
 
 
-def fetch_latest_release(repo):
+def fetch_latest_release(repo, include_prereleases=False):
     """Query the GitHub Releases API. Returns a release dict or None.
 
-    Network and API errors are swallowed and reported as 'no release'
-    so a missing/broken connection can never break the poll loop.
+    Default asks for the latest *stable* release. With
+    include_prereleases=True the most recent release of any kind wins
+    (that is what a pre-release channel wants). Network and API errors
+    are swallowed and reported as 'no release' so a missing/broken
+    connection can never break the poll loop.
     """
-    url = f"https://api.github.com/repos/{repo}/releases/latest"
+    if include_prereleases:
+        url = f"https://api.github.com/repos/{repo}/releases?per_page=1"
+    else:
+        url = f"https://api.github.com/repos/{repo}/releases/latest"
     try:
         req = urllib.request.Request(
             url,
@@ -380,7 +441,10 @@ def fetch_latest_release(repo):
         with urllib.request.urlopen(req, timeout=10) as resp:
             if resp.status != 200:
                 return None
-            return json.loads(resp.read().decode("utf-8"))
+            data = json.loads(resp.read().decode("utf-8"))
+            if isinstance(data, list):
+                return data[0] if data else None
+            return data
     except Exception:
         return None
 
@@ -569,6 +633,7 @@ class App:
         self._alert_since = None
         self._last_alert = 0.0
         self._pending_update = None
+        self._nagged_version = None      # nag once per (version, session)
         self._last_update_check = 0.0
         self.icon = pystray.Icon(
             "ssd_temp",
@@ -578,6 +643,7 @@ class App:
                 pystray.MenuItem("Show details", self.show_details, default=True),
                 pystray.MenuItem("Show temperature graph", self.show_graph),
                 pystray.MenuItem("Show all disks (debug)", self.show_disks),
+                pystray.MenuItem("Copy diagnostics to clipboard", self.copy_diagnostics),
                 pystray.MenuItem("Refresh now", self.refresh),
                 pystray.MenuItem("Check for updates...", self.check_updates_now),
                 pystray.MenuItem("Settings...", self.show_settings),
@@ -933,27 +999,31 @@ class App:
         user only sees a message when the check was manual.
         """
         repo = SETTINGS.get("github_repo") or DEFAULT_SETTINGS["github_repo"]
-        release = fetch_latest_release(repo)
+        prerelease = bool(SETTINGS.get("update_channel") == "pre-release")
+        release = fetch_latest_release(repo, include_prereleases=prerelease)
         if not release:
             if manual:
                 self._notify("No update information available.",
                              "SSD Temp Monitor — Update")
             return
-        prerelease = bool(SETTINGS.get("update_channel") == "pre-release")
         url, version = select_release_asset(release, prefer_prerelease=prerelease)
         if not url or not is_newer_version(version):
             if manual:
                 self._notify(
-                    f"You are running the latest version ({APP_VERSION}).",
+                    f"You are running the latest version ({effective_version()}).",
                     "SSD Temp Monitor — Update")
             return
-        # a newer release exists -> surface it
-        self._notify(
-            f"Version {version} is available ({APP_VERSION} installed).\n"
-            "Right-click -> Check for updates... to install.",
-            title="SSD Temp Monitor — update available")
         with self._lock:
+            already = self._nagged_version == version
             self._pending_update = (url, version)
+            self._nagged_version = version
+        if not already:
+            # nag once per release per session; the Update menu item and the
+            # About window stay available the whole time
+            self._notify(
+                f"Version {version} is available ({effective_version()} installed).\n"
+                "Right-click -> Check for updates... to install.",
+                title="SSD Temp Monitor — update available")
 
     def _install_update(self, *_):
         """Download the new setup exe, verify its SHA-256, then update.
@@ -1028,7 +1098,7 @@ class App:
         tk.Label(frame, text="SSD Temperature Monitor",
                  font=("Segoe UI", 15, "bold"),
                  fg="#e2e8f0").pack(anchor="w")
-        tk.Label(frame, text=f"Version {APP_VERSION}",
+        tk.Label(frame, text=f"Version {effective_version()}",
                  font=("Segoe UI", 10),
                  fg="#94a3b8").pack(anchor="w", pady=(2, 6))
         repo = SETTINGS.get("github_repo") or DEFAULT_SETTINGS["github_repo"]
@@ -1038,6 +1108,44 @@ class App:
         link.pack(anchor="w")
         link.bind("<Button-1>",
                   lambda e: webbrowser.open(f"https://github.com/{repo}/releases/latest"))
+
+        # live "latest release" line: fetched on a worker thread, applied on
+        # the tk thread via root.after (no cross-thread tk mutation)
+        latest_lbl = tk.Label(frame, text="Latest release: checking…",
+                              font=("Segoe UI", 10), fg="#94a3b8")
+        latest_lbl.pack(anchor="w", pady=(2, 0))
+        pre = bool(SETTINGS.get("update_channel") == "pre-release")
+
+        def apply_latest(release):
+            try:
+                if not release:
+                    latest_lbl.config(text="Latest release: unknown (offline?)")
+                    return
+                tag = str(release.get("tag_name") or "?")
+                if not pre and _is_prerelease(release):
+                    latest_lbl.config(
+                        text=f"Latest stable: none · newest: {tag} (pre-release)")
+                    return
+                if is_newer_version(tag):
+                    latest_lbl.config(
+                        text=f"Latest release: {tag} — update available!",
+                        fg="#fbbf24")
+                else:
+                    latest_lbl.config(
+                        text=f"Latest release: {tag} — you are up to date",
+                        fg="#86efac")
+            except Exception:
+                pass
+
+        def fetch_latest():
+            rel = fetch_latest_release(repo, include_prereleases=pre)
+            try:
+                root.after(0, lambda: apply_latest(rel))
+            except Exception:
+                pass  # window already closed
+
+        threading.Thread(target=fetch_latest, daemon=True).start()
+
         btns = tk.Frame(frame)
         btns.pack(pady=(12, 0))
         tk.Button(btns, text="Check for updates", width=16,
@@ -1109,6 +1217,47 @@ class App:
                               temp_color(temp))
         icon.title = f"{model}: {temp}C" if temp is not None else f"{model}: n/a"
 
+    def copy_diagnostics(self, *_):
+        """Copy a troubleshooting snapshot to the clipboard (menu thread OK:
+        only win32 clipboard calls, no tk)."""
+        with self._lock:
+            temps = list(self.temps)
+        lines = [
+            f"SSD Temperature Monitor diagnostics",
+            f"version: {effective_version()} (build {APP_VERSION})",
+            f"admin: {is_admin()}",
+            f"settings: {json.dumps(SETTINGS, ensure_ascii=False)}",
+            "disks:",
+        ]
+        if temps:
+            for t in temps:
+                lines.append(
+                    f"  {t['model']}: {t['temp']}C"
+                    if t["temp"] is not None else f"  {t['model']}: n/a")
+        else:
+            lines.append("  (no data yet)")
+        text = "\n".join(lines)
+        try:
+            import ctypes.wintypes
+            k32 = ctypes.WinDLL("user32", use_last_error=True)
+            CF_UNICODETEXT = 13
+            GMEM_MOVEABLE = 0x0002
+            k32.OpenClipboard(0)
+            try:
+                k32.EmptyClipboard()
+                buf = ctypes.create_unicode_buffer(text)
+                size = (len(buf) + 1) * ctypes.sizeof(ctypes.c_wchar)
+                h = k32.GlobalAlloc(GMEM_MOVEABLE, size)
+                p = k32.GlobalLock(h)
+                ctypes.memmove(p, buf, size)
+                k32.GlobalUnlock(h)
+                k32.SetClipboardData(CF_UNICODETEXT, h)
+            finally:
+                k32.CloseClipboard()
+            self._notify("Diagnostics copied to clipboard.", "SSD Temp Monitor")
+        except Exception:
+            pass
+
     def _alert_drive(self, hottest, now):
         """Advance the alert state machine; return True if an alert fired."""
         with self._lock:
@@ -1126,7 +1275,7 @@ class App:
             temps = [t["temp"] for t in self.temps if t["temp"] is not None]
         peak = max(temps) if temps else None
         try:
-            self.icon.notify(
+            self._notify(
                 f"SSD has been at {peak}°C for a while."
                 if peak is not None else "SSD is overheating.",
                 title=f"⚠ SSD overheat: {peak}°C" if peak is not None
@@ -1186,7 +1335,10 @@ class App:
                     and time.time() - self._last_update_check >= interval):
                 self._last_update_check = time.time()
                 threading.Thread(target=self._check_updates, daemon=True).start()
-            time.sleep(POLL_SECONDS)
+            # sleep in small slices so a saved poll interval applies at once
+            target = max(1, int(SETTINGS.get("poll_seconds", POLL_SECONDS)))
+            for _ in range(target * 4):
+                time.sleep(0.25)
 
     def update(self):
         temps = read_temps()
@@ -1225,11 +1377,11 @@ def run_unattended_update():
     silent install can proceed (/RESTARTAPPLICATIONS brings the app back).
     """
     repo = SETTINGS.get("github_repo") or DEFAULT_SETTINGS["github_repo"]
-    release = fetch_latest_release(repo)
+    prerelease = bool(SETTINGS.get("update_channel") == "pre-release")
+    release = fetch_latest_release(repo, include_prereleases=prerelease)
     if not release:
         print("UPDATE-RESULT: no release information")
         sys.exit(1)
-    prerelease = bool(SETTINGS.get("update_channel") == "pre-release")
     url, version = select_release_asset(release, prefer_prerelease=prerelease)
     if not url or not is_newer_version(version):
         print(f"UPDATE-RESULT: no update available (latest={version or '?'})")

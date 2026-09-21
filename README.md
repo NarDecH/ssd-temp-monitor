@@ -2,8 +2,8 @@
 
 [![CI](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/ci.yml)
 [![Release](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/release.yml/badge.svg)](https://github.com/NarDecH/ssd-temp-monitor/releases)
-![Version](https://img.shields.io/badge/version-1.8.0-blue)
-![Tests](https://img.shields.io/badge/tests-114%20passing-brightgreen)
+![Version](https://img.shields.io/badge/version-1.9.0--rc1-orange)
+![Tests](https://img.shields.io/badge/tests-126%20passing-brightgreen)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey)
 
 ![Banner](docs/img/banner.svg)

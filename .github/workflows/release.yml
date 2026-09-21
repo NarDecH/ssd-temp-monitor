@@ -29,10 +29,13 @@ jobs:
         run: python -m pytest tests/ -v
 
       - name: Build exe
-        run: >
+        run: |
+          python make_icon.py
+          python make_version_file.py
           python -m PyInstaller --noconfirm --clean --onefile --windowed
-          --uac-admin --name ssd_temp_monitor --icon app_icon.ico
-          --hidden-import pystray._win32 ssd_temp_tray.py
+            --uac-admin --name ssd_temp_monitor --icon app_icon.ico
+            --version-file ssd_temp_monitor_version.rc
+            --hidden-import pystray._win32 ssd_temp_tray.py
 
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
@@ -85,6 +88,39 @@ jobs:
           $tag = "${{ github.ref_name }}"
           "version=$($tag.TrimStart('v'))" >> $env:GITHUB_OUTPUT
 
+      - name: Release notes from CHANGELOG (and tag sanity check)
+        id: notes
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"                 # e.g. v1.9.0-rc1
+          $ver = $tag.TrimStart('v')
+          $md = Get-Content docs/CHANGELOG.md -Raw
+          $m = [regex]::Match($md, '(?s)## \[' + [regex]::Escape($ver) + '\].*?(?=\r?\n## \[|$)')
+          if (-not $m.Success) {
+            Write-Output "::warning::docs/CHANGELOG.md has no [[$ver]] section - using a stub"
+            $body = "Release $tag`n`n(No changelog entry found for this version.)"
+          } else {
+            $body = $m.Value -replace '^## \[([^\]]+)\].*$', "## $tag"
+          }
+          # published date sanity check: changelog date must be today
+          if ($m.Success -and $m.Value -match '## \[[^\]]+\] — (\d{4}-\d{2}-\d{2})') {
+            $docDate = $Matches[1]
+            $today = (Get-Date).ToString('yyyy-MM-dd')
+            if ($docDate -ne $today) {
+              Write-Output "::warning::CHANGELOG date $docDate differs from release date $today"
+            }
+          }
+          $body = $body + "`n`n**Downloads**`n" +
+            "- ``ssd_temp_monitor_setup_$ver.exe`` — installer (แนะนำ)`n" +
+            "- ``ssd_temp_monitor_$ver.exe`` — portable`n`n" +
+            "🔒 ดาวน์โหลดถูกตรวจ SHA-256 กับ ``SHA256SUMS.txt`` โดยแอปอัตโนมัติ`n"
+          $body = $body.Replace('"', '""')
+          Add-Content $env:GITHUB_OUTPUT "notes<<EOF_NOTES"
+          Add-Content $env:GITHUB_OUTPUT $body
+          Add-Content $env:GITHUB_OUTPUT "EOF_NOTES"
+          $isPre = if ($tag -match '-') { 'true' } else { 'false' }
+          Add-Content $env:GITHUB_OUTPUT "prerelease=$isPre"
+
       - name: Rename artifacts with version
         shell: pwsh
         run: |
@@ -105,20 +141,10 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: SSD Temperature Monitor v${{ steps.ver.outputs.version }}
-          body: |
-            ## SSD Temperature Monitor v${{ steps.ver.outputs.version }}
-
-            **Downloads**
-            - `ssd_temp_monitor_setup_v${{ steps.ver.outputs.version }}.exe` — installer (แนะนำ, มี auto-start option)
-            - `ssd_temp_monitor_v${{ steps.ver.outputs.version }}.exe` — portable, รันได้ทันที
-
-            ทั้งสองไฟล์ต้องการสิทธิ์ Administrator (UAC) เพื่ออ่านอุณหภูมิ SMART
-
-            🔒 ความปลอดภัย: `SHA256SUMS.txt` มี checksum ของทั้งสองไฟล์ —
-            แอปจะตรวจสอบ checksum อัตโนมัติก่อนติดตั้งอัปเดตเสมอ
+          name: SSD Temperature Monitor ${{ github.ref_name }}
+          body: ${{ steps.notes.outputs.notes }}
           draft: false
-          prerelease: false
+          prerelease: ${{ steps.notes.outputs.prerelease }}
           files: |
             ssd_temp_monitor_v${{ steps.ver.outputs.version }}.exe
             ssd_temp_monitor_setup_v${{ steps.ver.outputs.version }}.exe
