@@ -3,6 +3,17 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.6.0] — 2026-09-21
+
+### Added
+
+- 🔄 **Auto-update** — เช็ค GitHub Releases อัตโนมัติหลังเปิดโปรแกรม
+  และทุก 6 ชั่วโมง เมื่อมีเวอร์ชันใหม่จะแจ้งผ่าน notification
+  กด **Check for updates...** ในเมนูเพื่อดาวน์โหลดและติดตั้งได้ทันที
+  (installer จะปิดแอป ติดตั้ง แล้วเปิดใหม่เองผ่าน `/CLOSEAPPLICATIONS`)
+  ปิดการเช็คได้ด้วย `"check_updates": false` และเปลี่ยน repo ต้นทางได้
+  ผ่าน `"github_repo"` ใน config.json
+
 ## [1.5.0] — 2026-09-21
 
 ### Added

@@ -448,6 +448,101 @@ class TestPerDiskIcons:
 
 
 # ---------------------------------------------------------------------------
+# auto-update (GitHub Releases)
+# ---------------------------------------------------------------------------
+class TestVersionCompare:
+    @pytest.mark.parametrize("text,expected", [
+        ("v1.2.3", (1, 2, 3)),
+        ("1.10.0", (1, 10, 0)),
+        ("V2.0", (2, 0)),
+        ("1.2.3-beta", (1, 2, 3)),
+        ("garbage", (0,)),
+    ])
+    def test_parse(self, text, expected):
+        assert m._parse_version(text) == expected
+
+    @pytest.mark.parametrize("remote,local,expected", [
+        ("1.6.0", "1.5.0", True),
+        ("v1.6.0", "1.6.0", False),   # equal -> no nag
+        ("1.5.9", "1.6.0", False),
+        ("2.0.0", "1.9.9", True),
+        ("1.5", "1.6.0", False),
+        ("nonsense", "1.6.0", False),
+    ])
+    def test_is_newer(self, remote, local, expected):
+        assert m.is_newer_version(remote, local) is expected
+
+
+class TestSelectReleaseAsset:
+    def asset(self, name, state="uploaded"):
+        return {"name": name, "browser_download_url": f"https://x/{name}", "state": state}
+
+    def test_prefers_setup_exe(self):
+        release = {"tag_name": "v1.6.0", "assets": [
+            self.asset("ssd_temp_monitor_v1.6.0.exe"),
+            self.asset("ssd_temp_monitor_setup_v1.6.0.exe"),
+        ]}
+        url, version = m.select_release_asset(release)
+        assert "setup" in url and version == "v1.6.0"
+
+    def test_falls_back_to_portable(self):
+        release = {"tag_name": "v1.6.0", "assets": [
+            self.asset("ssd_temp_monitor_v1.6.0.exe"),
+        ]}
+        url, version = m.select_release_asset(release)
+        assert "portable" not in url and "setup" not in url
+        assert url.endswith(".exe") and version == "v1.6.0"
+
+    def test_ignores_non_exe_and_drafts(self):
+        release = {"tag_name": "v1.6.0", "assets": [
+            self.asset("checksums.txt"),
+            self.asset("draft_setup.exe", state="start"),
+        ]}
+        assert m.select_release_asset(release) == (None, None)
+
+    def test_empty_and_invalid_releases(self):
+        assert m.select_release_asset({"assets": []}) == (None, None)
+        assert m.select_release_asset(None) == (None, None)
+        assert m.select_release_asset("nope") == (None, None)
+
+
+class TestFetchLatestRelease:
+    class FakeResponse:
+        status = 200
+
+        def __init__(self, payload):
+            self._payload = payload
+
+        def read(self):
+            return self._payload.encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def test_parses_json(self, monkeypatch):
+        monkeypatch.setattr(
+            m.urllib.request, "urlopen",
+            lambda req, timeout: self.FakeResponse('{"tag_name": "v9.9.9"}'))
+        release = m.fetch_latest_release("anyone/anything")
+        assert release["tag_name"] == "v9.9.9"
+
+    def test_network_error_returns_none(self, monkeypatch):
+        def boom(req, timeout):
+            raise OSError("offline")
+        monkeypatch.setattr(m.urllib.request, "urlopen", boom)
+        assert m.fetch_latest_release("anyone/anything") is None
+
+    def test_non_200_returns_none(self, monkeypatch):
+        resp = self.FakeResponse("{}")
+        resp.status = 404
+        monkeypatch.setattr(m.urllib.request, "urlopen", lambda req, timeout: resp)
+        assert m.fetch_latest_release("anyone/anything") is None
+
+
+# ---------------------------------------------------------------------------
 # graph window + exit regression guards (the "cannot close" bug)
 # ---------------------------------------------------------------------------
 class TestGraphAndExit:

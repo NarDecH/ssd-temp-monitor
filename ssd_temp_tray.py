@@ -29,11 +29,16 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.request
 
 from PIL import Image, ImageDraw, ImageFont
 import pystray
 
 ICON_SIZE = 64
+
+# ---- auto-update (GitHub Releases) ----
+APP_VERSION = "1.6.0"          # keep in sync with setup.iss #define MyAppVersion
+UPDATE_CHECK_INTERVAL = 6 * 3600  # re-check every 6 hours
 
 GREEN = "#22c55e"
 ORANGE = "#f59e0b"
@@ -57,6 +62,8 @@ DEFAULT_SETTINGS = {
     "history_minutes": 30,
     "record_history": False,
     "multi_disk_icons": True,
+    "check_updates": True,
+    "github_repo": "NarDech/ssd-temp-monitor",
 }
 
 
@@ -69,6 +76,10 @@ def _validate_settings(cfg):
     out["alert_cooldown_minutes"] = min(120, max(1, int(out["alert_cooldown_minutes"])))
     out["history_minutes"] = min(240, max(5, int(out["history_minutes"])))
     out["record_history"] = bool(out["record_history"])
+    if not str(out["github_repo"]).strip():
+        out["github_repo"] = DEFAULT_SETTINGS["github_repo"]
+    else:
+        out["github_repo"] = str(out["github_repo"]).strip()
     return out
 
 
@@ -287,6 +298,69 @@ def temp_color(temp):
     return GREEN
 
 
+def _parse_version(v):
+    """'v1.2.3-beta' -> (1, 2, 3) for simple numeric comparison."""
+    try:
+        core = str(v).strip().lstrip("vV").split("-")[0]
+        return tuple(int(x) for x in core.split(".")[:3])
+    except ValueError:
+        return (0,)
+
+
+def is_newer_version(remote, local=APP_VERSION):
+    """True when the remote version string is strictly newer than ours."""
+    try:
+        return _parse_version(remote) > _parse_version(local)
+    except Exception:
+        return False
+
+
+def select_release_asset(release):
+    """Pick the setup exe asset from a GitHub release dict.
+
+    Prefers ssd_temp_monitor_setup_*.exe and falls back to any .exe that
+    is not a portable build. Returns (asset_url, version) or (None, None).
+    """
+    if not isinstance(release, dict):
+        return None, None
+    assets = release.get("assets") or []
+    version = release.get("tag_name") or release.get("name") or ""
+    setup = portable = None
+    for asset in assets:
+        if asset.get("state") == "uploaded" and str(asset.get("name", "")).lower().endswith(".exe"):
+            name = asset["name"].lower()
+            if "setup" in name and setup is None:
+                setup = asset
+            elif "setup" not in name and portable is None:
+                portable = asset
+    chosen = setup or portable
+    if not chosen:
+        return None, None
+    return chosen.get("browser_download_url"), str(version)
+
+
+def fetch_latest_release(repo):
+    """Query the GitHub Releases API. Returns a release dict or None.
+
+    Network and API errors are swallowed and reported as 'no release'
+    so a missing/broken connection can never break the poll loop.
+    """
+    url = f"https://api.github.com/repos/{repo}/releases/latest"
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "ssd-temp-monitor",
+            })
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status != 200:
+                return None
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return None
+
+
 def alert_state(hottest, since, last_alert, now):
     """Pure helper for the overheat notification logic.
 
@@ -368,6 +442,8 @@ class App:
         self._extra_icons = {}   # key "i:model" -> pystray.Icon (one per extra SSD)
         self._alert_since = None
         self._last_alert = 0.0
+        self._pending_update = None
+        self._last_update_check = 0.0
         self.icon = pystray.Icon(
             "ssd_temp",
             icon=make_icon("--", UNKNOWN),
@@ -377,6 +453,7 @@ class App:
                 pystray.MenuItem("Show temperature graph", self.show_graph),
                 pystray.MenuItem("Show all disks (debug)", self.show_disks),
                 pystray.MenuItem("Refresh now", self.refresh),
+                pystray.MenuItem("Check for updates...", self.check_updates_now),
                 pystray.MenuItem("Settings...", self.show_settings),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("Record history", self.toggle_history,
@@ -403,6 +480,10 @@ class App:
 
     def show_settings(self, *_):
         self._spawn_once("_settings_open", self._settings_window)
+
+    def check_updates_now(self, *_):
+        threading.Thread(target=self._check_updates, kwargs={"manual": True},
+                         daemon=True).start()
 
     def _spawn_once(self, flag_attr, target):
         """Run target() in its own thread, one instance at a time."""
@@ -703,6 +784,72 @@ class App:
         root.bind("<Escape>", lambda e: root.destroy())
         root.mainloop()
 
+    # ---- auto-update ----
+    def _check_updates(self, manual=False):
+        """Look for a newer GitHub release; notify / offer to install.
+
+        Runs on a worker thread; never raises. With no update available the
+        user only sees a message when the check was manual.
+        """
+        repo = SETTINGS.get("github_repo") or DEFAULT_SETTINGS["github_repo"]
+        release = fetch_latest_release(repo)
+        if not release:
+            if manual:
+                self._notify("No update information available.",
+                             "SSD Temp Monitor — Update")
+            return
+        url, version = select_release_asset(release)
+        if not url or not is_newer_version(version):
+            if manual:
+                self._notify(
+                    f"You are running the latest version ({APP_VERSION}).",
+                    "SSD Temp Monitor — Update")
+            return
+        # a newer release exists -> surface it
+        self.icon.notify(
+            f"Version {version} is available ({APP_VERSION} installed).\n"
+            "Right-click -> Check for updates... to install.",
+            title="SSD Temp Monitor — update available")
+        with self._lock:
+            self._pending_update = (url, version)
+
+    def _install_update(self, *_):
+        """Download the new setup exe and run it (the installer closes us)."""
+        with self._lock:
+            pending = self._pending_update
+        if not pending:
+            return
+        url, version = pending
+        self.icon.notify(f"Downloading v{version}...", "SSD Temp Monitor")
+
+        def worker():
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "ssd-temp-monitor"})
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    data = resp.read()
+                dest = os.path.join(os.environ.get("TEMP", os.path.expanduser("~")),
+                                    f"ssd_temp_monitor_setup_{version}.exe")
+                with open(dest, "wb") as f:
+                    f.write(data)
+            except Exception:
+                self._notify("Update download failed.", "SSD Temp Monitor — Update")
+                return
+            # hand over to the installer; /CLOSEAPPLICATIONS makes it close
+            # this app and restart it afterwards (needs RestartManager)
+            subprocess.Popen([
+                dest, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
+                "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS",
+            ], creationflags=subprocess.CREATE_NO_WINDOW, close_fds=True)
+            self.icon.stop()  # exit so the installer can replace the exe
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _notify(self, message, title):
+        try:
+            self.icon.notify(message, title=title)
+        except Exception:
+            pass
+
     # ---- per-disk icons (multi-SSD support) ----
     def _sync_extra_icons(self, temps):
         """Show one extra tray icon per additional internal SSD (2nd onward).
@@ -829,6 +976,11 @@ class App:
     def poll_loop(self):
         while True:
             self.update()
+            # auto-update: check right after start, then every 6 hours
+            if (SETTINGS.get("check_updates")
+                    and time.time() - self._last_update_check >= UPDATE_CHECK_INTERVAL):
+                self._last_update_check = time.time()
+                threading.Thread(target=self._check_updates, daemon=True).start()
             time.sleep(POLL_SECONDS)
 
     def update(self):

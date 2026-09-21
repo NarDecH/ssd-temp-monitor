@@ -23,6 +23,7 @@
 - 🚦 เปิดซ้ำไม่ได้ — โปรแกรมรันได้ครั้งละ 1 อินสแตนซ์เท่านั้น
   (อินสแตนซ์ซ้ำขึ้นข้อความแล้วออก · มีตัวติดตั้ง 64-bit ลง Program Files)
 - ⚙️ **หน้า Settings** — ปรับ polling / การเตือน / history เก็บลง config.json
+- 🔄 **Auto-update** — เช็ค GitHub Releases อัตโนมัติ แจ้งเตือนและติดตั้งจากเมนู
 - 🛡️ ขอสิทธิ์ Administrator อัตโนมัติผ่าน UAC (จำเป็นสำหรับอ่าน SMART)
 - 📦 มี **exe สำเร็จรูป** (`dist\ssd_temp_monitor.exe`) — ไม่ต้องติดตั้ง Python
 - 🔌 **แสดงเฉพาะ SSD ภายในเครื่อง** — ไม่นับ USB card reader / external enclosure
