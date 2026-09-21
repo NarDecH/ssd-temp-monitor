@@ -74,10 +74,19 @@
 ## หน้า Settings
 
 เมนูคลิกขวา → **Settings...** ปรับได้ทั้ง polling interval (1–60 วินาที),
-alert threshold (40–90 °C), sustain/cooldown, ความยาว history (5–240 นาที)
-และ record-on-start — บันทึกลง `%APPDATA%\SSDTempMonitor\config.json`
-และมีผลทันที (ยกเว้น polling interval ที่ใช้หลังรีสตาร์ท)
+alert threshold (40–90 °C), sustain/cooldown, ความยาว history (5–240 นาที),
+record-on-start, **ขนาดไอคอน (16–128 px)**, **โหมด high-contrast**
+(เม็ดดำขอบขาว — อ่านง่ายบน taskbar สีอ่อน), **ช่องทางอัปเดต** (stable /
+pre-release), **ช่วงเวลาเช็คอัปเดต (5–1440 นาที)** และ multi-disk icons —
+บันทึกลง `%APPDATA%\SSDTempMonitor\config.json` และ**มีผลทันทีทุกค่า**
+(รวมถึงขนาดไอคอนและ polling interval — ไม่ต้องรีสตาร์ท)
 ลบไฟล์ config เพื่อรีเซ็ตค่าเริ่มต้น
+
+## Event log
+
+แอปบันทึกเหตุการณ์สำคัญลง `%APPDATA%\SSDTempMonitor\ssd_temp_monitor.log`
+(หมุนเวียนอัตโนมัติ 512 kB × 3 ไฟล์): เริ่ม/ปิดโปรแกรม, การแจ้งเตือนอุณหภูมิเกิน,
+การตรวจพบ/ติดตั้งอัปเดต และเวลาที่ดิสก์หาย/เพิ่ม — ใช้ไฟล์นี้ยืนยันอาการเวลารายงานบั๊ก
 
 ## ทำไมไอคอนถึงขึ้น "--"?
 
@@ -98,4 +107,5 @@ alert threshold (40–90 °C), sustain/cooldown, ความยาว history (
 |---|---|
 | [RESEARCH.md](RESEARCH.md) | วิเคราะห์ปัญหา USB reader + วิธีแก้ |
 | [CHANGELOG.md](CHANGELOG.md) | ประวัติการเปลี่ยนแปลง |
+| [USER_GUIDE_EN.md](USER_GUIDE_EN.md) | คู่มือภาษาอังกฤษ (มีฉบับ [HTML](USER_GUIDE_EN.html) ด้วย) |
 | [../README.md](../README.md) | คู่มือภาษาอังกฤษ (root) |

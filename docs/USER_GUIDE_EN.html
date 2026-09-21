@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SSD Temperature Tray Monitor — User Guide</title>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8;
+    --green: #22c55e; --orange: #f59e0b; --red: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", Tahoma, sans-serif;
+    line-height: 1.7;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 24px 20px 64px; }
+  .banner { width: 100%; border-radius: 16px; display: block; margin: 12px 0 8px; }
+  figure { margin: 20px 0; text-align: center; }
+  figure img, figure svg { max-width: 100%; height: auto; }
+  figcaption { font-size: 0.85rem; color: var(--muted); margin-top: 6px; }
+  h1 { font-size: 1.9rem; margin: 20px 0 4px; }
+  h2 { font-size: 1.3rem; margin-top: 36px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: #0b1220; border: 1px solid var(--border); border-radius: 6px;
+    padding: 1px 7px; font-family: Consolas, "Cascadia Mono", monospace; font-size: 0.9em;
+  }
+  pre {
+    background: #0b1220; border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 18px; overflow-x: auto;
+  }
+  pre code { border: none; padding: 0; background: none; }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
+  .badge {
+    font-size: 0.78rem; padding: 3px 12px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+  }
+  .badge.ok { color: #86efac; border-color: #14532d; }
+  .badge.warn { color: #fcd34d; border-color: #78350f; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 20px; margin: 16px 0;
+  }
+  .card.tip { border-left: 4px solid var(--accent); }
+  .card.warn { border-left: 4px solid var(--orange); }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 0.95rem; }
+  th, td { border: 1px solid var(--border); padding: 8px 14px; text-align: left; }
+  th { background: var(--surface); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 16px 0; }
+  .feature { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; }
+  .feature b { color: #fff; }
+  ul { padding-left: 22px; }
+  .legend { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
+  .dot { width: 14px; height: 14px; border-radius: 4px; display: inline-block; margin-right: 6px; vertical-align: -2px; }
+  .footer { margin-top: 48px; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--border); padding-top: 16px; }
+  .lang-switch { float: right; font-size: 0.85rem; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="lang-switch"><a href="README.html">🇹🇭 คู่มือไทย</a></div>
+  <img class="banner" src="img/banner.svg" alt="SSD Temperature Tray Monitor">
+  <h1>SSD Temperature Tray Monitor</h1>
+  <div class="badges">
+    <span class="badge">Windows 10 / 11</span>
+    <span class="badge">Single-file Python app</span>
+    <span class="badge ok">v1.9.0</span>
+    <span class="badge warn">Needs admin rights</span>
+  </div>
+  <p>A tiny app that shows your <strong>SSD temperature</strong> live on the Windows
+  system tray icon (updated every second), with warning colors when a disk runs hot.</p>
+
+  <h2>Features</h2>
+  <div class="grid">
+    <div class="feature">🔢 <b>Temperature in the icon</b><br>Hottest SSD, refreshed every 1 second</div>
+    <div class="feature">💺 <b>Per-disk icons</b><br>One extra icon per NVMe/SATA SSD (optional)</div>
+    <div class="feature">🛡️ <b>Automatic UAC</b><br>Elevates itself at launch — SMART reads need admin</div>
+    <div class="feature">📈 <b>Live graph</b><br>Last 30 minutes, redrawn every second, min/max/avg</div>
+    <div class="feature">🔔 <b>Overheat alert</b><br>≥ 65 °C sustained 30 s, cooldown 5 min — both configurable</div>
+    <div class="feature">⚙️ <b>Settings window</b><br>Polling, alerts, history, icons, update channel</div>
+    <div class="feature">⬆️ <b>Verified auto-update</b><br>Downloads from GitHub Releases, SHA-256 checked</div>
+    <div class="feature">🔌 <b>Ignores USB readers</b><br>Internal SSDs only — no bogus readings, no 40 s stalls</div>
+    <div class="feature">🩹 <b>Copy diagnostics</b><br>Full snapshot to the clipboard for bug reports</div>
+  </div>
+
+  <div class="legend">
+    <span><span class="dot" style="background:#22c55e"></span>green ≤ 50 °C</span>
+    <span><span class="dot" style="background:#f59e0b"></span>orange 51–64 °C</span>
+    <span><span class="dot" style="background:#ef4444"></span>red ≥ 65 °C</span>
+  </div>
+
+  <figure>
+    <img src="img/tray-icons.svg" alt="Tray icons mockup">
+    <figcaption>Tray icons — hottest-disk temperature, plus one icon per additional SSD</figcaption>
+  </figure>
+
+  <h2>System requirements</h2>
+  <ul>
+    <li>Windows 10 / 11</li>
+    <li>Administrator rights (UAC) — temperature data comes from privileged SMART counters</li>
+  </ul>
+
+  <h2>Install</h2>
+  <div class="card tip">
+    <b>Option A — installer (recommended)</b><br>
+    Download <code>ssd_temp_monitor_setup_vX.Y.Z.exe</code> from the
+    <a href="https://github.com/NarDecH/ssd-temp-monitor/releases/latest">releases page</a>,
+    run it, and optionally tick <i>Start automatically at Windows login</i>.
+  </div>
+  <div class="card">
+    <b>Option B — portable exe</b><br>
+    Download <code>ssd_temp_monitor_vX.Y.Z.exe</code> and run it directly — no installation.
+  </div>
+  <div class="card">
+    <b>Option C — from source</b><br>
+    <code>pip install pystray Pillow</code>, then double-click
+    <code>start_ssd_temp_monitor.bat</code> (or run <code>pyw ssd_temp_tray.py</code>).
+  </div>
+
+  <h2>Tray menu</h2>
+  <table>
+    <tr><th>Menu item</th><th>What it does</th></tr>
+    <tr><td>Show details</td><td>Every disk with model, bus type and temperature</td></tr>
+    <tr><td>Show temperature graph</td><td>Live chart of the last 30 min with min/max/avg</td></tr>
+    <tr><td>Show all disks (debug)</td><td>Every physical disk incl. filtered-out ones, with the reason</td></tr>
+    <tr><td>Copy diagnostics to clipboard</td><td>Snapshot of version, admin status, settings, all disks</td></tr>
+    <tr><td>Refresh now</td><td>Read temperatures immediately</td></tr>
+    <tr><td>Check for updates...</td><td>Download + verify + install a newer release</td></tr>
+    <tr><td>Settings...</td><td>Open the settings window (see below)</td></tr>
+    <tr><td>About</td><td>Version, latest release, releases link</td></tr>
+    <tr><td>Record history</td><td>Toggle CSV logging for the graph</td></tr>
+    <tr><td>Exit</td><td>Quit (flushes history first)</td></tr>
+  </table>
+
+  <h2>Settings</h2>
+  <p>Saved to <code>%APPDATA%\SSDTempMonitor\config.json</code>; changes apply immediately.</p>
+  <table>
+    <tr><th>Setting</th><th>Range / values</th></tr>
+    <tr><td>Poll interval</td><td>1–60 s</td></tr>
+    <tr><td>Alert threshold</td><td>40–90 °C</td></tr>
+    <tr><td>Alert sustain</td><td>0–600 s</td></tr>
+    <tr><td>Alert cooldown</td><td>1–120 min</td></tr>
+    <tr><td>History window</td><td>5–240 min</td></tr>
+    <tr><td>Update check interval</td><td>5–1440 min</td></tr>
+    <tr><td>Update channel</td><td><code>stable</code> or <code>pre-release</code></td></tr>
+    <tr><td>Icon size</td><td>16–128 px</td></tr>
+    <tr><td>High-contrast icon</td><td>Black pill with a white border — readable on light taskbars</td></tr>
+    <tr><td>Record history on startup</td><td>on / off</td></tr>
+    <tr><td>Multi-disk icons</td><td>on / off</td></tr>
+  </table>
+
+  <h2>Auto-update</h2>
+  <p>The app checks GitHub Releases on startup and every N minutes. A newer stable
+  release raises <b>one notification per release per session</b>; install it via
+  <b>Check for updates...</b>. Every download is SHA-256-verified against the release's
+  <code>SHA256SUMS.txt</code> before it is executed, and a helper waits for the app to
+  exit before the installer runs, then relaunches the app. Unattended usage:</p>
+  <pre><code>ssd_temp_monitor.exe --update-now</code></pre>
+
+  <div class="card warn">
+    <b>Update channels:</b> <code>stable</code> (default) never sees <code>-rc1</code> tags;
+    switch to <code>pre-release</code> in Settings to test release candidates early.
+  </div>
+
+  <h2>Event log</h2>
+  <p>Startup/shutdown, overheat alerts and update attempts are written to
+  <code>%APPDATA%\SSDTempMonitor\ssd_temp_monitor.log</code> (rotating, 512 kB × 3 files).</p>
+
+  <h2>Run at startup (optional)</h2>
+  <p>The installer can create the startup entry for you. Manual way: press Win+R,
+  type <code>shell:startup</code>, and put a shortcut to the exe there.</p>
+
+  <h2>Documentation</h2>
+  <ul>
+    <li><a href="README.html">Thai user guide (README.html)</a></li>
+    <li><a href="RESEARCH.html">Why USB card readers are excluded</a></li>
+    <li><a href="CHANGELOG.html">Release history</a></li>
+    <li><a href="CODE_SIGNING.html">Code signing status</a></li>
+    <li><a href="https://github.com/NarDecH/ssd-temp-monitor/blob/main/AGENT.md">AGENT.md — guidance for AI coding agents</a></li>
+  </ul>
+
+  <div class="footer">
+    SSD Temperature Tray Monitor · single-file Python · MIT-style internal tool ·
+    <a href="https://github.com/NarDecH/ssd-temp-monitor">GitHub repository</a>
+  </div>
+</div>
+</body>
+</html>

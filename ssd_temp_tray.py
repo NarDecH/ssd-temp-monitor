@@ -25,6 +25,8 @@ import csv
 import ctypes
 import hashlib
 import json
+import logging
+import logging.handlers
 import os
 import subprocess
 import sys
@@ -39,7 +41,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.9.0-rc1"      # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.9.0"          # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -68,6 +70,8 @@ DEFAULT_SETTINGS = {
     "github_repo": "NarDech/ssd-temp-monitor",
     "update_channel": "stable",              # or "pre-release"
     "update_check_interval_minutes": 360,     # auto-check every N minutes
+    "icon_size": 64,                          # tray icon edge in px
+    "high_contrast_icon": False,              # black pill + white border
 }
 
 
@@ -88,6 +92,11 @@ def _validate_settings(cfg):
     except (TypeError, ValueError):
         out["update_check_interval_minutes"] = \
             DEFAULT_SETTINGS["update_check_interval_minutes"]
+    try:
+        out["icon_size"] = min(128, max(16, int(out["icon_size"])))
+    except (TypeError, ValueError):
+        out["icon_size"] = DEFAULT_SETTINGS["icon_size"]
+    out["high_contrast_icon"] = bool(out["high_contrast_icon"])
     if not str(out["github_repo"]).strip():
         out["github_repo"] = DEFAULT_SETTINGS["github_repo"]
     else:
@@ -142,6 +151,35 @@ ALERT_COOLDOWN_SECONDS = SETTINGS["alert_cooldown_minutes"] * 60
 
 # ---- live graph window ----
 GRAPH_W, GRAPH_H, GRAPH_PAD = 680, 320, 50
+
+# ---- rotating event log (startup/shutdown/update/alert/error) -------------
+LOG_FILE = os.path.join(
+    os.environ.get("APPDATA", os.path.expanduser("~")),
+    "SSDTempMonitor", "ssd_temp_monitor.log")
+_event_log = logging.getLogger("ssd_temp_monitor")
+_event_log.setLevel(logging.INFO)
+try:
+    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+    _handler = logging.handlers.RotatingFileHandler(
+        LOG_FILE, maxBytes=512 * 1024, backupCount=2, encoding="utf-8")
+    _handler.setFormatter(logging.Formatter(
+        "%(asctime)s %(levelname)s %(message)s"))
+    _event_log.addHandler(_handler)
+except OSError:
+    _event_log.addHandler(logging.NullHandler())
+
+
+def log_event(event, **fields):
+    """Append one structured line to the rotating event log.
+
+    Never raises - logging must not be able to break the app.
+    """
+    try:
+        parts = " ".join(
+            f"{k}={v}" for k, v in fields.items() if v is not None)
+        _event_log.info("%s%s", event, (" " + parts) if parts else "")
+    except Exception:
+        pass
 GRAPH_Y_LO, GRAPH_Y_HI = 15, 95
 GRAPH_REFRESH_MS = 1000
 
@@ -566,23 +604,52 @@ def alert_state(hottest, since, last_alert, now):
     return False, None
 
 
-def make_icon(text, color):
-    key = (text, color)
+def _icon_font(size):
+    """Font for tray digits at the given icon size (cached)."""
+    key = ("font", size)
     cached = _ICON_CACHE.get(key)
     if cached is not None:
         return cached
-    img = Image.new("RGBA", (ICON_SIZE, ICON_SIZE), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    # rounded background
-    d.rounded_rectangle([2, 2, ICON_SIZE - 2, ICON_SIZE - 2], radius=14, fill=color)
     try:
-        font = ImageFont.truetype("arial.ttf", 34 if len(text) <= 2 else 26)
+        font = ImageFont.truetype("arialbd.ttf", int(size * 0.85)
+                                  if size >= 48 else int(size * 0.78))
     except OSError:
         font = ImageFont.load_default()
-    bbox = d.textbbox((0, 0), text, font=font)
+    _ICON_CACHE[key] = font
+    return font
+
+
+def _text_xy(size, bbox, text_h):
+    """Center a text bbox inside a size x size icon."""
     w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    d.text(((ICON_SIZE - w) / 2 - bbox[0], (ICON_SIZE - h) / 2 - bbox[1]),
-           text, font=font, fill="white")
+    return ((size - w) / 2 - bbox[0], (size - text_h) / 2 - bbox[1])
+
+
+def make_icon(text, color, size=None, high_contrast=None):
+    """Render the tray temperature icon.
+
+    size: icon edge in px (default ICON_SIZE); high_contrast swaps the
+    colored pill for a black pill with a white border so the white digits
+    stay readable on light/white taskbars. Results are cached.
+    """
+    if size is None:
+        size = ICON_SIZE
+    if high_contrast is None:
+        high_contrast = bool(SETTINGS.get("high_contrast_icon"))
+    key = (text, color, size, high_contrast)
+    cached = _ICON_CACHE.get(key)
+    if cached is not None:
+        return cached
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    pill = (0, 0, 0, 255) if high_contrast else color
+    d.rounded_rectangle([2, 2, size - 2, size - 2], radius=max(4, size // 5),
+                        fill=pill,
+                        outline=(255, 255, 255, 255) if high_contrast else None,
+                        width=max(1, size // 32) if high_contrast else 0)
+    font = _icon_font(size)
+    bbox = d.textbbox((0, 0), text, font=font)
+    d.text(_text_xy(size, bbox, size), text, font=font, fill="white")
     _ICON_CACHE[key] = img
     return img
 
@@ -618,6 +685,7 @@ def save_history(points):
 
 class App:
     def __init__(self):
+        log_event("startup", version=effective_version())
         self.temps = []
         self.history = load_history() if KEEP_HISTORY else []
         self._last_save = 0.0
@@ -1018,6 +1086,8 @@ class App:
             self._pending_update = (url, version)
             self._nagged_version = version
         if not already:
+            log_event("update_available", remote=version,
+                      local=effective_version())
             # nag once per release per session; the Update menu item and the
             # About window stay available the whole time
             self._notify(
@@ -1065,10 +1135,12 @@ class App:
                 self._notify("Update download failed.", "SSD Temp Monitor — Update")
                 return
             self._notify(f"Installing {version}...", "SSD Temp Monitor")
+            log_event("update_install_start", remote=version)
             # exit so the installer can replace the exe; the shim waits for
             # us to let go of the AppMutex before starting the installer
             self.quit()
             code = wait_and_install(shim)
+            log_event("update_install_result", code=code)
             if code in (0, 1002, 1004):
                 return  # installer succeeded (or handed off to a restart)
             try:
@@ -1271,6 +1343,7 @@ class App:
 
     def _alert(self):
         """Show a Windows toast/notification about the overheat."""
+        log_event("overheat_alert")
         with self._lock:
             temps = [t["temp"] for t in self.temps if t["temp"] is not None]
         peak = max(temps) if temps else None
@@ -1285,6 +1358,7 @@ class App:
             pass  # notifications are best-effort
 
     def quit(self, *_):
+        log_event("shutdown")
         """Exit: ask the graph thread to close, flush history, stop the tray.
 
         No tkinter call is ever made from this (menu) thread -- the graph
@@ -1357,7 +1431,9 @@ class App:
 
         text = str(hottest) if hottest is not None else "--"
         color = temp_color(hottest) if hottest is not None else UNKNOWN
-        self.icon.icon = make_icon(text, color)
+        size = int(SETTINGS.get("icon_size", 64))
+        hc = bool(SETTINGS.get("high_contrast_icon"))
+        self.icon.icon = make_icon(text, color, size=size, high_contrast=hc)
         self.icon.title = " | ".join(
             f"{t['model']}: {t['temp']}C" if t["temp"] is not None else f"{t['model']}: n/a"
             for t in temps

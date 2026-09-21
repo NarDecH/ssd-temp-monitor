@@ -23,7 +23,9 @@ are exercised for real.
 | `_safe_temp` | empty string / 0 / 65535 / out-of-range values → `n/a`, never a crash |
 | `alert_state` | 65 °C sustained 30 s, 5-min cooldown, reset on drop |
 | CSV history | roundtrip, 30-min cutoff, corrupt rows, cap/trim, 60-s flush interval |
-| tray icon | cache hit returns the same image object |
+| tray icon | cache hit returns the same image object; size/high-contrast settings clamp correctly; high-contrast pill is black with a white border |
+| `log_event` | writes structured lines, never raises, rotating handler is configured at import |
+| uninstaller | `setup.iss` `[UninstallDelete]` removes `config.json` and the event log |
 | single instance | second `acquire_single_instance()` on the same mutex returns `False` |
 
 GUI (tkinter) and tray-icon behavior are intentionally not covered — they

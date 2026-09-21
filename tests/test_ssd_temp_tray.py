@@ -5,6 +5,8 @@ CSV/Windows-mutex helpers are exercised for real.
 """
 import csv
 import json
+import logging
+import logging.handlers
 import os
 import subprocess
 import sys
@@ -1054,3 +1056,119 @@ class TestPollIntervalLive:
         assert "for _ in range(target * 4)" in src
         assert "time.sleep(0.25)" in src
         assert "time.sleep(POLL_SECONDS)" not in src
+
+
+# ---------------------------------------------------------------------------
+# icon size + high-contrast settings (v1.9.0)
+# ---------------------------------------------------------------------------
+class TestIconSizeAndContrast:
+    def test_icon_size_clamped(self):
+        cfg = {"icon_size": 9999, "high_contrast_icon": "yes"}
+        s = m._validate_settings(cfg)
+        assert s["icon_size"] == 128
+        assert s["high_contrast_icon"] is True
+
+    def test_high_contrast_defaults_off(self):
+        s = m._validate_settings({})
+        assert s["high_contrast_icon"] is False
+        assert s["icon_size"] == m.DEFAULT_SETTINGS["icon_size"]
+
+    def test_make_icon_honors_size_and_contrast(self):
+        pytest.importorskip("PIL", reason="Pillow not installed")
+        m._ICON_CACHE.clear()
+        normal = m.make_icon("42", m.GREEN, size=32)
+        hc = m.make_icon("42", m.GREEN, size=32, high_contrast=True)
+        assert normal.size == (32, 32)
+        # sample the four inner corners of the pill (never covered by digits):
+        # high-contrast pill must be black there, the colored pill must not be
+        corners = [(5, 27), (27, 27), (27, 5), (5, 5)]
+        hc_px = [hc.convert("RGB").getpixel(p) for p in corners]
+        normal_px = [normal.convert("RGB").getpixel(p) for p in corners]
+        assert (0, 0, 0) in hc_px
+        assert (0, 0, 0) not in normal_px
+
+    def test_make_icon_cache_key_includes_contrast(self):
+        pytest.importorskip("PIL")
+        a = m.make_icon("42", m.GREEN, size=24, high_contrast=False)
+        b = m.make_icon("42", m.GREEN, size=24, high_contrast=True)
+        assert a is not b
+
+    def test_hc_pill_has_white_border(self):
+        pytest.importorskip("PIL")
+        hc = m.make_icon("42", m.GREEN, size=32, high_contrast=True)
+        # the outline is drawn on the rectangle boundary -> pixel (2, 16)
+        assert hc.getpixel((2, 16))[:3] == (255, 255, 255)
+
+
+# ---------------------------------------------------------------------------
+# rotating event log (v1.9.0)
+# ---------------------------------------------------------------------------
+class TestEventLog:
+    def test_log_event_writes_line(self, tmp_path, monkeypatch):
+        logfile = tmp_path / "events.log"
+        logger = logging.getLogger("ssd_temp_monitor")
+        old_handlers = logger.handlers[:]
+        logger.handlers = []
+        handler = logging.handlers.RotatingFileHandler(
+            str(logfile), maxBytes=64 * 1024, backupCount=2, encoding="utf-8")
+        logger.addHandler(handler)
+        try:
+            m.log_event("startup", version=m.APP_VERSION, admin=True)
+            handler.flush()
+        finally:
+            logger.removeHandler(handler)
+            logger.handlers = old_handlers
+        text = logfile.read_text(encoding="utf-8")
+        assert "startup" in text
+        assert f"version={m.APP_VERSION}" in text
+        assert "admin=True" in text
+
+    def test_log_event_never_raises(self):
+        # even with hostile fields the helper must not blow up
+        m.log_event("weird", obj=object(), none=None)
+        m.log_event("empty")
+
+    def test_rotating_handler_configured(self):
+        logger = logging.getLogger("ssd_temp_monitor")
+        assert any(isinstance(h, logging.handlers.RotatingFileHandler)
+                   for h in logger.handlers)
+
+
+# ---------------------------------------------------------------------------
+# documentation completeness (Thai + English guides, landing page)
+# ---------------------------------------------------------------------------
+class TestDocs:
+    @pytest.mark.parametrize("relpath", [
+        "docs/USER_GUIDE_EN.md",
+        "docs/USER_GUIDE_EN.html",
+        "docs/index.html",
+    ])
+    def test_files_exist(self, relpath):
+        assert (PROJECT_ROOT / relpath).exists()
+
+    def test_landing_page_links_english_guide(self):
+        html = (PROJECT_ROOT / "docs" / "index.html").read_text(encoding="utf-8")
+        assert "USER_GUIDE_EN.html" in html
+
+    def test_thai_guide_links_english_guide(self):
+        md = (PROJECT_ROOT / "docs" / "README.md").read_text(encoding="utf-8")
+        assert "USER_GUIDE_EN.md" in md
+
+
+# ---------------------------------------------------------------------------
+# uninstaller removes user data (v1.9.0)
+# ---------------------------------------------------------------------------
+class TestUninstallCleansUp:
+    def test_uninstall_section_deletes_config_and_log(self):
+        iss = (PROJECT_ROOT / "setup.iss").read_text(encoding="utf-8")
+        assert "[UninstallDelete]" in iss
+        assert "config.json" in iss
+        assert "ssd_temp_monitor.log" in iss
+
+    def test_uninstall_entries_are_user_files(self):
+        iss = (PROJECT_ROOT / "setup.iss").read_text(encoding="utf-8")
+        lines = [ln.strip() for ln in iss.splitlines()]
+        idx = lines.index("[UninstallDelete]")
+        block = "\n".join(lines[idx + 1:idx + 6])
+        assert "Type: files; Name: \"{userappdata}\SSDTempMonitor\config.json\"" in block
+        assert "Type: files; Name: \"{userappdata}\SSDTempMonitor\ssd_temp_monitor.log\"" in block

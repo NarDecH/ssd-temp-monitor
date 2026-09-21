@@ -2,8 +2,8 @@
 
 [![CI](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/ci.yml)
 [![Release](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/release.yml/badge.svg)](https://github.com/NarDecH/ssd-temp-monitor/releases)
-![Version](https://img.shields.io/badge/version-1.9.0--rc1-orange)
-![Tests](https://img.shields.io/badge/tests-126%20passing-brightgreen)
+![Version](https://img.shields.io/badge/version-1.9.0-orange)
+![Tests](https://img.shields.io/badge/tests-142%20passing-brightgreen)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey)
 
 ![Banner](docs/img/banner.svg)
@@ -13,9 +13,11 @@ Shows your SSD temperature live on the system tray icon.
 - Icon displays the current temperature (°C) of the hottest SSD, refreshed every 1 second.
 - Color coding: **green** ≤ 50 °C, **orange** 51–64 °C, **red** ≥ 65 °C.
 - Hover tooltip shows every SSD with its temperature.
+- Adjustable **icon size (16–128 px)** and **high-contrast mode** (readable on light taskbars).
 - Right-click menu: *Show details*, *Show temperature graph* (last 30 min),
-  *Show all disks (debug)*, *Settings...*, *Check for updates...*, *About*,
+  *Show all disks (debug)*, *Copy diagnostics*, *Settings...*, *Check for updates...*, *About*,
   *Refresh now*, *Record history*, *Exit*.
+- **Event log** (rotating) in `%APPDATA%\SSDTempMonitor\ssd_temp_monitor.log`.
 - **Internal SSDs only** — USB card readers and enclosures are ignored on
   purpose (their bridge chips report bogus temperatures and can block the
   counter read for ~40 s). See [docs/RESEARCH.md](docs/RESEARCH.md).
@@ -78,6 +80,7 @@ prompt at each login (admin is required for SMART temperature data).
 ## Documentation
 
 - [docs/README.md](docs/README.md) — Thai user guide (มีฉบับ HTML ด้วย)
+- [docs/USER_GUIDE_EN.md](docs/USER_GUIDE_EN.md) — English user guide
 - [docs/RESEARCH.md](docs/RESEARCH.md) — why USB readers are excluded
 - [docs/CHANGELOG.md](docs/CHANGELOG.md) — release history
 - [AGENT.md](AGENT.md) — guidance for AI coding agents

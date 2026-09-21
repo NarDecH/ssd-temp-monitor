@@ -3,7 +3,22 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
-## [1.9.0-rc1] — 2026-09-22
+## [1.9.0] — 2026-09-22
+
+เวอร์ชันเสถียรรวมทุกอย่างจาก [1.9.0-rc1] พร้อมเพิ่มเติม:
+
+### Added
+
+- 🎨 **ปรับขนาดไอคอนได้ (16–128 px)** และ **โหมด high-contrast**
+  (เม็ดดำขอบขาว — อ่านง่ายบน taskbar สีอ่อน) ตั้งในหน้า Settings
+  มีผลทันทีไม่ต้องรีสตาร์ท · ไอคอนทุกตำแหน่ง (tray, ต่อดิสก์, tooltip)
+  ใช้การตั้งค่าเดียวกัน
+- 📋 **Event log หมุนเวียน** — เริ่ม/ปิดโปรแกรม, การแจ้งเตือน,
+  การตรวจ/ติดตั้งอัปเดต และดิสก์ที่หาย/เพิ่ม ถูกบันทึกลง
+  `%APPDATA%\SSDTempMonitor\ssd_temp_monitor.log` (512 kB × 3 ไฟล์)
+- 🌐 **คู่มือภาษาอังกฤษฉบับเต็ม** — [USER_GUIDE_EN.md](USER_GUIDE_EN.md)
+  + [USER_GUIDE_EN.html](USER_GUIDE_EN.html) ลิงก์จาก root README,
+  คู่มือไทย และหน้า GitHub Pages
 
 ### Added
 
