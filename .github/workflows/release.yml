@@ -42,6 +42,33 @@ jobs:
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" setup.iss
 
+      - name: Sign binaries (optional, secrets-gated)
+        shell: pwsh
+        env:
+          SIGNING_PFX_BASE64: ${{ secrets.SIGNING_PFX_BASE64 }}
+          SIGNING_PFX_PASSWORD: ${{ secrets.SIGNING_PFX_PASSWORD }}
+          SIGNING_TSA_URL: ${{ secrets.SIGNING_TSA_URL }}
+        run: |
+          if (-not $env:SIGNING_PFX_BASE64) {
+            Write-Output "No signing certificate configured - releasing unsigned."
+            Write-Output "See docs/CODE_SIGNING.md to enable Authenticode signing."
+            exit 0
+          }
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" `
+            -Recurse -Filter signtool.exe | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $signtool) { Write-Error "signtool.exe not found"; exit 1 }
+          $pfx = Join-Path $env:RUNNER_TEMP "signing.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGNING_PFX_BASE64))
+          try {
+            & $signtool sign /fd SHA256 /f $pfx /p "$env:SIGNING_PFX_PASSWORD" `
+              /tr "$env:SIGNING_TSA_URL" /td SHA256 `
+              "dist\ssd_temp_monitor.exe" "installer\ssd_temp_monitor_setup.exe"
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          } finally {
+            Remove-Item $pfx -Force -ErrorAction SilentlyContinue
+          }
+          Write-Output "binaries signed"
+
       - name: Smoke-test installed exe
         shell: pwsh
         run: |

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SSD Temperature Monitor — แสดงอุณหภูมิ SSD บน tray ของ Windows</title>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8;
+    --green: #22c55e; --orange: #f59e0b; --red: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", "Noto Sans Thai", Tahoma, sans-serif;
+    line-height: 1.65;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 24px 20px 64px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .hero { text-align: center; padding: 26px 0 8px; }
+  .hero img.banner { width: 100%; max-width: 720px; border-radius: 14px; }
+  h1 { font-size: 2rem; margin: 18px 0 6px; }
+  .tagline { color: var(--muted); font-size: 1.05rem; margin: 0 auto; max-width: 640px; }
+  .cta { margin: 26px 0 8px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 11px 26px; border-radius: 10px;
+    font-weight: 700; font-size: 1rem; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text);
+  }
+  .btn.primary { background: #0369a1; border-color: #0284c7; color: #fff; }
+  .btn:hover { text-decoration: none; filter: brightness(1.12); }
+  .cards {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 14px; margin: 30px 0;
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 18px;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 1rem; }
+  .card p { margin: 0; color: var(--muted); font-size: .92rem; }
+  .links { margin-top: 26px; }
+  .links h2 { font-size: 1.15rem; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .links ul { list-style: none; padding: 0; }
+  .links li { padding: 7px 0; border-bottom: 1px dashed var(--border); }
+  .foot { margin-top: 40px; color: var(--muted); font-size: .85rem; text-align: center; }
+  code {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 1px 7px; font-size: .88em;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <img class="banner" src="img/banner.svg" alt="SSD Temperature Tray Monitor">
+    <h1>SSD Temperature Monitor</h1>
+    <p class="tagline">แอป Windows ขนาดเล็กที่แสดง<strong>อุณหภูมิ SSD</strong>ไว้บน
+    system tray แบบเรียลไทม์ อัปเดตทุกวินาที พร้อมสีเตือนเมื่อดิสก์ร้อนเกิน
+    และ<strong>อัปเดตตัวเองอัตโนมัติ</strong>จาก GitHub Releases</p>
+    <div class="cta">
+      <a class="btn primary" id="dl-latest"
+         href="https://github.com/NarDecH/ssd-temp-monitor/releases/latest"
+         data-noseek>⬇️ ดาวน์โหลดเวอร์ชันล่าสุด</a>
+      <a class="btn" href="https://github.com/NarDecH/ssd-temp-monitor">📦 ซอร์สโค้ดบน GitHub</a>
+    </div>
+    <p style="color: var(--muted); font-size: .9rem;">
+      Windows 10/11 · ต้องการสิทธิ์ Administrator (UAC) เพื่ออ่านอุณหภูมิ SMART
+    </p>
+  </div>
+
+  <div class="cards">
+    <div class="card"><h3>🔢 เรียลไทม์ทุกวินาที</h3>
+      <p>ไอคอน tray โชว์อุณหภูมิของ SSD ที่ร้อนที่สุด (หรือแยกไอคอนต่อดิสก์)
+      พร้อม tooltip รายดิสก์</p></div>
+    <div class="card"><h3>🎨 สีเตือน 3 ระดับ</h3>
+      <p>เขียว ≤ 50 °C · ส้ม 51–64 °C · แดง ≥ 65 °C พร้อม notification
+      เมื่อร้อนจัดต่อเนื่อง</p></div>
+    <div class="card"><h3>📈 กราฟย้อนหลัง 30 นาที</h3>
+      <p>บันทึกประวัติ CSV แล้วดูกราฟสด พร้อมค่า min/max/avg แบบเรียลไทม์</p></div>
+    <div class="card"><h3>🔌 กรอง USB อัตโนมัติ</h3>
+      <p>ไม่นับ USB card reader/enclosure ที่รายงานค่าผิดและทำให้การอ่านค้าง
+      (อ่านวิเคราะห์ใน RESEARCH)</p></div>
+    <div class="card"><h3>🔄 อัปเดตตัวเอง</h3>
+      <p>เช็ค GitHub Releases อัตโนมัติ ตรวจ SHA-256 ทุกไฟล์ก่อนติดตั้ง
+      เลือกช่องทาง stable / pre-release ได้</p></div>
+    <div class="card"><h3>🚦 ใช้ทรัพยากรน้อยมาก</h3>
+      <p>ตัวเดียวจบ ไม่มี background service หนัก ๆ — ไฟล์เดียว + PowerShell
+      query ที่กรองจากต้นทาง</p></div>
+  </div>
+
+  <div class="links">
+    <h2>เอกสารทั้งหมด</h2>
+    <ul>
+      <li>📘 <a href="./">คู่มือผู้ใช้ (README)</a> — วิธีติดตั้ง ใช้งาน ตั้งค่า</li>
+      <li>🔬 <a href="RESEARCH.html">Research</a> — วิเคราะห์บั๊ก USB reader พร้อมหลักฐานการวัดจริง</li>
+      <li>📜 <a href="CHANGELOG.html">Changelog</a> — ประวัติการเปลี่ยนแปลงทุกเวอร์ชัน</li>
+      <li>🔐 <a href="https://github.com/NarDecH/ssd-temp-monitor/blob/main/docs/CODE_SIGNING.md">Code signing</a> — สถานะการเซ็นโค้ดและวิธีเปิดใช้</li>
+      <li>🤖 <a href="https://github.com/NarDecH/ssd-temp-monitor/blob/main/AGENT.md">AGENT.md</a> — กฎสำหรับ AI coding agent</li>
+    </ul>
+  </div>
+
+  <p class="foot">
+    SSD Temperature Monitor · MIT-style เอกสารทั้งหมดเป็นภาษาไทย ·
+    สร้างจาก <a href="https://github.com/NarDecH/ssd-temp-monitor">NarDecH/ssd-temp-monitor</a>
+  </p>
+</div>
+</body>
+</html>

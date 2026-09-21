@@ -3,6 +3,32 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.8.0] — 2026-09-21
+
+### Added
+
+- 🧩 **แก้บั๊ก auto-update ติด AppMutex** — ตอนนี้ updater เขียน cmd shim
+  ที่**รอให้แอปออกก่อน** (ตรวจ process ทุกวินาที ด้วย `tasklist`/`find`
+  path เต็มจาก System32 กันชน GNU find ของ Git Bash) แล้วค่อยรันตัวติดตั้ง
+  — เดิม installer เงียบ ๆ abort (exit 1) เพราะแอปยังถือ mutex อยู่
+- ⚡ **`--update-now` flag** — ตรวจ ดาวน์โหลด ตรวจ SHA-256 และติดตั้ง
+  แบบไม่มี UI (พร้อม `UPDATE-RESULT:` ทาง stdout สำหรับระบบอัตโนมัติ)
+- 🔀 **ช่องทางอัปเดต (update channel)** — เลือกได้ใน Settings:
+  `stable` หรือ `pre-release` (tag แบบ `v1.9.0-rc1` จะถูกเห็นเฉพาะ
+  ช่องทาง pre-release)
+- ⏱️ **ช่วงเวลาเช็คอัปเดตปรับได้** — 5–1440 นาที (มีผลทันที ไม่ต้องรีสตาร์ต)
+- 🤝 **รันหลังติดตั้งในบริบทผู้ใช้เดิม** — `[Run]` ใช้ `runasoriginaluser`
+  ทำให้แอปกลับมาบน desktop ของผู้ใช้จริงหลัง auto-update (ไม่ค้างใน
+  บริบท admin)
+- 🖊️ **ขั้น sign โค้ดใน release workflow** — เปิดใช้เมื่อตั้ง secrets
+  (`SIGNING_PFX_BASE64` ฯลฯ) ดู `docs/CODE_SIGNING.md` — ไม่ตั้ง =
+  ข้ามไปเลย ปล่อยแบบ unsigned ตามเดิม
+
+### Fixed
+
+- แก้เทส fake `urllib` ที่อ่าน attribute ผิด (`req.url` → `req.full_url`)
+  และปรับ assertion ให้ตรง flow การแจ้งเตือนจริงของ updater
+
 ## [1.7.0] — 2026-09-21
 
 ### Added

@@ -15,6 +15,9 @@ are exercised for real.
 | Area | What is pinned down |
 |---|---|
 | `is_internal_ssd` | the original USB-reader bug (ASM236X reports `MediaType=SSD` but must be excluded) |
+| `build_update_shim` / `wait_and_install` | update shim waits for the app process (real mutex, real cmd, real wait), then runs the installer and passes its exit code through |
+| `select_release_asset(prefer_prerelease)` | stable channel skips `v1.9.0-rc1` tags; pre-release channel sees them |
+| `run_unattended_update` | `--update-now`: exit codes and the `cmd /c shim` handoff with SHA-256 verification |
 | `PS_TEMPS` / `PS_LIST` | regression guard: the USB filter must run **before** `Get-StorageReliabilityCounter` (the 42-second stall) |
 | `read_temps` | client-side filter as defense in depth, even if the query is broken |
 | `_safe_temp` | empty string / 0 / 65535 / out-of-range values → `n/a`, never a crash |

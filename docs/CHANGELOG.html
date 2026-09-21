@@ -67,6 +67,23 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
+  <h2><span class="ver-badge">v1.8.0</span> <span class="date">21 กันยายน 2026</span></h2>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>🧩 <strong>แก้บั๊ก auto-update ติด AppMutex</strong> — updater เขียน cmd
+        shim ที่รอให้แอปออกก่อน แล้วค่อยรันตัวติดตั้ง (เดิม installer เงียบ ๆ
+        abort เพราะแอปยังถือ mutex)</li>
+    <li>⚡ <strong>flag <code>--update-now</code></strong> — ตรวจ+ดาวน์โหลด+
+        ตรวจ SHA-256+ติดตั้งแบบไม่มี UI (สำหรับระบบอัตโนมัติ)</li>
+    <li>🔀 <strong>ช่องทางอัปเดต</strong> — stable / pre-release เลือกใน Settings</li>
+    <li>⏱️ <strong>ช่วงเวลาเช็คปรับได้</strong> — 5–1440 นาที มีผลทันที</li>
+    <li>🤝 <strong><code>runasoriginaluser</code></strong> — หลัง auto-update
+        แอปกลับมาบน desktop ของผู้ใช้จริง</li>
+    <li>🖊️ <strong>ขั้น sign โค้ด</strong> — เปิดเมื่อตั้ง secrets
+        (ดู <a href="CODE_SIGNING.md">CODE_SIGNING.md</a>) ไม่ตั้ง = ข้าม</li>
+  </ul>
+
   <h2><span class="ver-badge">v1.7.0</span> <span class="date">21 กันยายน 2026</span></h2>
 
   <h3><span class="pill add-pill">Added</span></h3>

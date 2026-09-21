@@ -104,7 +104,7 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
 ## การทดสอบ
 
 - **รัน pytest ทุกครั้งที่แก้ logic** — `python -m pytest tests/ -v`
-  (101 เคส รันได้โดยไม่ต้องมี admin/PowerShell/GUI; PowerShell ถูก
+  (114 เคส รันได้โดยไม่ต้องมี admin/PowerShell/GUI; PowerShell ถูก
   monkeypatch ที่ `_run_powershell` เสมอ)
 - ตรวจ syntax เพิ่มด้วย `python -m py_compile ssd_temp_tray.py`
 - ทดสอบ filter ด้วยคำสั่ง (ต้อง run PowerShell ใน terminal ที่รองรับ
@@ -136,6 +136,18 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   ติดตั้งเวอร์ชันใหม่
 - ตรวจความถูกต้องของ exe ที่ติดตั้งได้ด้วย SHA-256 เทียบกับ
   `SHA256SUMS.txt` ใน release (กลไกเดียวกับ updater ใช้)
+- **กลไก auto-update ต้องผ่าน AppMutex ให้ได้ก่อน**: installer จะ abort
+  (exit 1 เงียบ ๆ) ถ้าแอปยังถือ mutex — โค้ดจึงรันตัวติดตั้งผ่าน cmd shim
+  (`build_update_shim`) ที่รอ process ของแอปออกก่อนทุกครั้ง
+- **ห้ามพึ่ง PATH ใน batch shim** — ใช้ path เต็ม
+  `%SystemRoot%\System32\tasklist.exe` / `find.exe` / `ping.exe` เสมอ:
+  เครื่องที่มี Git Bash ใน PATH จะให้ `find` ชี้ไปที่ **GNU find** แล้ว
+  pipeline พังเงียบ ๆ (ทดสอบพบจริง)
+- เทสแบบ unattended ใช้ `--update-now` (พิมพ์ `UPDATE-RESULT:` ทาง stdout)
+  และ `--duplicate-silent` — ทั้งสอง flag มี unit test ครอบ
+- **ระวัง shell layer ของเทอร์มินัล**: บางชั้นแปลง `>nul` เป็น `>/dev/null`
+  อัตโนมัติแล้ว cmd.exe พัง — ในเทสจึงเรียก `ping` แบบ list ไม่ใช้
+  redirection
 
 ## สไตล์โค้ด
 

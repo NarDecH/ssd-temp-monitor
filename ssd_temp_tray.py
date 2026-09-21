@@ -28,6 +28,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.request
@@ -38,8 +39,8 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.7.0"          # keep in sync with setup.iss #define MyAppVersion
-UPDATE_CHECK_INTERVAL = 6 * 3600  # re-check every 6 hours
+APP_VERSION = "1.8.0"          # keep in sync with setup.iss #define MyAppVersion
+UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
 ORANGE = "#f59e0b"
@@ -65,6 +66,8 @@ DEFAULT_SETTINGS = {
     "multi_disk_icons": True,
     "check_updates": True,
     "github_repo": "NarDech/ssd-temp-monitor",
+    "update_channel": "stable",              # or "pre-release"
+    "update_check_interval_minutes": 360,     # auto-check every N minutes
 }
 
 
@@ -77,6 +80,14 @@ def _validate_settings(cfg):
     out["alert_cooldown_minutes"] = min(120, max(1, int(out["alert_cooldown_minutes"])))
     out["history_minutes"] = min(240, max(5, int(out["history_minutes"])))
     out["record_history"] = bool(out["record_history"])
+    out["update_channel"] = ("pre-release" if out["update_channel"] == "pre-release"
+                             else "stable")
+    try:
+        out["update_check_interval_minutes"] = min(
+            1440, max(5, int(out["update_check_interval_minutes"])))
+    except (TypeError, ValueError):
+        out["update_check_interval_minutes"] = \
+            DEFAULT_SETTINGS["update_check_interval_minutes"]
     if not str(out["github_repo"]).strip():
         out["github_repo"] = DEFAULT_SETTINGS["github_repo"]
     else:
@@ -316,13 +327,23 @@ def is_newer_version(remote, local=APP_VERSION):
         return False
 
 
-def select_release_asset(release):
+def _is_prerelease(release):
+    """True when the release/tag looks like a pre-release (v1.2.3-rc1...)."""
+    tag = str(release.get("tag_name") or release.get("name") or "")
+    return "-" in tag
+
+
+def select_release_asset(release, prefer_prerelease=False):
     """Pick the setup exe asset from a GitHub release dict.
 
     Prefers ssd_temp_monitor_setup_*.exe and falls back to any .exe that
-    is not a portable build. Returns (asset_url, version) or (None, None).
+    is not a portable build. With prefer_prerelease=True the app follows
+    the pre-release channel: draft/pre-release releases are also accepted.
+    Returns (asset_url, version) or (None, None).
     """
     if not isinstance(release, dict):
+        return None, None
+    if not prefer_prerelease and _is_prerelease(release):
         return None, None
     assets = release.get("assets") or []
     version = release.get("tag_name") or release.get("name") or ""
@@ -393,6 +414,62 @@ def verify_asset(data, sums_text, filename):
     if not expected:
         return False
     return sha256_hex(data) == expected
+
+
+def build_update_shim(installer_path, app_exe_path=None):
+    """Write a tiny cmd that waits for our processes to exit, then runs the
+    installer.
+
+    Why: setup.iss declares AppMutex, so the installer aborts (exit code 1,
+    silently in /VERYSILENT) whenever the tray app is still holding the
+    mutex. /CLOSEAPPLICATIONS does not help because Inno checks AppMutex
+    before its close-app logic. The shim exits with the installer's exit
+    code so the calling thread can report success/failure.
+    """
+    app = app_exe_path or _own_exe_path()
+    fd, path = tempfile.mkstemp(prefix="ssd_update_", suffix=".cmd")
+    with os.fdopen(fd, "w") as f:
+        f.write(
+            "@echo off\r\n"
+            "rem SSD Temperature Monitor update shim: wait for the app to\r\n"
+            "rem exit, then run the installer (AppMutex must be free).\r\n"
+            ":wait\r\n"
+            # absolute paths: never resolve `find` to GNU find from a
+            # Git-bash PATH, which would silently break the pipeline
+            # (%% -> literal % for the cmd %SystemRoot% variable)
+            '%%SystemRoot%%\\System32\\tasklist.exe /FI "IMAGENAME eq %s" 2>nul '
+            '| %%SystemRoot%%\\System32\\find.exe /I "%s" >nul ' % (app, app)
+            + "&& (%SystemRoot%\\System32\\ping.exe -n 2 127.0.0.1 >nul "
+              "& goto wait)\r\n"
+            "rem hand over to the installer; /CLOSEAPPLICATIONS makes it\r\n"
+            "rem close this app and restart it afterwards (RestartManager)\r\n"
+            + ('"%s" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART '
+               "/CLOSEAPPLICATIONS /RESTARTAPPLICATIONS\r\n" % installer_path)
+            + "exit /b %ERRORLEVEL%\r\n"
+        )
+    return path
+
+
+def _own_exe_path():
+    """Path of our own exe (frozen) or an empty sentinel."""
+    if getattr(sys, "frozen", False):
+        return os.path.basename(sys.executable)
+    return "ssd_temp_monitor.exe"
+
+
+def wait_and_install(shim_path, timeout=90):
+    """Run the update shim and wait (bounded) for the whole update to
+    finish. Returns the shim's exit code (the installer's), or None.
+    """
+    try:
+        proc = subprocess.run(
+            ["cmd", "/c", shim_path],
+            creationflags=subprocess.CREATE_NO_WINDOW,
+            timeout=timeout,
+        )
+        return proc.returncode
+    except Exception:
+        return None
 
 
 def alert_state(hottest, since, last_alert, now):
@@ -767,6 +844,8 @@ class App:
             ("Alert sustain (seconds, 0-600)", "alert_sustain_seconds", 0, 600),
             ("Alert cooldown (minutes, 1-120)", "alert_cooldown_minutes", 1, 120),
             ("History window (minutes, 5-240)", "history_minutes", 5, 240),
+            ("Update check interval (minutes, 5-1440)",
+             "update_check_interval_minutes", 5, 1440),
         ]
         vars_ = {}
         for i, (label, key, lo, hi) in enumerate(rows):
@@ -783,11 +862,19 @@ class App:
                         variable=record_var).grid(
             row=len(rows), column=0, columnspan=2, sticky="w", pady=(8, 0))
 
+        tk.Label(frame, text="Update channel", font=("Segoe UI", 10),
+                 anchor="w").grid(row=len(rows) + 1, column=0, sticky="w",
+                                  pady=3)
+        channel_var = tk.StringVar(value=current.get("update_channel", "stable"))
+        ttk.Combobox(frame, textvariable=channel_var, width=14,
+                     values=("stable", "pre-release"), state="readonly").grid(
+            row=len(rows) + 1, column=1, padx=(14, 0), pady=3)
+
         note = tk.Label(
             frame,
             text="Poll interval takes effect after restarting the app.",
             font=("Segoe UI", 8), fg="#64748b")
-        note.grid(row=len(rows) + 1, column=0, columnspan=2, sticky="w",
+        note.grid(row=len(rows) + 2, column=0, columnspan=2, sticky="w",
                   pady=(4, 0))
 
         def on_save():
@@ -796,6 +883,7 @@ class App:
                 for key, var in vars_.items():
                     current[key] = int(var.get())
                 current["record_history"] = bool(record_var.get())
+                current["update_channel"] = channel_var.get()
             except ValueError:
                 messagebox.showerror("SSD Temp Monitor",
                                      "Please enter whole numbers only.",
@@ -815,7 +903,7 @@ class App:
                     f"Could not write {CONFIG_FILE}", parent=root)
 
         btns = tk.Frame(frame)
-        btns.grid(row=len(rows) + 2, column=0, columnspan=2, pady=(12, 0))
+        btns.grid(row=len(rows) + 3, column=0, columnspan=2, pady=(12, 0))
         tk.Button(btns, text="Save", width=10, command=on_save,
                   font=("Segoe UI", 10)).pack(side="left", padx=4)
         tk.Button(btns, text="Cancel", width=10, command=root.destroy,
@@ -837,7 +925,8 @@ class App:
                 self._notify("No update information available.",
                              "SSD Temp Monitor — Update")
             return
-        url, version = select_release_asset(release)
+        prerelease = bool(SETTINGS.get("update_channel") == "pre-release")
+        url, version = select_release_asset(release, prefer_prerelease=prerelease)
         if not url or not is_newer_version(version):
             if manual:
                 self._notify(
@@ -845,7 +934,7 @@ class App:
                     "SSD Temp Monitor — Update")
             return
         # a newer release exists -> surface it
-        self.icon.notify(
+        self._notify(
             f"Version {version} is available ({APP_VERSION} installed).\n"
             "Right-click -> Check for updates... to install.",
             title="SSD Temp Monitor — update available")
@@ -853,7 +942,14 @@ class App:
             self._pending_update = (url, version)
 
     def _install_update(self, *_):
-        """Download the new setup exe, verify its SHA-256, then run it."""
+        """Download the new setup exe, verify its SHA-256, then update.
+
+        Runs the installer through a cmd shim that first waits for this app
+        to exit (setup.iss AppMutex would otherwise abort the silent
+        install). Exit codes of the shim: 0 = installed, 1 = installer
+        failed/aborted, 1002/1004 = pre-install stage (msi-style,
+        inconclusive), None = the wait timed out.
+        """
         with self._lock:
             pending = self._pending_update
         if not pending:
@@ -880,16 +976,27 @@ class App:
                                     f"ssd_temp_monitor_setup_{version}.exe")
                 with open(dest, "wb") as f:
                     f.write(data)
+                shim = build_update_shim(dest)
             except Exception:
                 self._notify("Update download failed.", "SSD Temp Monitor — Update")
                 return
-            # hand over to the installer; /CLOSEAPPLICATIONS makes it close
-            # this app and restart it afterwards (needs RestartManager)
-            subprocess.Popen([
-                dest, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
-                "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS",
-            ], creationflags=subprocess.CREATE_NO_WINDOW, close_fds=True)
-            self.icon.stop()  # exit so the installer can replace the exe
+            self._notify(f"Installing {version}...", "SSD Temp Monitor")
+            # exit so the installer can replace the exe; the shim waits for
+            # us to let go of the AppMutex before starting the installer
+            self.quit()
+            code = wait_and_install(shim)
+            if code in (0, 1002, 1004):
+                return  # installer succeeded (or handed off to a restart)
+            try:
+                os.remove(shim)
+            except OSError:
+                pass
+            ctypes.windll.user32.MessageBoxW(
+                None,
+                f"The update to {version} could not be installed\n"
+                f"(installer exit code {code}).\n"
+                "Download it manually from the About window.",
+                "SSD Temp Monitor — Update", 0x10 | 0x40000 | 0x10000)
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -1059,9 +1166,10 @@ class App:
     def poll_loop(self):
         while True:
             self.update()
-            # auto-update: check right after start, then every 6 hours
+            # auto-update: check right after start, then every N minutes
+            interval = SETTINGS.get("update_check_interval_minutes", 360) * 60
             if (SETTINGS.get("check_updates")
-                    and time.time() - self._last_update_check >= UPDATE_CHECK_INTERVAL):
+                    and time.time() - self._last_update_check >= interval):
                 self._last_update_check = time.time()
                 threading.Thread(target=self._check_updates, daemon=True).start()
             time.sleep(POLL_SECONDS)
@@ -1095,6 +1203,48 @@ class App:
         threading.Thread(target=self.poll_loop, daemon=True).start()
         self.icon.run()
 
+def run_unattended_update():
+    """--update-now: install a newer release without any UI.
+
+    Downloads + SHA-256-verifies the setup exe, starts the cmd shim that
+    waits for this process to release the AppMutex, then exits so the
+    silent install can proceed (/RESTARTAPPLICATIONS brings the app back).
+    """
+    repo = SETTINGS.get("github_repo") or DEFAULT_SETTINGS["github_repo"]
+    release = fetch_latest_release(repo)
+    if not release:
+        print("UPDATE-RESULT: no release information")
+        sys.exit(1)
+    prerelease = bool(SETTINGS.get("update_channel") == "pre-release")
+    url, version = select_release_asset(release, prefer_prerelease=prerelease)
+    if not url or not is_newer_version(version):
+        print(f"UPDATE-RESULT: no update available (latest={version or '?'})")
+        sys.exit(0)
+    print(f"UPDATE-RESULT: update available {version}")
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "ssd-temp-monitor"})
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            data = resp.read()
+        sums_url = url.rsplit("/", 1)[0] + "/SHA256SUMS.txt"
+        req = urllib.request.Request(sums_url, headers={"User-Agent": "ssd-temp-monitor"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            sums_text = resp.read().decode("utf-8", "replace")
+        if not verify_asset(data, sums_text, url.rsplit("/", 1)[1]):
+            print("UPDATE-RESULT: checksum mismatch - aborted")
+            sys.exit(1)
+        dest = os.path.join(os.environ.get("TEMP", os.path.expanduser("~")),
+                            f"ssd_temp_monitor_setup_{version}.exe")
+        with open(dest, "wb") as f:
+            f.write(data)
+    except Exception as exc:
+        print(f"UPDATE-RESULT: download failed ({exc})")
+        sys.exit(1)
+    print("UPDATE-RESULT: checksum verified - handing over to installer")
+    shim = build_update_shim(dest)
+    subprocess.Popen(["cmd", "/c", shim],
+                     creationflags=subprocess.CREATE_NO_WINDOW, close_fds=True)
+    sys.exit(0)  # frees the mutex; the shim then runs the silent install
+
 
 def main():
     if not acquire_single_instance():
@@ -1112,6 +1262,10 @@ def main():
         sys.exit(2)
     if not is_admin():
         relaunch_elevated()
+    if "--update-now" in sys.argv:
+        # unattended update: check for a newer release and, if one exists,
+        # download, verify and install it with no tray UI (CI/e2e friendly)
+        run_unattended_update()
     App().run()
 
 

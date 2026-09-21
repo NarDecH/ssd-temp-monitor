@@ -4,7 +4,10 @@ The PowerShell boundary is always monkeypatched; only pure logic and the
 CSV/Windows-mutex helpers are exercised for real.
 """
 import csv
+import os
+import subprocess
 import sys
+import tempfile
 import threading
 import time
 import types
@@ -734,3 +737,169 @@ class TestGraphAndExit:
         t0 = time.time()
         app.quit()                           # must return after ~3 s max
         assert time.time() - t0 < 6.0
+
+
+
+
+# ---------------------------------------------------------------------------
+# v1.8.0: update shim (AppMutex deadlock), pre-release channel, --update-now
+# ---------------------------------------------------------------------------
+class TestUpdateShim:
+    def test_shim_content(self):
+        shim = m.build_update_shim("C:/tmp/setup.exe",
+                                   app_exe_path="ssd_temp_monitor.exe")
+        try:
+            content = open(shim, encoding="utf-8").read()
+            assert ":wait" in content and "goto wait" in content   # poll loop
+            assert "ping.exe -n 2 127.0.0.1" in content            # 1 s sleep
+            assert "System32\\tasklist.exe" in content
+            assert "System32\\find.exe" in content   # never GNU find via PATH
+            assert "tasklist.exe /FI" in content and "find.exe /I" in content
+            assert "ssd_temp_monitor.exe" in content               # waits for US
+            assert '"C:/tmp/setup.exe"' in content                 # quoted
+            assert "/CLOSEAPPLICATIONS" in content                 # restart app
+            assert "exit /b %ERRORLEVEL%" in content               # code pass
+        finally:
+            os.remove(shim)
+
+    def test_shim_installs_when_no_app_running(self):
+        """No matching process -> installer runs immediately, code passes."""
+        installer = os.path.join(tempfile.gettempdir(), "ssd_test_installer.cmd")
+        with open(installer, "w") as f:
+            f.write("@echo off\r\nexit /b 7\r\n")
+        shim = m.build_update_shim(installer,
+                                   app_exe_path="ssd_no_such_app.exe")
+        try:
+            t0 = time.time()
+            code = m.wait_and_install(shim, timeout=30)
+            assert code == 7                    # exit /b passthrough
+            assert time.time() - t0 < 15        # did not wait for anything
+        finally:
+            os.remove(shim)
+            os.remove(installer)
+
+    def test_shim_waits_until_app_exits(self):
+        """A running 'app' (cmd.exe copy) blocks the install until it exits."""
+        import shutil
+        fake_app = os.path.join(tempfile.gettempdir(), "ssd_test_app.exe")
+        installer = os.path.join(tempfile.gettempdir(), "ssd_test_installer.cmd")
+        shutil.copy(os.path.join(os.environ["WINDIR"], "System32", "cmd.exe"),
+                    fake_app)
+        with open(installer, "w") as f:
+            f.write("@echo off\r\nexit /b 0\r\n")
+        shim = m.build_update_shim(installer, app_exe_path="ssd_test_app.exe")
+        # keep the fake app alive WITHOUT shell redirection: `>nul` gets
+        # rewritten to `>/dev/null` by the shell layer and breaks cmd.exe
+        proc = subprocess.Popen([fake_app, "/c", "ping", "-n", "4", "127.0.0.1"])
+        try:
+            t0 = time.time()
+            code = m.wait_and_install(shim, timeout=30)
+            elapsed = time.time() - t0
+            assert code == 0
+            assert elapsed >= 1.5   # it really waited for the fake app
+        finally:
+            proc.wait(10)
+            os.remove(shim)
+            os.remove(installer)
+            os.remove(fake_app)
+
+
+class TestPrereleaseChannel:
+    def _rel(self, tag):
+        return {"tag_name": tag, "draft": False, "prerelease": False,
+                "assets": [{"name": "ssd_temp_monitor_setup_x.exe",
+                            "state": "uploaded",
+                            "browser_download_url": f"https://x/{tag}.exe"}]}
+
+    def test_stable_channel_skips_prerelease_tag(self):
+        url, ver = m.select_release_asset(self._rel("v1.9.0-beta.1"),
+                                          prefer_prerelease=False)
+        assert url is None and ver is None
+
+    def test_prerelease_channel_accepts_prerelease_tag(self):
+        url, ver = m.select_release_asset(self._rel("v1.9.0-beta.1"),
+                                          prefer_prerelease=True)
+        assert url.endswith("v1.9.0-beta.1.exe") and ver == "v1.9.0-beta.1"
+
+    def test_prerelease_channel_still_gets_stable(self):
+        _, ver = m.select_release_asset(self._rel("v1.9.0"),
+                                        prefer_prerelease=True)
+        assert ver == "v1.9.0"
+
+    def test_beta_semver_not_newer_than_same_core(self):
+        assert m.is_newer_version("v1.8.0-beta.1", "1.8.0") is False
+
+
+class TestSettingsUpdateOptions:
+    def test_defaults_and_validation(self):
+        assert m.DEFAULT_SETTINGS["update_channel"] == "stable"
+        cfg = m._validate_settings({"update_channel": "bogus",
+                                    "update_check_interval_minutes": 1})
+        assert cfg["update_channel"] == "stable"
+        assert cfg["update_check_interval_minutes"] == 5          # clamped
+        cfg = m._validate_settings({"update_channel": "pre-release",
+                                    "update_check_interval_minutes": 99999})
+        assert cfg["update_channel"] == "pre-release"
+        assert cfg["update_check_interval_minutes"] == 1440       # clamped
+
+    def test_interval_read_live_from_settings(self):
+        import inspect
+        src = inspect.getsource(m.App.poll_loop)
+        assert "update_check_interval_minutes" in src
+        assert "UPDATE_CHECK_INTERVAL" not in src
+
+
+class TestUpdateNowFlag:
+    def test_flag_is_wired_before_run(self):
+        import inspect
+        src = inspect.getsource(m.main)
+        assert "--update-now" in src
+        assert "run_unattended_update()" in src
+
+    def test_no_release_info_exits_1(self, monkeypatch):
+        monkeypatch.setattr(m, "fetch_latest_release", lambda repo: None)
+        with pytest.raises(SystemExit) as ei:
+            m.run_unattended_update()
+        assert ei.value.code == 1
+
+    def test_up_to_date_exits_0(self, monkeypatch, capsys):
+        monkeypatch.setattr(m, "fetch_latest_release", lambda repo: {
+            "tag_name": "v1.8.0",
+            "assets": [{"name": "setup.exe", "state": "uploaded",
+                        "browser_download_url": "https://x/setup.exe"}]})
+        with pytest.raises(SystemExit) as ei:
+            m.run_unattended_update()
+        assert ei.value.code == 0
+        assert "no update available" in capsys.readouterr().out
+
+    def test_update_flow_starts_shim_and_exits_0(self, monkeypatch, capsys):
+        import hashlib
+        body = b"INSTALLER"
+        HEX = hashlib.sha256(body).hexdigest()
+        responses = {
+            "exe": body,
+            "sums": f"{HEX}  setup.exe\n",
+        }
+
+        def fake_urlopen(req, timeout=10):
+            payload = (responses["sums"].encode()
+                       if str(req.full_url).endswith("SHA256SUMS.txt")
+                       else responses["exe"])
+            return type("R", (), {"read": lambda self: payload,
+                                  "__enter__": lambda self: self,
+                                  "__exit__": lambda self, *a: False})()
+
+        monkeypatch.setattr(m, "fetch_latest_release", lambda repo: {
+            "tag_name": "v9.0.0",
+            "assets": [{"name": "setup.exe", "state": "uploaded",
+                        "browser_download_url": "https://x/setup.exe"}]})
+        monkeypatch.setattr(m.urllib.request, "urlopen", fake_urlopen)
+        started = []
+        monkeypatch.setattr(m, "build_update_shim", lambda dest: "SHIM.cmd")
+        monkeypatch.setattr(m.subprocess, "Popen",
+                            lambda cmd, **k: started.append(cmd))
+        with pytest.raises(SystemExit) as ei:
+            m.run_unattended_update()
+        assert ei.value.code == 0
+        assert started == [["cmd", "/c", "SHIM.cmd"]]
+        assert "checksum verified" in capsys.readouterr().out

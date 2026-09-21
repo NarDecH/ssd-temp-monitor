@@ -3,7 +3,7 @@
 ; Requires dist\ssd_temp_monitor.exe (run build_exe.bat first)
 
 #define MyAppName "SSD Temperature Monitor"
-#define MyAppVersion "1.7.0"
+#define MyAppVersion "1.8.0"
 #define MyAppExeName "ssd_temp_monitor.exe"
 #define MyMutex "Local\SSDTempMonitor_SingleInstance"
 
@@ -48,8 +48,10 @@ Name: "{commonstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; \
     Tasks: autostart
 
 [Run]
+; runasoriginaluser: after a silent auto-update (elevated) the app must come
+; back on the original user's desktop, not in the admin context
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; \
-    Flags: nowait postinstall skipifsilent
+    Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [UninstallDelete]
 ; remove the CSV history on uninstall

@@ -2,8 +2,8 @@
 
 [![CI](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/ci.yml)
 [![Release](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/release.yml/badge.svg)](https://github.com/NarDecH/ssd-temp-monitor/releases)
-![Version](https://img.shields.io/badge/version-1.7.0-blue)
-![Tests](https://img.shields.io/badge/tests-101%20passing-brightgreen)
+![Version](https://img.shields.io/badge/version-1.8.0-blue)
+![Tests](https://img.shields.io/badge/tests-114%20passing-brightgreen)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey)
 
 ![Banner](docs/img/banner.svg)
@@ -46,12 +46,20 @@ To rebuild the exe: `pip install pyinstaller` then run `build_exe.bat`.
 
 ## Auto-update
 
-The app checks GitHub Releases on startup and every 6 hours. When a new
-version is published (push a `v*` tag), a notification appears — open
-**Check for updates...** to download and install it silently. Every
-download is verified against the release's `SHA256SUMS.txt` before
-installation. Disable with `"check_updates": false` in
-`%APPDATA%\SSDTempMonitor\config.json`.
+The app checks GitHub Releases on startup and every 6 hours (configurable,
+5–1440 min, takes effect immediately). Two channels are available in
+**Settings...**: *stable* or *pre-release* (`v1.9.0-rc1` style tags). When a
+new version is published (push a `v*` tag), a notification appears — open
+**Check for updates...** to download and install it silently. Every download
+is verified against the release's `SHA256SUMS.txt` before installation, and
+the installer waits for the app to exit (AppMutex) before upgrading.
+Disable with `"check_updates": false` in `%APPDATA%\SSDTempMonitor\config.json`.
+
+For unattended updates (CI / scripting):
+
+    ssd_temp_monitor.exe --update-now
+
+prints `UPDATE-RESULT: ...` lines and exits, so the flow is scriptable.
 
 ## History recording (optional)
 
