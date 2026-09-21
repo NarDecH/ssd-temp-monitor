@@ -39,7 +39,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.8.0"          # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.8.1"          # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -416,15 +416,16 @@ def verify_asset(data, sums_text, filename):
     return sha256_hex(data) == expected
 
 
-def build_update_shim(installer_path, app_exe_path=None):
-    """Write a tiny cmd that waits for our processes to exit, then runs the
-    installer.
+def build_update_shim(installer_path, app_exe_path=None, restart_path=None):
+    """Write a tiny cmd that waits for our processes to exit, runs the
+    installer, then relaunches the app.
 
     Why: setup.iss declares AppMutex, so the installer aborts (exit code 1,
     silently in /VERYSILENT) whenever the tray app is still holding the
     mutex. /CLOSEAPPLICATIONS does not help because Inno checks AppMutex
-    before its close-app logic. The shim exits with the installer's exit
-    code so the calling thread can report success/failure.
+    before its close-app logic, and a silent install skips the postinstall
+    launch — so the shim relaunches the updated app itself.
+    The shim exits with the installer's exit code.
     """
     app = app_exe_path or _own_exe_path()
     fd, path = tempfile.mkstemp(prefix="ssd_update_", suffix=".cmd")
@@ -445,9 +446,20 @@ def build_update_shim(installer_path, app_exe_path=None):
             "rem close this app and restart it afterwards (RestartManager)\r\n"
             + ('"%s" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART '
                "/CLOSEAPPLICATIONS /RESTARTAPPLICATIONS\r\n" % installer_path)
+            # a silent install skips the postinstall launch, so bring the
+            # updated app back ourselves (only when the install succeeded)
+            + (f'if not errorlevel 1 start "" "{restart_path}"\r\n'
+               if restart_path else "")
             + "exit /b %ERRORLEVEL%\r\n"
         )
     return path
+
+
+def _own_restart_path():
+    """Full path to relaunch the frozen exe (None for source runs)."""
+    if getattr(sys, "frozen", False):
+        return sys.executable
+    return None
 
 
 def _own_exe_path():
@@ -976,7 +988,7 @@ class App:
                                     f"ssd_temp_monitor_setup_{version}.exe")
                 with open(dest, "wb") as f:
                     f.write(data)
-                shim = build_update_shim(dest)
+                shim = build_update_shim(dest, restart_path=_own_restart_path())
             except Exception:
                 self._notify("Update download failed.", "SSD Temp Monitor — Update")
                 return
@@ -1240,7 +1252,7 @@ def run_unattended_update():
         print(f"UPDATE-RESULT: download failed ({exc})")
         sys.exit(1)
     print("UPDATE-RESULT: checksum verified - handing over to installer")
-    shim = build_update_shim(dest)
+    shim = build_update_shim(dest, restart_path=_own_restart_path())
     subprocess.Popen(["cmd", "/c", shim],
                      creationflags=subprocess.CREATE_NO_WINDOW, close_fds=True)
     sys.exit(0)  # frees the mutex; the shim then runs the silent install

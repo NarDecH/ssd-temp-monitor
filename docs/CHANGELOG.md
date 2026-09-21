@@ -3,6 +3,14 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.8.1] — 2026-09-21
+
+### Fixed
+
+- 🔄 **แอปกลับมาที่ tray หลัง self-update เอง** — ตัวติดตั้งแบบเงียบข้าม
+  postinstall launch ไป ทำให้หลังอัปเดตสำเร็จแอปหายไปจาก tray ตัว shim
+  จึงเป็นคนเริ่มแอปใหม่เองหลังติดตั้งสำเร็จ (`if not errorlevel 1 start`)
+
 ## [1.8.0] — 2026-09-21
 
 ### Added

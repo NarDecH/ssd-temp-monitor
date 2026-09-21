@@ -895,7 +895,8 @@ class TestUpdateNowFlag:
                         "browser_download_url": "https://x/setup.exe"}]})
         monkeypatch.setattr(m.urllib.request, "urlopen", fake_urlopen)
         started = []
-        monkeypatch.setattr(m, "build_update_shim", lambda dest: "SHIM.cmd")
+        monkeypatch.setattr(m, "build_update_shim",
+                            lambda dest, restart_path=None: "SHIM.cmd")
         monkeypatch.setattr(m.subprocess, "Popen",
                             lambda cmd, **k: started.append(cmd))
         with pytest.raises(SystemExit) as ei:
