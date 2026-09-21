@@ -104,7 +104,7 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
 ## การทดสอบ
 
 - **รัน pytest ทุกครั้งที่แก้ logic** — `python -m pytest tests/ -v`
-  (55 เคส รันได้โดยไม่ต้องมี admin/PowerShell/GUI; PowerShell ถูก
+  (101 เคส รันได้โดยไม่ต้องมี admin/PowerShell/GUI; PowerShell ถูก
   monkeypatch ที่ `_run_powershell` เสมอ)
 - ตรวจ syntax เพิ่มด้วย `python -m py_compile ssd_temp_tray.py`
 - ทดสอบ filter ด้วยคำสั่ง (ต้อง run PowerShell ใน terminal ที่รองรับ
@@ -117,6 +117,25 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   ต้องเห็นว่าดิสก์ USB ถูกกรองออกใน logic ของ `read_temps()`
 - ทดสอบบนเครื่องที่มีและไม่มี USB reader เสียบอยู่ — ไอคอนต้องโชว์
   อุณหภูมิ SSD ภายในถูกต้องเสมอ
+
+## การรันคำสั่งด้วยสิทธิ์ admin (elevation)
+
+- **ห้ามใส่ quoted path + arguments ตรง ๆ ในคำสั่งที่ขอ elevation** —
+  wrapper รันคำสั่งผ่าน PowerShell ทำให้
+  `"C:\path with spaces\setup.exe" /SILENT` ถูกตีความเป็น string
+  expression ไม่ใช่คำสั่ง → parse error → exit code 1 โดยโปรแกรมเป้าหมาย
+  **ไม่ถูกรันเลย** (สัญญาณ: exit 1 แต่ไม่มี log / ไม่มี output ใด ๆ)
+- วิธีที่ถูกต้อง: เขียนสคริปต์ `.ps1` แล้วขอ elevation รัน
+  `powershell -NoProfile -ExecutionPolicy Bypass -File <script>`
+  ภายในสคริปต์ใช้ `Start-Process -Wait -PassThru` เพื่อได้ ExitCode จริง
+  และตรวจ `/LOG=<path>` ของ Inno Setup ได้ทันที
+- **UAC ไม่ส่งต่อ environment variables** จาก parent ไปลูก — ส่งสัญญาณ
+  ด้วย command-line flag แทน (เช่น `--duplicate-silent` ที่แอปรองรันไว้)
+- ตัวติดตั้ง Inno ที่ตั้ง `AppMutex` จะจบด้วย exit code 1 เมื่อแอปยังรัน
+  อยู่ — ต้อง `taskkill /IM ssd_temp_monitor.exe /F` (แบบ elevated) ก่อน
+  ติดตั้งเวอร์ชันใหม่
+- ตรวจความถูกต้องของ exe ที่ติดตั้งได้ด้วย SHA-256 เทียบกับ
+  `SHA256SUMS.txt` ใน release (กลไกเดียวกับ updater ใช้)
 
 ## สไตล์โค้ด
 
