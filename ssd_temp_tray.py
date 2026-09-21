@@ -41,7 +41,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.9.0"          # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.10.0"         # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -72,6 +72,7 @@ DEFAULT_SETTINGS = {
     "update_check_interval_minutes": 360,     # auto-check every N minutes
     "icon_size": 64,                          # tray icon edge in px
     "high_contrast_icon": False,              # black pill + white border
+    "language": "en",                         # UI language: "en" or "th"
 }
 
 
@@ -97,6 +98,7 @@ def _validate_settings(cfg):
     except (TypeError, ValueError):
         out["icon_size"] = DEFAULT_SETTINGS["icon_size"]
     out["high_contrast_icon"] = bool(out["high_contrast_icon"])
+    out["language"] = ("th" if out["language"] == "th" else "en")
     if not str(out["github_repo"]).strip():
         out["github_repo"] = DEFAULT_SETTINGS["github_repo"]
     else:
@@ -151,6 +153,170 @@ ALERT_COOLDOWN_SECONDS = SETTINGS["alert_cooldown_minutes"] * 60
 
 # ---- live graph window ----
 GRAPH_W, GRAPH_H, GRAPH_PAD = 680, 320, 50
+
+# ---- UI strings (i18n: "en" / "th") -----------------------------------
+STRINGS = {
+    "en": {
+        "app.title": "SSD Temperature Monitor",
+        "win.details": "SSD Temperature",
+        "win.graph": "SSD Temperature - History",
+        "win.disks": "SSD Temperature - All Disks (debug)",
+        "win.settings": "SSD Temperature - Settings",
+        "win.about": "About SSD Temperature Monitor",
+        "menu.details": "Show details",
+        "menu.graph": "Show temperature graph",
+        "menu.disks": "Show all disks (debug)",
+        "menu.diagnostics": "Copy diagnostics to clipboard",
+        "menu.refresh": "Refresh now",
+        "menu.updates": "Check for updates...",
+        "menu.settings": "Settings...",
+        "menu.about": "About",
+        "menu.history": "Record history",
+        "menu.exit": "Exit",
+        "notify.no_update": "No update information available.",
+        "notify.latest": "You are running the latest version ({local}).",
+        "notify.available": ("Version {remote} is available ({local} installed).\n"
+                             "Right-click -> Check for updates... to install."),
+        "notify.downloading": "Downloading {version}...",
+        "notify.installing": "Installing {version}...",
+        "notify.bad_checksum": "Checksum mismatch - update aborted.",
+        "notify.download_failed": "Update download failed.",
+        "notify.copied": "Diagnostics copied to clipboard.",
+        "notify.install_failed": ("The update to {version} could not be installed\n"
+                                  "(installer exit code {code}).\n"
+                                  "Download it manually from the About window."),
+        "notify.title.update": "SSD Temp Monitor — Update",
+        "notify.title.available": "SSD Temp Monitor — update available",
+        "alert.body": "SSD has been at {peak}°C for a while.",
+        "alert.body.no_peak": "SSD is overheating.",
+        "alert.title": "⚠ SSD overheat: {peak}°C",
+        "alert.title.no_peak": "⚠ SSD overheat",
+        "elevation.required": ("Administrator rights are required to read "
+                               "SSD temperature."),
+        "duplicate.body": ("SSD Temperature Monitor is already running\n"
+                           "(check the system tray)."),
+        "mb.title": "SSD Temp Monitor",
+        "details.no_data": "No SSD temperature data (run as Administrator).",
+        "graph.no_history": ("No history recorded yet.\n"
+                             "Enable 'Record history' in the tray menu."),
+        "graph.span": "last {minutes} min",
+        "disks.legend": "✓ shown on icon    ✗ filtered out",
+        "disks.none": "No disks found.",
+        "settings.poll": "Poll interval (seconds, 1-60)",
+        "settings.threshold": "Alert threshold (°C, 40-90)",
+        "settings.sustain": "Alert sustain (seconds, 0-600)",
+        "settings.cooldown": "Alert cooldown (minutes, 1-120)",
+        "settings.history": "History window (minutes, 5-240)",
+        "settings.check_interval": "Update check interval (minutes, 5-1440)",
+        "settings.record": "Record history on startup",
+        "settings.channel": "Update channel",
+        "settings.icon_size": "Icon size (px, 16-128)",
+        "settings.high_contrast": "High-contrast icon (light taskbars)",
+        "settings.language": "Language / ภาษา",
+        "settings.note": "Values apply immediately - no restart needed.",
+        "settings.save": "Save",
+        "settings.cancel": "Cancel",
+        "settings.int_error": "Please enter whole numbers only.",
+        "settings.save_error": "Could not write {path}",
+        "about.latest.checking": "Latest release: checking…",
+        "about.latest.unknown": "Latest release: unknown (offline?)",
+        "about.latest.stable_none": "Latest stable: none · newest: {tag} (pre-release)",
+        "about.latest.newer": "Latest release: {tag} — update available!",
+        "about.latest.uptodate": "Latest release: {tag} — you are up to date",
+        "about.check_updates": "Check for updates",
+        "about.close": "Close",
+        "common.close": "Close",
+        "diag.header": "SSD Temperature Monitor diagnostics",
+        "diag.no_data": "  (no data yet)",
+    },
+    "th": {
+        "app.title": "SSD Temperature Monitor",
+        "win.details": "อุณหภูมิ SSD",
+        "win.graph": "อุณหภูมิ SSD - ประวัติย้อนหลัง",
+        "win.disks": "อุณหภูมิ SSD - ดิสก์ทั้งหมด (debug)",
+        "win.settings": "อุณหภูมิ SSD - ตั้งค่า",
+        "win.about": "เกี่ยวกับ SSD Temperature Monitor",
+        "menu.details": "ดูรายละเอียด",
+        "menu.graph": "แสดงกราฟอุณหภูมิ",
+        "menu.disks": "ดูดิสก์ทั้งหมด (debug)",
+        "menu.diagnostics": "คัดลอกข้อมูลวินิจฉัย",
+        "menu.refresh": "รีเฟรชเดี๋ยวนี้",
+        "menu.updates": "ตรวจหาการอัปเดต...",
+        "menu.settings": "ตั้งค่า...",
+        "menu.about": "เกี่ยวกับ",
+        "menu.history": "บันทึกประวัติ",
+        "menu.exit": "ออกจากโปรแกรม",
+        "notify.no_update": "ไม่พบข้อมูลการอัปเดต",
+        "notify.latest": "คุณใช้เวอร์ชันล่าสุดแล้ว ({local})",
+        "notify.available": ("มีเวอร์ชัน {remote} พร้อมใช้ (คุณใช้ {local})\n"
+                             "คลิกขวา -> ตรวจหาการอัปเดต... เพื่อติดตั้ง"),
+        "notify.downloading": "กำลังดาวน์โหลด {version}...",
+        "notify.installing": "กำลังติดตั้ง {version}...",
+        "notify.bad_checksum": "Checksum ไม่ตรง - ยกเลิกการอัปเดต",
+        "notify.download_failed": "ดาวน์โหลดอัปเดตไม่สำเ็จ",
+        "notify.copied": "คัดลอกข้อมูลวินิจฉัยไปคลิปบอร์ดแล้ว",
+        "notify.install_failed": ("ติดตั้งอัปเดต {version} ไม่สำเร็จ\n"
+                                  "(installer exit code {code})\n"
+                                  "ดาวน์โหลดด้วยตัวเองได้จากหน้าเกี่ยวกับ"),
+        "notify.title.update": "SSD Temp Monitor — อัปเดต",
+        "notify.title.available": "SSD Temp Monitor — มีเวอร์ชันใหม่",
+        "alert.body": "SSD มีอุณหภูมิ {peak}°C ติดกันหลายวินาที",
+        "alert.title": "⚠ SSD ร้อนเกิน: {peak}°C",
+        "alert.body.no_peak": "SSD กำลังร้อนเกินไป",
+        "alert.title.no_peak": "⚠ SSD ร้อนเกินไป",
+        "elevation.required": "ต้องใช้สิทธิ์ Administrator เพื่ออ่านอุณหภูมิ SSD",
+        "duplicate.body": ("SSD Temperature Monitor กำลังทำงานอยู่แล้ว\n"
+                           "(ดูที่ system tray)"),
+        "mb.title": "SSD Temp Monitor",
+        "details.no_data": "ไม่พบข้อมูลอุณหภูมิ (ต้องรันในสิทธิ์ Administrator)",
+        "graph.no_history": ("ยังไม่มีประวัติบันทึก\n"
+                             "เปิด 'บันทึกประวัติ' จากเมนูที่ไอคอน tray"),
+        "graph.span": "{minutes} นาทีล่าสุด",
+        "disks.legend": "✓ แสดงบนไอคอน    ✗ ถูกกรองออก",
+        "disks.none": "ไม่พบดิสก์",
+        "settings.poll": "ช่วงอ่านอุณหภูมิ (วินาที, 1-60)",
+        "settings.threshold": "อุณหภูมิแจ้งเตือน (°C, 40-90)",
+        "settings.sustain": "เวลาที่ต้องร้อนติดกัน (วินาที, 0-600)",
+        "settings.cooldown": "ช่วงเว้นการแจ้งซ้ำ (นาที, 1-120)",
+        "settings.history": "ความยาวประวัติ (นาที, 5-240)",
+        "settings.check_interval": "ช่วงเวลาตรวจอัปเดต (นาที, 5-1440)",
+        "settings.record": "บันทึกประวัติตอนเปิดโปรแกรม",
+        "settings.channel": "ช่องทางอัปเดต",
+        "settings.icon_size": "ขนาดไอคอน (px, 16-128)",
+        "settings.high_contrast": "ไอคอนคมชัดพิเศษ (taskbar สีอ่อน)",
+        "settings.language": "ภาษา / Language",
+        "settings.note": "ค่าทั้งหมดมีผลทันที - ไม่ต้องรีสตาร์ท",
+        "settings.save": "บันทึก",
+        "settings.cancel": "ยกเลิก",
+        "settings.int_error": "กรุณากรอกตัวเลขจำนวนเต็มเท่านั้น",
+        "settings.save_error": "เขียนไฟล์ {path} ไม่สำเร็จ",
+        "about.latest.checking": "เวอร์ชันล่าสุด: กำลังตรวจ…",
+        "about.latest.unknown": "เวอร์ชันล่าสุด: ไม่ทราบ (ออฟไลน์?)",
+        "about.latest.stable_none": "stable ล่าสุด: ไม่มี · ใหม่สุด: {tag} (pre-release)",
+        "about.latest.newer": "เวอร์ชันล่าสุด: {tag} — มีเวอร์ชันใหม่!",
+        "about.latest.uptodate": "เวอร์ชันล่าสุด: {tag} — คุณใช้ล่าสุดแล้ว",
+        "about.check_updates": "ตรวจหาการอัปเดต",
+        "about.close": "ปิด",
+        "common.close": "ปิด",
+        "diag.header": "SSD Temperature Monitor diagnostics",
+        "diag.no_data": "  (ยังไม่มีข้อมูล)",
+    },
+}
+
+
+def tr(key, **kw):
+    """Translate a UI string; {placeholders} come from keyword arguments.
+
+    Falls back to English, then to the key itself - never raises.
+    """
+    lang = str(SETTINGS.get("language", "en"))
+    text = STRINGS.get(lang, STRINGS["en"]).get(key) \
+        or STRINGS["en"].get(key) or key
+    try:
+        return text.format(**kw) if kw else text
+    except (KeyError, IndexError):
+        return text
+
 
 # ---- rotating event log (startup/shutdown/update/alert/error) -------------
 LOG_FILE = os.path.join(
@@ -226,8 +392,8 @@ def relaunch_elevated() -> None:
     )
     if ret <= 32:  # user declined UAC
         ctypes.windll.user32.MessageBoxW(
-            None, "Administrator rights are required to read SSD temperature.",
-            "SSD Temp Monitor", 0x10 | 0x40000 | 0x10000  # error icon | topmost | set foreground
+            None, tr("elevation.required"), tr("mb.title"),
+            0x10 | 0x40000 | 0x10000  # error icon | topmost | set foreground
         )
     sys.exit(0)
 
@@ -604,15 +770,41 @@ def alert_state(hottest, since, last_alert, now):
     return False, None
 
 
-def _icon_font(size):
-    """Font for tray digits at the given icon size (cached)."""
-    key = ("font", size)
+def _pill_text_color(pill):
+    """Digit color chosen by the pill's luminance (WCAG-style contrast).
+
+    On the medium green/orange pills dark digits reach ~9:1 contrast while
+    white would only manage ~2:1; on the dark red pill white stays the
+    readable choice. high-contrast black pill -> white digits.
+    """
+    rgb = pill
+    if isinstance(rgb, str):  # "#rrggbb"
+        rgb = tuple(int(rgb[i:i + 2], 16) for i in (1, 3, 5))
+    r, g, b = rgb[:3]
+    lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return (17, 17, 27, 255) if lum > 150 else (255, 255, 255, 255)
+
+
+def _icon_font(size, text):
+    """Bold font scaled so the digits fill the pill but never overflow it.
+
+    Three-digit temperatures (or a wide string) shrink to fit the pill's
+    inner width; everything else renders as large as the pill allows.
+    """
+    key = ("font", size, text)
     cached = _ICON_CACHE.get(key)
     if cached is not None:
         return cached
+    px = int(size * (0.92 if size >= 48 else 0.86))
+    margin = max(4, size // 12)
+    max_w = size - 2 * margin
     try:
-        font = ImageFont.truetype("arialbd.ttf", int(size * 0.85)
-                                  if size >= 48 else int(size * 0.78))
+        font = ImageFont.truetype("arialbd.ttf", px)
+        bbox = font.getbbox(text)
+        w = bbox[2] - bbox[0]
+        if w > max_w:
+            font = ImageFont.truetype("arialbd.ttf",
+                                      max(8, int(px * max_w / w)))
     except OSError:
         font = ImageFont.load_default()
     _ICON_CACHE[key] = font
@@ -628,9 +820,12 @@ def _text_xy(size, bbox, text_h):
 def make_icon(text, color, size=None, high_contrast=None):
     """Render the tray temperature icon.
 
-    size: icon edge in px (default ICON_SIZE); high_contrast swaps the
-    colored pill for a black pill with a white border so the white digits
-    stay readable on light/white taskbars. Results are cached.
+    size: icon edge in px (default ICON_SIZE). The colored pill fills
+    nearly the whole icon so the temperature digits get maximum area;
+    digit color adapts to the pill (dark on green/orange, white on red)
+    and a subtle same-color stroke keeps the digits crisp at small sizes.
+    high_contrast swaps the pill for black with a white border so it stays
+    readable on light/white taskbars. Results are cached.
     """
     if size is None:
         size = ICON_SIZE
@@ -642,14 +837,23 @@ def make_icon(text, color, size=None, high_contrast=None):
         return cached
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    pill = (0, 0, 0, 255) if high_contrast else color
-    d.rounded_rectangle([2, 2, size - 2, size - 2], radius=max(4, size // 5),
-                        fill=pill,
-                        outline=(255, 255, 255, 255) if high_contrast else None,
-                        width=max(1, size // 32) if high_contrast else 0)
-    font = _icon_font(size)
-    bbox = d.textbbox((0, 0), text, font=font)
-    d.text(_text_xy(size, bbox, size), text, font=font, fill="white")
+    margin = max(1, size // 32)
+    if high_contrast:
+        pill = (0, 0, 0, 255)
+        d.rounded_rectangle([margin, margin, size - 1 - margin, size - 1 - margin],
+                            radius=max(4, size // 5), fill=pill,
+                            outline=(255, 255, 255, 255),
+                            width=max(1, size // 24))
+    else:
+        pill = color
+        d.rounded_rectangle([margin, margin, size - 1 - margin, size - 1 - margin],
+                            radius=max(4, size // 5), fill=pill)
+    font = _icon_font(size, text)
+    text_color = _pill_text_color(pill)
+    stroke = max(1, size // 26)
+    bbox = d.textbbox((0, 0), text, font=font, stroke_width=stroke)
+    d.text(_text_xy(size, bbox, size), text, font=font, fill=text_color,
+           stroke_width=stroke, stroke_fill=text_color)
     _ICON_CACHE[key] = img
     return img
 
@@ -706,24 +910,32 @@ class App:
         self.icon = pystray.Icon(
             "ssd_temp",
             icon=make_icon("--", UNKNOWN),
-            title="SSD Temperature Monitor",
-            menu=pystray.Menu(
-                pystray.MenuItem("Show details", self.show_details, default=True),
-                pystray.MenuItem("Show temperature graph", self.show_graph),
-                pystray.MenuItem("Show all disks (debug)", self.show_disks),
-                pystray.MenuItem("Copy diagnostics to clipboard", self.copy_diagnostics),
-                pystray.MenuItem("Refresh now", self.refresh),
-                pystray.MenuItem("Check for updates...", self.check_updates_now),
-                pystray.MenuItem("Settings...", self.show_settings),
-                pystray.MenuItem("About", self.show_about),
-                pystray.Menu.SEPARATOR,
-                pystray.MenuItem("Record history", self.toggle_history,
-                                 checked=lambda item: KEEP_HISTORY),
-                pystray.Menu.SEPARATOR,
-                pystray.MenuItem("Exit", self.quit),
-            ),
+            title=tr("app.title"),
+            menu=self._build_menu(),
         )
         self._lock = threading.Lock()
+
+    def _build_menu(self):
+        """Assemble the tray menu from translated strings.
+
+        Rebuilt after a language change: pystray menus cannot retranslate
+        themselves in place, so we assign a fresh Menu object instead.
+        """
+        return pystray.Menu(
+            pystray.MenuItem(tr("menu.details"), self.show_details, default=True),
+            pystray.MenuItem(tr("menu.graph"), self.show_graph),
+            pystray.MenuItem(tr("menu.disks"), self.show_disks),
+            pystray.MenuItem(tr("menu.diagnostics"), self.copy_diagnostics),
+            pystray.MenuItem(tr("menu.refresh"), self.refresh),
+            pystray.MenuItem(tr("menu.updates"), self.check_updates_now),
+            pystray.MenuItem(tr("menu.settings"), self.show_settings),
+            pystray.MenuItem(tr("menu.about"), self.show_about),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem(tr("menu.history"), self.toggle_history,
+                             checked=lambda item: KEEP_HISTORY),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem(tr("menu.exit"), self.quit),
+        )
 
     # ---- menu actions ----
     def refresh(self, *_):
@@ -779,7 +991,7 @@ class App:
         already = self._graph_open
         self._spawn_once("_graph_open", self._graph_window)
         if already:
-            self._raise_window("SSD Temperature - History")
+            self._raise_window(tr("win.graph"))
 
     def show_disks(self, *_):
         self._spawn_once("_disks_open", self._disks_window)
@@ -810,7 +1022,7 @@ class App:
         temps = self._snapshot("temps")
         lines = []
         if not temps:
-            lines.append(("No SSD temperature data (run as Administrator).", UNKNOWN))
+            lines.append((tr("details.no_data"), UNKNOWN))
         else:
             for t in temps:
                 if t["temp"] is not None:
@@ -820,7 +1032,7 @@ class App:
 
         import tkinter as tk
         root = tk.Tk()
-        root.title("SSD Temperature")
+        root.title(tr("win.details"))
         root.attributes("-topmost", True)
         root.resizable(False, False)
         frame = tk.Frame(root, padx=24, pady=12)
@@ -828,7 +1040,7 @@ class App:
         for text, color in lines:
             tk.Label(frame, text=text, font=("Segoe UI", 13, "bold"),
                      fg=color).pack(anchor="w", pady=2)
-        tk.Button(frame, text="Close", command=root.destroy,
+        tk.Button(frame, text=tr("common.close"), command=root.destroy,
                   font=("Segoe UI", 10)).pack(pady=(10, 0))
         root.protocol("WM_DELETE_WINDOW", root.destroy)
         root.bind("<Return>", lambda e: root.destroy())
@@ -843,14 +1055,14 @@ class App:
         """
         import tkinter as tk
         win = tk.Tk()
-        win.title("SSD Temperature - History")
+        win.title(tr("win.graph"))
         win.attributes("-topmost", True)
         win.resizable(False, False)
         W, H, PAD = GRAPH_W, GRAPH_H, GRAPH_PAD
         canvas = tk.Canvas(win, width=W, height=H, bg="#0f172a",
                            highlightthickness=0)
         canvas.pack(padx=12, pady=(12, 4))
-        tk.Button(win, text="Close", command=win.destroy,
+        tk.Button(win, text=tr("common.close"), command=win.destroy,
                   font=("Segoe UI", 10)).pack(pady=(2, 10))
         win.protocol("WM_DELETE_WINDOW", win.destroy)
         win.bind("<Return>", lambda e: win.destroy())
@@ -896,9 +1108,7 @@ class App:
         if not data:
             canvas.create_text(
                 W / 2, H / 2, fill="#94a3b8", font=("Segoe UI", 12),
-                text="No history recorded yet.\n"
-                     "Enable 'Record history' in the tray menu.",
-                justify="center")
+                text=tr("graph.no_history"), justify="center")
             return
 
         # down-sample to at most 500 points for the polyline
@@ -927,7 +1137,7 @@ class App:
         canvas.create_line(PAD, H - PAD, W - PAD, H - PAD, fill="#334155")
         canvas.create_text(W - PAD, H - PAD + 14, anchor="ne", fill="#64748b",
                            font=("Segoe UI", 9),
-                           text=f"last {span / 60:.0f} min")
+                           text=tr("graph.span", minutes=f"{span / 60:.0f}"))
 
         coords = []
         for t, temp in pts:
@@ -945,15 +1155,15 @@ class App:
         import tkinter as tk
         disks = list_all_disks()
         root = tk.Tk()
-        root.title("SSD Temperature - All Disks (debug)")
+        root.title(tr("win.disks"))
         root.attributes("-topmost", True)
         root.resizable(False, False)
         frame = tk.Frame(root, padx=24, pady=12)
         frame.pack()
-        tk.Label(frame, text="✓ shown on icon    ✗ filtered out",
+        tk.Label(frame, text=tr("disks.legend"),
                  font=("Segoe UI", 9), fg="#64748b").pack(anchor="w")
         if not disks:
-            tk.Label(frame, text="No disks found.",
+            tk.Label(frame, text=tr("disks.none"),
                      font=("Segoe UI", 12, "bold"), fg=UNKNOWN).pack(anchor="w", pady=6)
         for d in disks:
             included = is_internal_ssd(d)
@@ -964,7 +1174,7 @@ class App:
                      text=f"{mark}  {d['model']}   [{d['media']} / {d['bus']}]   {temp}",
                      font=("Segoe UI", 11, "bold"), fg=color,
                      anchor="w").pack(anchor="w", pady=2)
-        tk.Button(frame, text="Close", command=root.destroy,
+        tk.Button(frame, text=tr("common.close"), command=root.destroy,
                   font=("Segoe UI", 10)).pack(pady=(10, 0))
         root.protocol("WM_DELETE_WINDOW", root.destroy)
         root.bind("<Return>", lambda e: root.destroy())
@@ -972,7 +1182,11 @@ class App:
         root.mainloop()
 
     def _settings_window(self):
-        """Settings dialog: edit values and save to config.json."""
+        """Settings dialog: edit values and save to config.json.
+
+        Every value applies immediately (icons re-render on the next poll,
+        the tray menu is rebuilt when the language changes).
+        """
         import tkinter as tk
         from tkinter import ttk, messagebox
 
@@ -980,20 +1194,21 @@ class App:
             current = dict(SETTINGS)
 
         root = tk.Tk()
-        root.title("SSD Temperature - Settings")
+        root.title(tr("win.settings"))
         root.attributes("-topmost", True)
         root.resizable(False, False)
         frame = tk.Frame(root, padx=22, pady=14)
         frame.pack()
 
         rows = [
-            ("Poll interval (seconds, 1-60)", "poll_seconds", 1, 60),
-            ("Alert threshold (°C, 40-90)", "alert_threshold", 40, 90),
-            ("Alert sustain (seconds, 0-600)", "alert_sustain_seconds", 0, 600),
-            ("Alert cooldown (minutes, 1-120)", "alert_cooldown_minutes", 1, 120),
-            ("History window (minutes, 5-240)", "history_minutes", 5, 240),
-            ("Update check interval (minutes, 5-1440)",
+            (tr("settings.poll"), "poll_seconds", 1, 60),
+            (tr("settings.threshold"), "alert_threshold", 40, 90),
+            (tr("settings.sustain"), "alert_sustain_seconds", 0, 600),
+            (tr("settings.cooldown"), "alert_cooldown_minutes", 1, 120),
+            (tr("settings.history"), "history_minutes", 5, 240),
+            (tr("settings.check_interval"),
              "update_check_interval_minutes", 5, 1440),
+            (tr("settings.icon_size"), "icon_size", 16, 128),
         ]
         vars_ = {}
         for i, (label, key, lo, hi) in enumerate(rows):
@@ -1006,23 +1221,34 @@ class App:
             vars_[key] = var
 
         record_var = tk.BooleanVar(value=current["record_history"])
-        ttk.Checkbutton(frame, text="Record history on startup",
+        ttk.Checkbutton(frame, text=tr("settings.record"),
                         variable=record_var).grid(
             row=len(rows), column=0, columnspan=2, sticky="w", pady=(8, 0))
 
-        tk.Label(frame, text="Update channel", font=("Segoe UI", 10),
-                 anchor="w").grid(row=len(rows) + 1, column=0, sticky="w",
+        hc_var = tk.BooleanVar(value=current["high_contrast_icon"])
+        ttk.Checkbutton(frame, text=tr("settings.high_contrast"),
+                        variable=hc_var).grid(
+            row=len(rows) + 1, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
+        tk.Label(frame, text=tr("settings.channel"), font=("Segoe UI", 10),
+                 anchor="w").grid(row=len(rows) + 2, column=0, sticky="w",
                                   pady=3)
         channel_var = tk.StringVar(value=current.get("update_channel", "stable"))
         ttk.Combobox(frame, textvariable=channel_var, width=14,
                      values=("stable", "pre-release"), state="readonly").grid(
-            row=len(rows) + 1, column=1, padx=(14, 0), pady=3)
+            row=len(rows) + 2, column=1, padx=(14, 0), pady=3)
 
-        note = tk.Label(
-            frame,
-            text="Poll interval takes effect after restarting the app.",
-            font=("Segoe UI", 8), fg="#64748b")
-        note.grid(row=len(rows) + 2, column=0, columnspan=2, sticky="w",
+        tk.Label(frame, text=tr("settings.language"), font=("Segoe UI", 10),
+                 anchor="w").grid(row=len(rows) + 3, column=0, sticky="w",
+                                  pady=3)
+        lang_var = tk.StringVar(value=current.get("language", "en"))
+        ttk.Combobox(frame, textvariable=lang_var, width=14,
+                     values=("en", "th"), state="readonly").grid(
+            row=len(rows) + 3, column=1, padx=(14, 0), pady=3)
+
+        note = tk.Label(frame, text=tr("settings.note"),
+                        font=("Segoe UI", 8), fg="#64748b")
+        note.grid(row=len(rows) + 4, column=0, columnspan=2, sticky="w",
                   pady=(4, 0))
 
         def on_save():
@@ -1031,30 +1257,41 @@ class App:
                 for key, var in vars_.items():
                     current[key] = int(var.get())
                 current["record_history"] = bool(record_var.get())
+                current["high_contrast_icon"] = bool(hc_var.get())
                 current["update_channel"] = channel_var.get()
+                current["language"] = lang_var.get()
             except ValueError:
-                messagebox.showerror("SSD Temp Monitor",
-                                     "Please enter whole numbers only.",
+                messagebox.showerror(tr("mb.title"), tr("settings.int_error"),
                                      parent=root)
                 return
             validated = _validate_settings(current)
-            SETTINGS.clear()
-            SETTINGS.update(validated)
+            with self._lock:
+                SETTINGS.clear()
+                SETTINGS.update(validated)
             POLL_SECONDS = SETTINGS["poll_seconds"]
             if os.environ.get("SSD_TEMP_RECORD_HISTORY") is None:
                 KEEP_HISTORY = SETTINGS["record_history"]
-            if save_settings(validated):
-                root.destroy()
-            else:
+            if not save_settings(validated):
                 messagebox.showerror(
-                    "SSD Temp Monitor",
-                    f"Could not write {CONFIG_FILE}", parent=root)
+                    tr("mb.title"),
+                    tr("settings.save_error", path=CONFIG_FILE), parent=root)
+                return
+            root.destroy()
+            # apply what cannot wait for the next poll: tray title and the
+            # menu (pystray menus must be replaced wholesale on retranslate)
+            self.icon.title = tr("app.title")
+            try:
+                self.icon.menu = self._build_menu()
+                self.icon.update_menu()
+            except Exception:
+                pass
 
         btns = tk.Frame(frame)
-        btns.grid(row=len(rows) + 3, column=0, columnspan=2, pady=(12, 0))
-        tk.Button(btns, text="Save", width=10, command=on_save,
+        btns.grid(row=len(rows) + 5, column=0, columnspan=2, pady=(12, 0))
+        tk.Button(btns, text=tr("settings.save"), width=10, command=on_save,
                   font=("Segoe UI", 10)).pack(side="left", padx=4)
-        tk.Button(btns, text="Cancel", width=10, command=root.destroy,
+        tk.Button(btns, text=tr("settings.cancel"), width=10,
+                  command=root.destroy,
                   font=("Segoe UI", 10)).pack(side="left", padx=4)
         root.bind("<Escape>", lambda e: root.destroy())
         root.mainloop()
@@ -1071,15 +1308,15 @@ class App:
         release = fetch_latest_release(repo, include_prereleases=prerelease)
         if not release:
             if manual:
-                self._notify("No update information available.",
-                             "SSD Temp Monitor — Update")
+                self._notify(tr("notify.no_update"),
+                             tr("notify.title.update"))
             return
         url, version = select_release_asset(release, prefer_prerelease=prerelease)
         if not url or not is_newer_version(version):
             if manual:
                 self._notify(
-                    f"You are running the latest version ({effective_version()}).",
-                    "SSD Temp Monitor — Update")
+                    tr("notify.latest", local=effective_version()),
+                    tr("notify.title.update"))
             return
         with self._lock:
             already = self._nagged_version == version
@@ -1091,9 +1328,9 @@ class App:
             # nag once per release per session; the Update menu item and the
             # About window stay available the whole time
             self._notify(
-                f"Version {version} is available ({effective_version()} installed).\n"
-                "Right-click -> Check for updates... to install.",
-                title="SSD Temp Monitor — update available")
+                tr("notify.available", remote=version,
+                   local=effective_version()),
+                title=tr("notify.title.available"))
 
     def _install_update(self, *_):
         """Download the new setup exe, verify its SHA-256, then update.
@@ -1109,7 +1346,8 @@ class App:
         if not pending:
             return
         url, version = pending
-        self._notify(f"Downloading {version}...", "SSD Temp Monitor")
+        self._notify(tr("notify.downloading", version=version),
+                     tr("app.title"))
 
         def worker():
             try:
@@ -1123,8 +1361,8 @@ class App:
                     sums_text = resp.read().decode("utf-8", "replace")
                 filename = url.rsplit("/", 1)[1]
                 if not verify_asset(data, sums_text, filename):
-                    self._notify("Checksum mismatch - update aborted.",
-                                 "SSD Temp Monitor — Update")
+                    self._notify(tr("notify.bad_checksum"),
+                                 tr("notify.title.update"))
                     return
                 dest = os.path.join(os.environ.get("TEMP", os.path.expanduser("~")),
                                     f"ssd_temp_monitor_setup_{version}.exe")
@@ -1132,9 +1370,11 @@ class App:
                     f.write(data)
                 shim = build_update_shim(dest, restart_path=_own_restart_path())
             except Exception:
-                self._notify("Update download failed.", "SSD Temp Monitor — Update")
+                self._notify(tr("notify.download_failed"),
+                             tr("notify.title.update"))
                 return
-            self._notify(f"Installing {version}...", "SSD Temp Monitor")
+            self._notify(tr("notify.installing", version=version),
+                         tr("app.title"))
             log_event("update_install_start", remote=version)
             # exit so the installer can replace the exe; the shim waits for
             # us to let go of the AppMutex before starting the installer
@@ -1149,10 +1389,8 @@ class App:
                 pass
             ctypes.windll.user32.MessageBoxW(
                 None,
-                f"The update to {version} could not be installed\n"
-                f"(installer exit code {code}).\n"
-                "Download it manually from the About window.",
-                "SSD Temp Monitor — Update", 0x10 | 0x40000 | 0x10000)
+                tr("notify.install_failed", version=version, code=code),
+                tr("notify.title.update"), 0x10 | 0x40000 | 0x10000)
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -1162,12 +1400,12 @@ class App:
         import webbrowser
 
         root = tk.Tk()
-        root.title("About SSD Temperature Monitor")
+        root.title(tr("win.about"))
         root.attributes("-topmost", True)
         root.resizable(False, False)
         frame = tk.Frame(root, padx=26, pady=14)
         frame.pack()
-        tk.Label(frame, text="SSD Temperature Monitor",
+        tk.Label(frame, text=tr("app.title"),
                  font=("Segoe UI", 15, "bold"),
                  fg="#e2e8f0").pack(anchor="w")
         tk.Label(frame, text=f"Version {effective_version()}",
@@ -1183,7 +1421,7 @@ class App:
 
         # live "latest release" line: fetched on a worker thread, applied on
         # the tk thread via root.after (no cross-thread tk mutation)
-        latest_lbl = tk.Label(frame, text="Latest release: checking…",
+        latest_lbl = tk.Label(frame, text=tr("about.latest.checking"),
                               font=("Segoe UI", 10), fg="#94a3b8")
         latest_lbl.pack(anchor="w", pady=(2, 0))
         pre = bool(SETTINGS.get("update_channel") == "pre-release")
@@ -1191,20 +1429,20 @@ class App:
         def apply_latest(release):
             try:
                 if not release:
-                    latest_lbl.config(text="Latest release: unknown (offline?)")
+                    latest_lbl.config(text=tr("about.latest.unknown"))
                     return
                 tag = str(release.get("tag_name") or "?")
                 if not pre and _is_prerelease(release):
                     latest_lbl.config(
-                        text=f"Latest stable: none · newest: {tag} (pre-release)")
+                        text=tr("about.latest.stable_none", tag=tag))
                     return
                 if is_newer_version(tag):
                     latest_lbl.config(
-                        text=f"Latest release: {tag} — update available!",
+                        text=tr("about.latest.newer", tag=tag),
                         fg="#fbbf24")
                 else:
                     latest_lbl.config(
-                        text=f"Latest release: {tag} — you are up to date",
+                        text=tr("about.latest.uptodate", tag=tag),
                         fg="#86efac")
             except Exception:
                 pass
@@ -1220,10 +1458,10 @@ class App:
 
         btns = tk.Frame(frame)
         btns.pack(pady=(12, 0))
-        tk.Button(btns, text="Check for updates", width=16,
+        tk.Button(btns, text=tr("about.check_updates"), width=16,
                   command=lambda: self.check_updates_now(),
                   font=("Segoe UI", 9)).pack(side="left", padx=4)
-        tk.Button(btns, text="Close", width=10, command=root.destroy,
+        tk.Button(btns, text=tr("about.close"), width=10, command=root.destroy,
                   font=("Segoe UI", 9)).pack(side="left", padx=4)
         root.bind("<Escape>", lambda e: root.destroy())
         root.mainloop()
@@ -1277,8 +1515,8 @@ class App:
                            temp_color(temp)),
             title=f"{model}: {temp}C" if temp is not None else f"{model}: n/a",
             menu=pystray.Menu(
-                pystray.MenuItem("Show details", self.show_details, default=True),
-                pystray.MenuItem("Exit", self.quit),
+                pystray.MenuItem(tr("menu.details"), self.show_details, default=True),
+                pystray.MenuItem(tr("menu.exit"), self.quit),
             ),
         )
         return icon
@@ -1326,7 +1564,7 @@ class App:
                 k32.SetClipboardData(CF_UNICODETEXT, h)
             finally:
                 k32.CloseClipboard()
-            self._notify("Diagnostics copied to clipboard.", "SSD Temp Monitor")
+            self._notify(tr("notify.copied"), tr("app.title"))
         except Exception:
             pass
 
@@ -1348,12 +1586,12 @@ class App:
             temps = [t["temp"] for t in self.temps if t["temp"] is not None]
         peak = max(temps) if temps else None
         try:
-            self._notify(
-                f"SSD has been at {peak}°C for a while."
-                if peak is not None else "SSD is overheating.",
-                title=f"⚠ SSD overheat: {peak}°C" if peak is not None
-                      else "⚠ SSD overheat",
-            )
+            if peak is not None:
+                self._notify(tr("alert.body", peak=peak),
+                             title=tr("alert.title", peak=peak))
+            else:
+                self._notify(tr("alert.body.no_peak"),
+                             title=tr("alert.title.no_peak"))
         except Exception:
             pass  # notifications are best-effort
 
@@ -1497,9 +1735,8 @@ def main():
         if (os.environ.get("SSD_TEMP_SILENT_DUPLICATE") != "1"
                 and "--duplicate-silent" not in sys.argv):
             ctypes.windll.user32.MessageBoxW(
-                None, "SSD Temperature Monitor is already running\n"
-                      "(check the system tray).",
-                "SSD Temp Monitor", 0x40 | 0x40000 | 0x10000,  # info icon | topmost | set foreground
+                None, tr("duplicate.body"), tr("mb.title"),
+                0x40 | 0x40000 | 0x10000,  # info icon | topmost | set foreground
             )
         sys.exit(2)
     if not is_admin():

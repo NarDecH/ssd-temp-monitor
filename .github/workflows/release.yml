@@ -69,6 +69,26 @@ jobs:
           }
           Write-Output "binaries signed"
 
+      - name: Verify signatures (only when signing is enabled)
+        shell: pwsh
+        env:
+          SIGNING_PFX_BASE64: ${{ secrets.SIGNING_PFX_BASE64 }}
+        run: |
+          if (-not $env:SIGNING_PFX_BASE64) {
+            Write-Output "Signing disabled - skipping signature verification."
+            exit 0
+          }
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" `
+            -Recurse -Filter signtool.exe | Select-Object -First 1 -ExpandProperty FullName
+          foreach ($f in "dist\ssd_temp_monitor.exe", "installer\ssd_temp_monitor_setup.exe") {
+            & $signtool verify /pa /all $f
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Signature verification failed for $f"
+              exit 1
+            }
+          }
+          Write-Output "signatures verified OK"
+
       - name: Smoke-test installed exe
         shell: pwsh
         run: |

@@ -68,7 +68,7 @@
   <div class="badges">
     <span class="badge">Windows 10 / 11</span>
     <span class="badge">Python ไฟล์เดียว</span>
-    <span class="badge ok">v1.9.0</span>
+    <span class="badge ok">v1.10.0</span>
     <span class="badge warn">ต้องการสิทธิ์ Admin</span>
   </div>
   <p>แอปเล็ก ๆ ที่แสดง<strong>อุณหภูมิ SSD</strong> ไว้บน system tray icon ของ Windows
@@ -134,8 +134,8 @@
   <div class="card tip">
     <strong>⚙️ Settings:</strong> ในเมนูคลิกขวา — ปรับ polling interval (1–60 s),
     alert threshold (40–90 °C), sustain/cooldown, ความยาว history (5–240 นาที),
-    ขนาดไอคอน (16–128 px), โหมด high-contrast, ช่องทางอัปเดต (stable/pre-release),
-    ช่วงเวลาเช็คอัปเดต (5–1440 นาที) เก็บลง
+    ขนาดไอคอน (16–128 px), โหมด high-contrast, ภาษา (en/th), ช่องทางอัปเดต
+    (stable/pre-release), ช่วงเวลาเช็คอัปเดต (5–1440 นาที) เก็บลง
     <code>%APPDATA%\SSDTempMonitor\config.json</code> <b>มีผลทันทีทุกค่า</b>
     (รวมถึงขนาดไอคอนและ poll interval — ไม่ต้องรีสตาร์ท) · ลบไฟล์เพื่อรีเซ็ต
   </div>
@@ -144,6 +144,18 @@
     <strong>💡 ตั้งให้รันตอนเปิดเครื่อง:</strong> กด <code>Win+R</code> พิมพ์
     <code>shell:startup</code> แล้ววาง shortcut ของ <code>start_ssd_temp_monitor.bat</code>
     ไว้ในโฟลเดอร์นั้น (Windows จะถาม UAC ทุกครั้งตอนล็อกอิน)
+  </div>
+
+  <h2>ภาษาและการอ่านง่ายของไอคอน</h2>
+  <div class="card tip">
+    Settings → <strong>ภาษา / Language</strong>: เลือก <code>en</code> หรือ
+    <code>th</code> — เมนู tray, หน้าต่างทุกใบ และการแจ้งเตือนเปลี่ยนตามทันที
+    (เมนู rebuild ให้เอง ไม่ต้องรีสตาร์ท)
+  </div>
+  <div class="card">
+    ไอคอนอ่านง่ายขึ้นใน v1.10.0: เม็ดสีขยายเต็มไอคอน ตัวเลขใช้สีตัดกับพื้นอัตโนมัติ
+    (ดำเข้มบนเขียว/ส้ม ขาวบนแดง) พร้อมเส้น stroke บาง ๆ กันเบลอ · ตัวเลข 3 หลัก
+    (เช่น 100 °C) ย่อขนาดพอดีเม็ดอัตโนมัติ · taskbar สีอ่อน แนะนำเปิด high-contrast
   </div>
 
   <h2>ทำไมไอคอนถึงขึ้น "--"?</h2>

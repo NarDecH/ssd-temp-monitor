@@ -14,7 +14,10 @@ when a disk runs hot.
 
 - 🔢 Tray icon shows the temperature (°C) of the **hottest** SSD, refreshed
   every 1 second
-- 🎨 Color coding: **green** ≤ 50 °C · **orange** 51–64 °C · **red** ≥ 65 °C
+- 🎨 Color coding: **green** ≤ 50 °C · **orange** 51–64 °C · **red** ≥ 65 °C —
+  the pill fills the icon and the digit color adapts to it (dark digits on
+  green/orange ≈ 9:1 contrast, white digits with a subtle stroke on red),
+  so the temperature is readable at a glance even at small sizes
 
   ![Color scale](img/color-scale.svg)
 
@@ -27,6 +30,8 @@ when a disk runs hot.
 - 🩹 **Copy diagnostics** — one menu click puts version, admin status,
   settings and all disk readings on the clipboard for bug reports
 - 🔐 **SHA-256-verified auto-updates** from GitHub Releases
+- 🌐 **Bilingual UI (English / ไทย)** — menu, windows and notifications
+  switch in Settings → Language, no restart needed
 - 🛡️ Automatic UAC elevation (needed to read SMART temperature data)
 - 🔌 **Internal SSDs only** — USB card readers / enclosures are ignored on
   purpose: their bridge chips report bogus temperatures and can stall the
@@ -78,6 +83,7 @@ Saved to `%APPDATA%\SSDTempMonitor\config.json`; changes apply immediately.
 | History window | 5–240 min |
 | Update check interval | 5–1440 min |
 | Update channel | `stable` or `pre-release` (sees `v1.9.0-rc1` tags) |
+| Language | `en` (English) or `th` (ไทย) — applies immediately |
 | Icon size | 16–128 px |
 | High-contrast icon | black pill + white border (readable on light taskbars) |
 | Record history on startup | on/off |

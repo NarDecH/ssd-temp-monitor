@@ -1096,8 +1096,12 @@ class TestIconSizeAndContrast:
     def test_hc_pill_has_white_border(self):
         pytest.importorskip("PIL")
         hc = m.make_icon("42", m.GREEN, size=32, high_contrast=True)
-        # the outline is drawn on the rectangle boundary -> pixel (2, 16)
-        assert hc.getpixel((2, 16))[:3] == (255, 255, 255)
+        # scan the middle row: the first opaque pixel must be the white
+        # outline, immediately followed by the black pill interior
+        row = [hc.getpixel((x, 16)) for x in range(8)]
+        first = next(i for i, px in enumerate(row) if px[3] > 0)
+        assert row[first][:3] == (255, 255, 255)
+        assert row[first + 1][:3] == (0, 0, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -1172,3 +1176,67 @@ class TestUninstallCleansUp:
         block = "\n".join(lines[idx + 1:idx + 6])
         assert "Type: files; Name: \"{userappdata}\SSDTempMonitor\config.json\"" in block
         assert "Type: files; Name: \"{userappdata}\SSDTempMonitor\ssd_temp_monitor.log\"" in block
+
+
+# ---------------------------------------------------------------------------
+# icon readability: big pill + adaptive digit color (v1.10.0)
+# ---------------------------------------------------------------------------
+class TestIconReadability:
+    def test_digit_color_adapts_to_pill_luminance(self):
+        dark = (17, 17, 27, 255)
+        assert m._pill_text_color(m.GREEN) == dark    # green pill -> dark digits
+        assert m._pill_text_color(m.ORANGE) == dark   # orange pill -> dark digits
+        assert m._pill_text_color(m.RED) == (255, 255, 255, 255)
+        assert m._pill_text_color("#000000") == (255, 255, 255, 255)
+        assert m._pill_text_color((34, 197, 94)) == dark  # tuple input works too
+
+    def test_pill_covers_most_of_the_icon(self):
+        pytest.importorskip("PIL")
+        m._ICON_CACHE.clear()
+        icon = m.make_icon("42", m.GREEN, size=64)
+        # just inside the top edge the pixel must already be pill-colored:
+        # the pill spans nearly the whole icon instead of a small box
+        assert icon.getpixel((32, 3))[:3] != (0, 0, 0)
+        assert icon.getpixel((32, 3))[3] == 255
+
+    def test_wide_text_shrinks_to_fit_pill(self):
+        pytest.importorskip("PIL")
+        small = m._icon_font(32, "8")
+        big3 = m._icon_font(32, "100")
+        w_small = small.getbbox("8")[2] - small.getbbox("8")[0]
+        w_big3 = big3.getbbox("100")[2] - big3.getbbox("100")[0]
+        assert w_big3 <= 32 - 2 * max(4, 32 // 12) + 2
+        assert w_big3 > w_small  # still uses as much width as possible
+
+    def test_fonts_cached_per_text(self):
+        assert m._icon_font(48, "42") is m._icon_font(48, "42")
+
+
+# ---------------------------------------------------------------------------
+# i18n: UI language en/th (v1.10.0)
+# ---------------------------------------------------------------------------
+class TestI18n:
+    def test_strings_parity(self):
+        assert set(m.STRINGS["en"]) == set(m.STRINGS["th"])
+
+    def test_tr_uses_active_language(self, monkeypatch):
+        monkeypatch.setitem(m.SETTINGS, "language", "en")
+        assert m.tr("menu.exit") == "Exit"
+        monkeypatch.setitem(m.SETTINGS, "language", "th")
+        assert m.tr("menu.exit") != "Exit"
+
+    def test_tr_formatting_and_fallback(self, monkeypatch):
+        monkeypatch.setitem(m.SETTINGS, "language", "en")
+        assert m.tr("notify.downloading", version="v9") == "Downloading v9..."
+        assert m.tr("no.such.key") == "no.such.key"      # missing -> key
+        monkeypatch.setitem(m.SETTINGS, "language", "xx")  # unknown -> English
+        assert m.tr("menu.exit") == "Exit"
+
+    def test_language_setting_validated(self):
+        assert m._validate_settings({"language": "th"})["language"] == "th"
+        assert m._validate_settings({"language": "fr"})["language"] == "en"
+        assert m._validate_settings({})["language"] == "en"
+
+    def test_thai_strings_nonempty(self):
+        for key, text in m.STRINGS["th"].items():
+            assert text.strip(), f"empty Thai string for {key}"

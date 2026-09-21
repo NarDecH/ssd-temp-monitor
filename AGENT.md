@@ -104,8 +104,12 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
 ## การทดสอบ
 
 - **รัน pytest ทุกครั้งที่แก้ logic** — `python -m pytest tests/ -v`
-  (141 เคส รันได้โดยไม่ต้องมี admin/PowerShell/GUI; PowerShell ถูก
+  (150 เคส รันได้โดยไม่ต้องมี admin/PowerShell/GUI; PowerShell ถูก
   monkeypatch ที่ `_run_powershell` เสมอ)
+- **UI ทุกข้อความต้องผ่าน `tr()` เท่านั้น** — ห้าม hardcode ข้อความภาษา
+  อังกฤษ/ไทยในเมนู/หน้าต่าง/การแจ้งเตือน เพิ่ม key ใหม่ใน `STRINGS`
+  ทั้งสองภาษาพร้อมกัน (เทส `TestI18n::test_strings_parity` จับถ้าลืม)
+  ส่วนขยายภาษาอื่น: เพิ่ม dict ใน `STRINGS` + ปรับ `_validate_settings`
 - ตรวจ syntax เพิ่มด้วย `python -m py_compile ssd_temp_tray.py`
 - ทดสอบ filter ด้วยคำสั่ง (ต้อง run PowerShell ใน terminal ที่รองรับ
   quoting ให้):
