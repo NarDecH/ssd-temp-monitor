@@ -152,7 +152,21 @@ class TestParseDisks:
     def test_single_dict_wrapped_to_list(self):
         out = '{"model":"A","media":"SSD","bus":"NVMe","temp":41}'
         disks = m._parse_disks(out, with_temp=True)
-        assert disks == [{"model": "A", "media": "SSD", "bus": "NVMe", "temp": 41}]
+        assert disks == [{"model": "A", "media": "SSD", "bus": "NVMe", "temp": 41,
+                          "wear": None, "read_errors": None, "unfixed_errors": None}]
+
+    def test_smart_fields_parsed(self):
+        out = ('{"model":"A","media":"SSD","bus":"NVMe","temp":41,'
+               '"wear":7,"readErr":12,"undef":0}')
+        d = m._parse_disks(out, with_temp=True)[0]
+        assert d["wear"] == 7 and d["read_errors"] == 12
+        assert d["unfixed_errors"] == 0
+
+    def test_smart_garbage_is_none(self):
+        out = '{"model":"A","wear":"x","readErr":-5,"undef":null}'
+        d = m._parse_disks(out, with_temp=True)[0]
+        assert d["wear"] is None and d["read_errors"] is None
+        assert d["unfixed_errors"] is None
 
     def test_list_parsed(self):
         out = ('[{"model":"A","media":"SSD","bus":"NVMe","temp":41},'
@@ -182,7 +196,9 @@ class TestReadTemps:
                     '{"model":"USB reader","media":"SSD","bus":"USB","temp":"0"}]')
         monkeypatch.setattr(m, "_run_powershell", fake_run)
         # USB entry must be dropped client-side too (defense in depth)
-        assert m.read_temps() == [{"model": "NVME SSD", "temp": 44}]
+        assert m.read_temps() == [{"model": "NVME SSD", "temp": 44,
+                                   "wear": None, "read_errors": None,
+                                   "unfixed_errors": None}]
 
     def test_client_side_filter_guards_regression(self, monkeypatch):
         """Even if someone breaks the PowerShell filter, USB disks must not
@@ -194,7 +210,9 @@ class TestReadTemps:
             m, "_run_powershell",
             lambda cmd: ('[{"model":"NVME SSD","media":"SSD","bus":"NVMe","temp":"44"},'
                          '{"model":"USB reader","media":"SSD","bus":"USB","temp":"0"}]'))
-        assert m.read_temps() == [{"model": "NVME SSD", "temp": 44}]
+        assert m.read_temps() == [{"model": "NVME SSD", "temp": 44,
+                                   "wear": None, "read_errors": None,
+                                   "unfixed_errors": None}]
 
     def test_failure_returns_empty(self, monkeypatch):
         monkeypatch.setattr(m, "_run_powershell", lambda cmd: "")
@@ -212,8 +230,10 @@ class TestListAllDisks:
             raise AssertionError("unexpected query")
         monkeypatch.setattr(m, "_run_powershell", fake_run)
         disks = m.list_all_disks()
-        assert disks[0] == {"model": "NVME SSD", "media": "SSD", "bus": "NVMe", "temp": 44}
-        assert disks[1] == {"model": "USB reader", "media": "SSD", "bus": "USB", "temp": None}
+        assert disks[0] == {"model": "NVME SSD", "media": "SSD", "bus": "NVMe", "temp": 44,
+                            "wear": None, "read_errors": None, "unfixed_errors": None}
+        assert disks[1] == {"model": "USB reader", "media": "SSD", "bus": "USB", "temp": None,
+                            "wear": None, "read_errors": None, "unfixed_errors": None}
 
     def test_failure_returns_empty(self, monkeypatch):
         monkeypatch.setattr(m, "_run_powershell", lambda cmd: "")
@@ -478,10 +498,11 @@ class TestPerDiskIcons:
 # ---------------------------------------------------------------------------
 class TestVersionCompare:
     @pytest.mark.parametrize("text,expected", [
-        ("v1.2.3", (1, 2, 3)),
-        ("1.10.0", (1, 10, 0)),
-        ("V2.0", (2, 0)),
-        ("1.2.3-beta", (1, 2, 3)),
+        ("v1.2.3", (1, 2, 3, 1, 0)),
+        ("1.10.0", (1, 10, 0, 1, 0)),
+        ("V2.0", (2, 0, 0, 1, 0)),
+        ("1.2.3-beta", (1, 2, 3, 0, 0)),
+        ("v1.14.0-rc2", (1, 14, 0, 0, 2)),
         ("garbage", (0,)),
     ])
     def test_parse(self, text, expected):
@@ -494,6 +515,12 @@ class TestVersionCompare:
         ("2.0.0", "1.9.9", True),
         ("1.5", "1.6.0", False),
         ("nonsense", "1.6.0", False),
+        # semver pre-release order (v1.13.x regression: rc compared as release)
+        ("1.14.0", "1.14.0-rc1", True),      # release beats its rc
+        ("1.14.0-rc1", "1.14.0", False),
+        ("1.14.0-rc2", "1.14.0-rc1", True),  # rc numbers sort within pre-releases
+        ("1.14.0-rc1", "1.13.9", True),
+        ("1.13.9", "1.14.0-rc1", False),
     ])
     def test_is_newer(self, remote, local, expected):
         assert m.is_newer_version(remote, local) is expected
@@ -1656,3 +1683,161 @@ class TestStaleMeiCleanup:
         self._fake_frozen(monkeypatch, tmp_path)
         m.cleanup_stale_mei()
         assert keep.exists()  # not _MEI<digits>: never touched
+
+
+# ---------------------------------------------------------------------------
+# v1.14.0: autostart, compact tooltip, window geometry, CSV writer,
+#          health flags, i18n ja/zh, semver pre-release ordering
+# ---------------------------------------------------------------------------
+class TestAutostart:
+    class _FakeKey:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def test_enabled_and_toggle_with_fake_registry(self):
+        """Full enable/disable cycle against an injectable fake registry
+        (the real HKCU must never be touched by tests)."""
+        store = {}
+
+        class FakeReg:
+            HKEY_CURRENT_USER = "HKCU"
+            KEY_SET_VALUE = 0x0002
+            REG_SZ = 1
+
+            @staticmethod
+            def OpenKey(root, path, reserved=0, access=None):
+                assert (root, path) == ("HKCU", m.AUTOSTART_RUN_KEY)
+                return TestAutostart._FakeKey()
+
+            @staticmethod
+            def QueryValueEx(key, name):
+                if name not in store:
+                    raise OSError(2, "not found")
+                return store[name], 1
+
+            @staticmethod
+            def SetValueEx(key, name, _r, _t, value):
+                store[name] = value
+
+            @staticmethod
+            def DeleteValue(key, name):
+                store.pop(name, None)
+
+        assert m.autostart_enabled(FakeReg) is False
+        assert m.set_autostart(True, FakeReg) is True
+        # quoted path to our own entry point (.py for source, .exe frozen)
+        stored = store[m.AUTOSTART_VALUE]
+        assert stored.startswith('"') and stored.endswith('"')
+        assert os.path.isfile(stored.strip('"'))
+        assert m.autostart_enabled(FakeReg) is True
+        assert m.set_autostart(False, FakeReg) is True
+        assert m.autostart_enabled(FakeReg) is False
+
+    def test_default_settings_keys(self):
+        assert m.DEFAULT_SETTINGS["compact_tooltip"] is True
+        assert m._validate_settings({"compact_tooltip": "yes"})["compact_tooltip"] is True
+        assert m._validate_settings({})["compact_tooltip"] is True
+
+
+class TestCompactTooltip:
+    def test_compact_single_disk(self):
+        assert m._tooltip_text([{"model": "A", "temp": 65}]) == "65°C"
+
+    def test_compact_multi_disk(self):
+        got = m._tooltip_text([{"model": "A", "temp": 65},
+                               {"model": "B", "temp": 58}])
+        assert got == "65°C · 58°C (2 disks)"
+
+    def test_full_mode_lists_models(self):
+        saved = m.SETTINGS.get("compact_tooltip")
+        try:
+            m.SETTINGS["compact_tooltip"] = False
+            got = m._tooltip_text([{"model": "A", "temp": 65},
+                                   {"model": "B", "temp": None}])
+            assert got == "A: 65C | B: n/a"
+        finally:
+            if saved is None:
+                m.SETTINGS.pop("compact_tooltip", None)
+            else:
+                m.SETTINGS["compact_tooltip"] = saved
+
+    def test_no_data(self):
+        assert "no data" in m._tooltip_text([])
+
+
+class TestGeometry:
+    def test_roundtrip(self, tmp_path, monkeypatch):
+        geo_file = tmp_path / "geo.json"
+        monkeypatch.setattr(m, "GEOMETRY_FILE", str(geo_file))
+        m.save_geometry({"graph": "800x480+10+20"})
+        assert m.load_geometry() == {"graph": "800x480+10+20"}
+        m.save_geometry({"details": "300x200+5+5"})
+        assert m.load_geometry()["graph"] == "800x480+10+20"
+
+    def test_corrupt_file_returns_empty(self, tmp_path, monkeypatch):
+        geo_file = tmp_path / "geo.json"
+        geo_file.write_text("{not json", encoding="utf-8")
+        monkeypatch.setattr(m, "GEOMETRY_FILE", str(geo_file))
+        assert m.load_geometry() == {}
+
+
+class TestHistoryCsvWriter:
+    def test_write_and_read_back(self, tmp_path):
+        path = tmp_path / "h.csv"
+        points = [(1700000000, 41), (1700000060, 45)]
+        assert m.write_history_csv(points, str(path)) == str(path)
+        rows = path.read_text(encoding="utf-8").splitlines()
+        assert rows[0] == "timestamp,temperature_c"
+        assert rows[1] == "1700000000,41"
+        assert rows[2] == "1700000060,45"
+
+    def test_invalid_path_returns_none(self):
+        assert m.write_history_csv([(1, 2)], "Z:/no/such/dir/x.csv") is None
+
+
+class TestHealthFlags:
+    def test_healthy_disk_has_no_flags(self):
+        assert m.health_flags({"wear": 5, "read_errors": 3,
+                               "unfixed_errors": 0}) == []
+
+    def test_high_wear_warns(self):
+        flags = m.health_flags({"wear": 95, "read_errors": 0,
+                                "unfixed_errors": 0})
+        assert len(flags) == 1 and "95" in flags[0]
+
+    def test_unfixed_errors_are_critical(self):
+        flags = m.health_flags({"wear": 5, "read_errors": 10,
+                                "unfixed_errors": 2})
+        assert any("2" in f for f in flags)
+
+    def test_none_fields_are_ignored(self):
+        assert m.health_flags({"wear": None, "read_errors": None,
+                               "unfixed_errors": None}) == []
+
+
+class TestI18nJaZh:
+    def test_four_languages_complete(self):
+        assert set(m.UI_LANGUAGES) == {"en", "th", "ja", "zh"}
+        en = set(m.STRINGS["en"])
+        for lang in m.UI_LANGUAGES:
+            assert set(m.STRINGS[lang]) == en, lang
+
+    def test_japanese_and_chinese_translations_nonempty(self):
+        for lang in ("ja", "zh"):
+            for key, text in m.STRINGS[lang].items():
+                assert text.strip(), f"empty {lang} string for {key}"
+
+    def test_settings_language_validated(self):
+        assert m._validate_settings({"language": "ja"})["language"] == "ja"
+        assert m._validate_settings({"language": "zh"})["language"] == "zh"
+        assert m._validate_settings({"language": "klingon"})["language"] == "en"
+
+
+class TestSelftestRcOrder:
+    def test_semver_check_included(self):
+        ok, (checks, failed) = m.run_update_selftest()
+        assert ok, [c for c in checks if not c[1]]
+        assert any("semver" in name for name, _o, _d in checks)

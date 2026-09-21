@@ -145,11 +145,17 @@ jobs:
         run: |
           Copy-Item "dist\ssd_temp_monitor.exe" "ssd_temp_monitor_v${{ steps.ver.outputs.version }}.exe"
           Copy-Item "installer\ssd_temp_monitor_setup.exe" "ssd_temp_monitor_setup_v${{ steps.ver.outputs.version }}.exe"
+          # portable package: keep settings/history next to the exe
+          New-Item -ItemType Directory -Force -Path "portable_tmp\portable_data" | Out-Null
+          Copy-Item "ssd_temp_monitor_v${{ steps.ver.outputs.version }}.exe" "portable_tmp\"
+          New-Item -ItemType File -Force -Path "portable_tmp\portable_data\.keep" | Out-Null
+          Compress-Archive -Path "portable_tmp\*" -DestinationPath "ssd_temp_monitor_v${{ steps.ver.outputs.version }}_portable.zip" -Force
 
       - name: Generate SHA256SUMS.txt
         shell: pwsh
         run: |
-          $files = Get-ChildItem "ssd_temp_monitor*_v*.exe"
+          $files = @(Get-ChildItem "ssd_temp_monitor*_v*.exe") +
+                   @(Get-ChildItem "ssd_temp_monitor*_v*_portable.zip")
           $lines = foreach ($f in $files) {
             $h = (Get-FileHash -Algorithm SHA256 $f.FullName).Hash.ToLower()
             "$h  $($f.Name)"
@@ -167,4 +173,5 @@ jobs:
           files: |
             ssd_temp_monitor_v${{ steps.ver.outputs.version }}.exe
             ssd_temp_monitor_setup_v${{ steps.ver.outputs.version }}.exe
+            ssd_temp_monitor_v${{ steps.ver.outputs.version }}_portable.zip
             SHA256SUMS.txt

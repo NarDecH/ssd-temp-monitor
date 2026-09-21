@@ -3,7 +3,7 @@
 ; Requires dist\ssd_temp_monitor.exe (run build_exe.bat first)
 
 #define MyAppName "SSD Temperature Monitor"
-#define MyAppVersion "1.13.0"
+#define MyAppVersion "1.14.0-rc1"
 #define MyAppExeName "ssd_temp_monitor.exe"
 #define MyMutex "Local\SSDTempMonitor_SingleInstance"
 
@@ -57,4 +57,5 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}
 ; remove the CSV history and the saved settings on uninstall
 Type: files; Name: "{userappdata}\..\Local\Temp\ssd_temp_history.csv"
 Type: files; Name: "{userappdata}\SSDTempMonitor\config.json"
+Type: files; Name: "{userappdata}\SSDTempMonitor\window_geometry.json"
 Type: files; Name: "{userappdata}\SSDTempMonitor\ssd_temp_monitor.log"

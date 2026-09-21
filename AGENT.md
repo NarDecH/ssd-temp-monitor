@@ -104,8 +104,13 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
 ## การทดสอบ
 
 - **รัน pytest ทุกครั้งที่แก้ logic** — `python -m pytest tests/ -v`
-  (186 เคส รันได้โดยไม่ต้องมี admin/PowerShell/GUI; PowerShell ถูก
+  (212 เคส รันได้โดยไม่ต้องมี admin/PowerShell/GUI; PowerShell ถูก
   monkeypatch ที่ `_run_powershell` เสมอ)
+- **เวอร์ชัน pre-release** — `_parse_version` เรียง `rc1 < rc2 < release`
+  (มี 5 ชั้น: core + flag + rc number) ห้ามกลับไปตัด suffix แบบเดิม
+  (ทำให้ช่องทาง pre-release ใช้ไม่ได้ — เคยเป็นบั๊กใน ≤1.13.x)
+- **เพิ่มภาษาใหม่** — copy dict ใน STRINGS, แปลให้ครบทุกคีย์, เพิ่มใน
+  UI_LANGUAGES + เมนู tray — เทส parity จะจับถ้าลืม
 - **การเทสพิกเซลของไอคอน** — ต้องกรอง `alpha > 0` ก่อนเสมอ (มุมโค้งนอก
   เม็ดเป็น (0,0,0,0) ที่ดูเหมือนเลขดำได้) และระวังว่าฟอนต์ถูกย่อให้เต็ม
   ความกว้างเม็ดแล้ว จึงเหลือ slack แนวตั้งมากกว่าแนวนอน (clamp ทำงานจริง

@@ -3,7 +3,7 @@
 [![CI](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/ci.yml)
 [![Release](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/release.yml/badge.svg)](https://github.com/NarDecH/ssd-temp-monitor/releases)
 ![Version](https://img.shields.io/badge/version-1.12.0-orange)
-![Tests](https://img.shields.io/badge/tests-186%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-212%20passing-brightgreen)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey)
 
 ![Banner](docs/img/banner.svg)
@@ -17,8 +17,15 @@ Shows your SSD temperature live on the system tray icon.
 - **Readable digits by design** — the colored pill fills the icon, digit color adapts
   to the pill (dark on green/orange ≈ 9:1 contrast, white + stroke on red), and
   3-digit temperatures shrink to fit.
-- **Bilingual UI** — switch the whole interface (menu, windows, notifications) between
-  English and Thai from the **Language tray submenu** or Settings; applies immediately.
+- **Multilingual UI** — English, Thai, Japanese (日本語) or Chinese (中文) for the whole
+  interface from the **Language tray submenu** or Settings; applies immediately.
+- **Auto-start & portable** — opt-in start at Windows login (Settings checkbox or the
+  installer task); a portable zip keeps config/history next to the exe (marker:
+  `portable_data.portable`), so it runs from a USB stick without host traces.
+- **Health signals** — SSD wear and read-error counters surface in Show details
+  (warn at ≥75 % wear, back up at ≥90 %, uncorrected read errors are critical).
+- **24 h history + export** — the graph window covers up to 24 hours and can
+  export the data as CSV or the chart as PNG; all toasts are click-to-open.
 - **Customizable tray digits** — pick the font (13 Windows families), the style
   (regular / bold / italic / bold italic), the digit size (50–150 %), the digit color
   (`auto` contrast, 8 presets, or any `#rrggbb`), and nudge the digit position

@@ -21,6 +21,7 @@ Extras:
       "Show temperature graph" window covering the last 30 minutes.
 """
 
+import base64
 import csv
 import ctypes
 import hashlib
@@ -42,7 +43,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.13.0"         # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.14.0-rc1"     # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -54,11 +55,29 @@ ACCENT = "#38bdf8"
 # temperature sanity range: real SMART readings always fall inside this
 TEMP_MIN, TEMP_MAX = -20, 100
 
-# ---- history recording ----
-# ---- settings (persisted to %APPDATA%\SSDTempMonitor\config.json) ----
-CONFIG_FILE = os.path.join(
-    os.environ.get("APPDATA", os.path.expanduser("~")),
-    "SSDTempMonitor", "config.json")
+
+# ---- data locations: installed (%APPDATA%) vs portable -------------------
+def _is_portable():
+    """True for the portable build (a marker file sits beside the exe).
+
+    The installed setup writes to %APPDATA%\\SSDTempMonitor; the portable
+    exe keeps config/history next to itself in \\portable_data\\ so it can
+    run from a USB stick without leaving traces on the host.
+    """
+    if not getattr(sys, "frozen", False):
+        return False
+    base = os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.isfile(os.path.join(base, "portable_data.portable"))
+
+
+BASE_DIR = (os.path.dirname(os.path.abspath(sys.executable))
+            if getattr(sys, "frozen", False) else os.getcwd())
+DATA_DIR = (os.path.join(BASE_DIR, "portable_data") if _is_portable()
+            else os.path.join(os.environ.get("APPDATA",
+                                             os.path.expanduser("~")),
+                              "SSDTempMonitor"))
+CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
+GEOMETRY_FILE = os.path.join(DATA_DIR, "window_geometry.json")
 # Digit fonts offered in Settings: {family: {style -> (ttf file, tk name)}}.
 # Every family below ships with Windows 10/11; a missing .ttf file or an
 # unknown family gracefully falls back to Arial (bold).
@@ -195,6 +214,10 @@ THEMES = {
 }
 
 
+# UI languages offered in the tray submenu and Settings (STRINGS keys)
+UI_LANGUAGES = ("en", "th", "ja", "zh")
+
+
 def _is_hex_color(value):
     """True for "#rgb" or "#rrggbb" strings."""
     s = str(value).strip()
@@ -212,7 +235,7 @@ DEFAULT_SETTINGS = {
     "alert_threshold": 65,
     "alert_sustain_seconds": 30,
     "alert_cooldown_minutes": 5,
-    "history_minutes": 30,
+    "history_minutes": 30,                   # 5..1440 (up to 24 h)
     "record_history": False,
     "multi_disk_icons": True,
     "check_updates": True,
@@ -221,6 +244,7 @@ DEFAULT_SETTINGS = {
     "update_check_interval_minutes": 360,     # auto-check every N minutes
     "icon_size": 64,                          # tray icon edge in px
     "high_contrast_icon": False,              # black pill + white border
+    "compact_tooltip": True,                  # short "65°C · 58°C (2 disks)"
     "language": "en",                         # UI language: "en" or "th"
     "icon_theme": "classic",                 # theme preset (THEMES keys)
     "icon_font": "Segoe UI",                 # digit font family (FONT_FAMILIES)
@@ -239,7 +263,7 @@ def _validate_settings(cfg):
     out["alert_threshold"] = min(90, max(40, int(out["alert_threshold"])))
     out["alert_sustain_seconds"] = min(600, max(0, int(out["alert_sustain_seconds"])))
     out["alert_cooldown_minutes"] = min(120, max(1, int(out["alert_cooldown_minutes"])))
-    out["history_minutes"] = min(240, max(5, int(out["history_minutes"])))
+    out["history_minutes"] = min(1440, max(5, int(out["history_minutes"])))
     out["record_history"] = bool(out["record_history"])
     out["update_channel"] = ("pre-release" if out["update_channel"] == "pre-release"
                              else "stable")
@@ -254,7 +278,9 @@ def _validate_settings(cfg):
     except (TypeError, ValueError):
         out["icon_size"] = DEFAULT_SETTINGS["icon_size"]
     out["high_contrast_icon"] = bool(out["high_contrast_icon"])
-    out["language"] = ("th" if out["language"] == "th" else "en")
+    out["compact_tooltip"] = bool(out["compact_tooltip"])
+    out["language"] = (out["language"] if out["language"] in UI_LANGUAGES
+                       else "en")
     out["icon_theme"] = (out["icon_theme"] if out["icon_theme"] in THEMES
                          else "classic")
     if out.get("icon_font") == "auto":      # v1.12.x name for Segoe UI bold
@@ -387,7 +413,7 @@ STRINGS = {
         "settings.threshold": "Alert threshold (°C, 40-90)",
         "settings.sustain": "Alert sustain (seconds, 0-600)",
         "settings.cooldown": "Alert cooldown (minutes, 1-120)",
-        "settings.history": "History window (minutes, 5-240)",
+        "settings.history": "History window (minutes, 5-1440)",
         "settings.check_interval": "Update check interval (minutes, 5-1440)",
         "settings.font": "Digit font",
         "settings.font_style": "Digit style",
@@ -408,6 +434,15 @@ STRINGS = {
         "settings.save": "Save",
         "settings.apply": "Apply",
         "settings.cancel": "Cancel",
+        "settings.autostart": "Start automatically at Windows login",
+        "settings.compact_tooltip": "Compact tray tooltip (temps only)",
+        "graph.export_csv": "Export CSV",
+        "graph.export_png": "Export PNG",
+        "notify.exported": "Saved: {path}",
+        "health.wear_high": "SSD wear {wear}% — backup soon",
+        "health.wear_used": "SSD wear used: {wear}%",
+        "health.read_errors": "{unfixed} UNCORRECTED read errors!",
+        "health.read_errors_fixed": "{total} corrected read errors",
         "settings.int_error": "Please enter whole numbers only.",
         "settings.save_error": "Could not write {path}",
         "about.latest.checking": "Latest release: checking…",
@@ -482,7 +517,7 @@ STRINGS = {
         "settings.threshold": "อุณหภูมิแจ้งเตือน (°C, 40-90)",
         "settings.sustain": "เวลาที่ต้องร้อนติดกัน (วินาที, 0-600)",
         "settings.cooldown": "ช่วงเว้นการแจ้งซ้ำ (นาที, 1-120)",
-        "settings.history": "ความยาวประวัติ (นาที, 5-240)",
+        "settings.history": "ความยาวประวัติ (นาที, 5-1440)",
         "settings.check_interval": "ช่วงเวลาตรวจอัปเดต (นาที, 5-1440)",
         "settings.font": "ฟอนต์ตัวเลข",
         "settings.font_style": "หนา-เอียงตัวเลข",
@@ -503,6 +538,15 @@ STRINGS = {
         "settings.save": "บันทึก",
         "settings.apply": "ใช้ค่า",
         "settings.cancel": "ยกเลิก",
+        "settings.autostart": "เริ่มโปรแกรมอัตโนมัติตอนเข้าสู่ระบบ Windows",
+        "settings.compact_tooltip": "tooltip แบบย่อ (แสดงแค่อุณหภูมิ)",
+        "graph.export_csv": "บันทึก CSV",
+        "graph.export_png": "บันทึก PNG",
+        "notify.exported": "บันทึกแล้ว: {path}",
+        "health.wear_high": "SSD สึกแล้ว {wear}% — ควรสำรองข้อมูลเร็ว ๆ นี้",
+        "health.wear_used": "SSD ใช้ไปแล้ว: {wear}%",
+        "health.read_errors": "Read error แก้ไม่ได้ {unfixed} ครั้ง!",
+        "health.read_errors_fixed": "Read error แก้ไขแล้ว {total} ครั้ง",
         "settings.int_error": "กรุณากรอกตัวเลขจำนวนเต็มเท่านั้น",
         "settings.save_error": "เขียนไฟล์ {path} ไม่สำเร็จ",
         "about.latest.checking": "เวอร์ชันล่าสุด: กำลังตรวจ…",
@@ -523,6 +567,212 @@ STRINGS = {
         "diag.header": "SSD Temperature Monitor diagnostics",
         "diag.no_data": "  (ยังไม่มีข้อมูล)",
     },
+    "ja": {
+        "app.title": "SSD Temperature Monitor",
+        "win.details": "SSD 温度",
+        "win.graph": "SSD 温度 - 履歴",
+        "win.disks": "SSD 温度 - 全ディスク (デバッグ)",
+        "win.settings": "SSD 温度 - 設定",
+        "tab.general": "全般",
+        "tab.icon": "アイコン",
+        "tab.updates": "更新",
+        "win.about": "SSD Temperature Monitor について",
+        "menu.details": "詳細を表示",
+        "menu.graph": "温度グラフを表示",
+        "menu.disks": "全ディスクを表示 (デバッグ)",
+        "menu.diagnostics": "診断情報をクリップボードへコピー",
+        "menu.refresh": "今すぐ更新",
+        "menu.updates": "アップデートを確認...",
+        "menu.selftest": "更新システムの自己テスト",
+        "menu.settings": "設定...",
+        "menu.about": "このアプリについて",
+        "menu.language": "言語",
+        "menu.history": "履歴を記録",
+        "menu.exit": "終了",
+        "notify.no_update": "アップデート情報がありません。",
+        "notify.latest": "最新バージョン ({local}) を使用中です。",
+        "notify.available": ("バージョン {remote} が利用可能です (現在 {local})。\n"
+                             "右クリック → アップデートを確認... でインストールできます。"),
+        "notify.downloading": "{version} をダウンロード中...",
+        "notify.installing": "{version} をインストール中...",
+        "notify.bad_checksum": "チェックサム不一致 - アップデートを中止しました。",
+        "notify.download_failed": "アップデートのダウンロードに失敗しました。",
+        "notify.copied": "診断情報をクリップボードにコピーしました。",
+        "notify.install_failed": ("{version} へのアップデートをインストールできませんでした\n"
+                                  "(インストーラー終了コード {code})。\n"
+                                  "About ウィンドウから手動でダウンロードしてください。"),
+        "notify.title.update": "SSD Temp Monitor — 更新",
+        "notify.title.available": "SSD Temp Monitor — 更新あり",
+        "alert.body": "SSD が {peak}°C をしばらく超えています。",
+        "alert.body.no_peak": "SSD が過熱しています。",
+        "alert.title": "⚠ SSD 過熱: {peak}°C",
+        "alert.title.no_peak": "⚠ SSD 過熱",
+        "elevation.required": "SSD 温度の取得には管理者権限が必要です。",
+        "duplicate.body": ("SSD Temperature Monitor は既に起動しています\n"
+                           "(タスクトレイを確認してください)。"),
+        "mb.title": "SSD Temp Monitor",
+        "details.no_data": "SSD 温度データがありません (管理者として実行)。",
+        "graph.no_history": ("履歴がまだありません。\n"
+                             "トレイメニューで「履歴を記録」を有効にしてください。"),
+        "graph.span": "過去 {minutes} 分",
+        "disks.legend": "✓ アイコン表示    ✗ 除外",
+        "disks.none": "ディスクが見つかりません。",
+        "settings.poll": "取得間隔 (秒, 1-60)",
+        "settings.threshold": "警報しきい値 (°C, 40-90)",
+        "settings.sustain": "警報持続時間 (秒, 0-600)",
+        "settings.cooldown": "再警報までの間隔 (分, 1-120)",
+        "settings.history": "履歴の長さ (分, 5-1440)",
+        "settings.check_interval": "更新確認間隔 (分, 5-1440)",
+        "settings.font": "数字フォント",
+        "settings.font_style": "数字スタイル",
+        "settings.digit_scale": "数字サイズ (自動の %, 50-150)",
+        "settings.digit_color": "数字の色 (auto または #rrggbb)",
+        "settings.dx": "数字オフセット X (px, -50..50)",
+        "settings.dy": "数字オフセット Y (px, -50..50)",
+        "settings.preview": "プレビュー:",
+        "settings.theme": "テーマ",
+        "settings.bad_color": ("数字の色は 'auto' または 16 進カラー\n"
+                               "(例: #ffd166) で指定してください。"),
+        "settings.record": "起動時に履歴を記録",
+        "settings.channel": "更新チャンネル",
+        "settings.icon_size": "アイコンサイズ (px, 16-128)",
+        "settings.high_contrast": "ハイコントラストアイコン (明るいタスクバー用)",
+        "settings.language": "言語 / Language",
+        "settings.note": "設定は即時反映されます - 再起動不要。",
+        "settings.save": "保存",
+        "settings.apply": "適用",
+        "settings.cancel": "キャンセル",
+        "settings.autostart": "Windows サインイン時に自動起動",
+        "settings.compact_tooltip": "コンパクトなトレイのヒント (温度のみ)",
+        "graph.export_csv": "CSV を保存",
+        "graph.export_png": "PNG を保存",
+        "notify.exported": "保存しました: {path}",
+        "health.wear_high": "SSD 劣化 {wear}% — 早めのバックアップを",
+        "health.wear_used": "SSD 劣化使用率: {wear}%",
+        "health.read_errors": "修復不能な読み取りエラー {unfixed} 件!",
+        "health.read_errors_fixed": "修復済み読み取りエラー {total} 件",
+        "settings.int_error": "整数を入力してください。",
+        "settings.save_error": "{path} に書き込めませんでした",
+        "about.latest.checking": "最新リリース: 確認中…",
+        "about.latest.unknown": "最新リリース: 不明 (オフライン?)",
+        "about.latest.stable_none": "stable 最新: なし · 新しい: {tag} (pre-release)",
+        "about.latest.newer": "最新リリース: {tag} — 更新があります!",
+        "about.latest.uptodate": "最新リリース: {tag} — 最新です",
+        "about.check_updates": "アップデートを確認",
+        "about.close": "閉じる",
+        "common.close": "閉じる",
+        "selftest.title": "更新システムの自己テスト",
+        "selftest.pass": ("すべて合格 ({n}/{n} 項目)\n\n"
+                          "バージョン比較 · リリース資産選択 · チェックサム検証\n"
+                          "更新 shim (環境変数分離 + 分離再起動)\n\n"
+                          "更新システムは次のリリースに向け準備完了です。"),
+        "selftest.fail": "失敗 ({total} 項目中 {n} 件):",
+        "diag.header": "SSD Temperature Monitor 診断",
+        "diag.no_data": "  (データなし)",
+    },
+    "zh": {
+        "app.title": "SSD 温度监控",
+        "win.details": "SSD 温度",
+        "win.graph": "SSD 温度 - 历史记录",
+        "win.disks": "SSD 温度 - 全部磁盘 (调试)",
+        "win.settings": "SSD 温度 - 设置",
+        "tab.general": "常规",
+        "tab.icon": "图标",
+        "tab.updates": "更新",
+        "win.about": "关于 SSD Temperature Monitor",
+        "menu.details": "显示详情",
+        "menu.graph": "显示温度曲线",
+        "menu.disks": "显示全部磁盘 (调试)",
+        "menu.diagnostics": "复制诊断信息到剪贴板",
+        "menu.refresh": "立即刷新",
+        "menu.updates": "检查更新...",
+        "menu.selftest": "自检更新系统",
+        "menu.settings": "设置...",
+        "menu.about": "关于",
+        "menu.language": "语言",
+        "menu.history": "记录历史",
+        "menu.exit": "退出",
+        "notify.no_update": "没有可用的更新信息。",
+        "notify.latest": "您正在运行最新版本 ({local})。",
+        "notify.available": ("新版本 {remote} 可用 (当前 {local})。\n"
+                             "右键点击 → 检查更新... 即可安装。"),
+        "notify.downloading": "正在下载 {version}...",
+        "notify.installing": "正在安装 {version}...",
+        "notify.bad_checksum": "校验和不匹配 - 已中止更新。",
+        "notify.download_failed": "更新下载失败。",
+        "notify.copied": "诊断信息已复制到剪贴板。",
+        "notify.install_failed": ("无法安装 {version} 更新\n"
+                                  "(安装程序退出代码 {code})。\n"
+                                  "请从“关于”窗口手动下载。"),
+        "notify.title.update": "SSD Temp Monitor — 更新",
+        "notify.title.available": "SSD Temp Monitor — 有可用更新",
+        "alert.body": "SSD 已持续处于 {peak}°C 一段时间。",
+        "alert.body.no_peak": "SSD 正在过热。",
+        "alert.title": "⚠ SSD 过热: {peak}°C",
+        "alert.title.no_peak": "⚠ SSD 过热",
+        "elevation.required": "读取 SSD 温度需要管理员权限。",
+        "duplicate.body": ("SSD Temperature Monitor 已在运行\n"
+                           "(请查看系统托盘)。"),
+        "mb.title": "SSD Temp Monitor",
+        "details.no_data": "没有 SSD 温度数据 (请以管理员身份运行)。",
+        "graph.no_history": ("尚无历史记录。\n"
+                             "请在托盘菜单中启用“记录历史”。"),
+        "graph.span": "最近 {minutes} 分钟",
+        "disks.legend": "✓ 显示在图标    ✗ 已过滤",
+        "disks.none": "未找到磁盘。",
+        "settings.poll": "采集间隔 (秒, 1-60)",
+        "settings.threshold": "报警阈值 (°C, 40-90)",
+        "settings.sustain": "报警持续时间 (秒, 0-600)",
+        "settings.cooldown": "重复报警间隔 (分钟, 1-120)",
+        "settings.history": "历史时长 (分钟, 5-1440)",
+        "settings.check_interval": "检查更新间隔 (分钟, 5-1440)",
+        "settings.font": "数字字体",
+        "settings.font_style": "数字样式",
+        "settings.digit_scale": "数字大小 (自动的 %, 50-150)",
+        "settings.digit_color": "数字颜色 (auto 或 #rrggbb)",
+        "settings.dx": "数字偏移 X (px, -50..50)",
+        "settings.dy": "数字偏移 Y (px, -50..50)",
+        "settings.preview": "预览:",
+        "settings.theme": "主题预设",
+        "settings.bad_color": ("数字颜色必须是 'auto' 或十六进制颜色\n"
+                               "(如 #ffd166)。"),
+        "settings.record": "启动时记录历史",
+        "settings.channel": "更新通道",
+        "settings.icon_size": "图标大小 (px, 16-128)",
+        "settings.high_contrast": "高对比度图标 (浅色任务栏)",
+        "settings.language": "语言 / Language",
+        "settings.note": "所有设置立即生效 - 无需重启。",
+        "settings.save": "保存",
+        "settings.apply": "应用",
+        "settings.cancel": "取消",
+        "settings.autostart": "登录 Windows 时自动启动",
+        "settings.compact_tooltip": "紧凑托盘提示 (仅温度)",
+        "graph.export_csv": "导出 CSV",
+        "graph.export_png": "导出 PNG",
+        "notify.exported": "已保存: {path}",
+        "health.wear_high": "SSD 磨损 {wear}% — 请尽快备份",
+        "health.wear_used": "SSD 磨损: {wear}%",
+        "health.read_errors": "{unfixed} 个无法修复的读取错误!",
+        "health.read_errors_fixed": "{total} 个已修复的读取错误",
+        "settings.int_error": "请只输入整数。",
+        "settings.save_error": "无法写入 {path}",
+        "about.latest.checking": "最新版本: 检查中…",
+        "about.latest.unknown": "最新版本: 未知 (离线?)",
+        "about.latest.stable_none": "stable 最新: 无 · 最新: {tag} (pre-release)",
+        "about.latest.newer": "最新版本: {tag} — 有可用更新!",
+        "about.latest.uptodate": "最新版本: {tag} — 已是最新",
+        "about.check_updates": "检查更新",
+        "about.close": "关闭",
+        "common.close": "关闭",
+        "selftest.title": "更新系统自检",
+        "selftest.pass": ("全部通过 ({n}/{n} 项)\n\n"
+                          "版本比较 · release 资产选择 · 校验和验证\n"
+                          "更新 shim (环境隔离 + 分离重启)\n\n"
+                          "更新系统已为下一个版本准备就绪。"),
+        "selftest.fail": "失败 ({total} 项中的 {n} 项):",
+        "diag.header": "SSD Temperature Monitor 诊断",
+        "diag.no_data": "  (暂无数据)",
+    },
 }
 
 
@@ -541,9 +791,7 @@ def tr(key, **kw):
 
 
 # ---- rotating event log (startup/shutdown/update/alert/error) -------------
-LOG_FILE = os.path.join(
-    os.environ.get("APPDATA", os.path.expanduser("~")),
-    "SSDTempMonitor", "ssd_temp_monitor.log")
+LOG_FILE = os.path.join(DATA_DIR, "ssd_temp_monitor.log")
 _event_log = logging.getLogger("ssd_temp_monitor")
 _event_log.setLevel(logging.INFO)
 try:
@@ -689,7 +937,9 @@ PS_TEMPS = (
     "$r=@(); foreach($x in $d){"
     "$c=$x|Get-StorageReliabilityCounter;"
     "$r+=[pscustomobject]@{model=$x.Model;friendly=$x.FriendlyName;"
-    "media=$x.MediaType;bus=$x.BusType;temp=$c.Temperature}};"
+    "media=$x.MediaType;bus=$x.BusType;temp=$c.Temperature;"
+    "wear=$c.Wear;readErr=$c.ReadErrorsCorrectedByReadErrorRecovery|"
+    "ReadErrorsTotal;undef=$c.ReadErrorsUncorrected}};"
     "$r|ConvertTo-Json -Compress"
 )
 
@@ -735,9 +985,38 @@ def _parse_disks(out, with_temp):
             "media": item.get("media") or "?",
             "bus": item.get("bus") or "?",
             "temp": _safe_temp(item.get("temp")) if with_temp else None,
+            "wear": _safe_small_int(item.get("wear")),
+            "read_errors": _safe_small_int(item.get("readErr")),
+            "unfixed_errors": _safe_small_int(item.get("undef")),
         }
         disks.append(disk)
     return disks
+
+
+def _safe_small_int(raw):
+    """Non-negative int or None (SMART counters must never go below 0)."""
+    try:
+        v = int(raw)
+        return v if 0 <= v <= 10 ** 12 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def health_flags(disk):
+    """List of human-readable SMART concerns for a disk (empty = healthy)."""
+    flags = []
+    wear = disk.get("wear")
+    if wear is not None and wear >= 90:
+        flags.append(tr("health.wear_high", wear=wear))
+    elif wear is not None and wear >= 75:
+        flags.append(tr("health.wear_used", wear=wear))
+    unfixed = disk.get("unfixed_errors") or 0
+    total = disk.get("read_errors") or 0
+    if unfixed:
+        flags.append(tr("health.read_errors", unfixed=unfixed))
+    elif total >= 100:
+        flags.append(tr("health.read_errors_fixed", total=total))
+    return flags
 
 
 def list_all_disks():
@@ -771,7 +1050,9 @@ def read_temps():
     is_internal_ssd() again client-side as a safety net.
     """
     return [
-        {"model": d["model"], "temp": d["temp"]}
+        {"model": d["model"], "temp": d["temp"],
+         "wear": d.get("wear"), "read_errors": d.get("read_errors"),
+         "unfixed_errors": d.get("unfixed_errors")}
         for d in _parse_disks(_run_powershell(PS_TEMPS), with_temp=True)
         if is_internal_ssd(d)
     ]
@@ -788,10 +1069,20 @@ def temp_color(temp):
 
 
 def _parse_version(v):
-    """'v1.2.3-beta' -> (1, 2, 3) for simple numeric comparison."""
+    """'v1.2.3-rc2' -> comparable tuple with semver-style pre-release order.
+
+    Plain releases sort after every pre-release of the same core version
+    (release flag 1 vs 0) and rc numbers sort within the pre-releases:
+    ``1.14.0-rc1 < 1.14.0-rc2 < 1.14.0`` while ``1.13.9 < 1.14.0-rc1``.
+    """
     try:
-        core = str(v).strip().lstrip("vV").split("-")[0]
-        return tuple(int(x) for x in core.split(".")[:3])
+        core, _, pre = str(v).strip().lstrip("vV").partition("-")
+        nums = tuple(int(x) for x in core.split(".")[:3])
+        nums += (0,) * (3 - len(nums))
+        if pre:
+            digits = "".join(ch for ch in pre if ch.isdigit())
+            return nums + (0, int(digits or 0))
+        return nums + (1, 0)
     except ValueError:
         return (0,)
 
@@ -1056,6 +1347,10 @@ def run_update_selftest():
           lambda: not is_newer_version("1.12.1", "1.12.1"))
     check("version: 1.10.0 > 1.9.0",
           lambda: is_newer_version("1.10.0", "1.9.0"))
+    check("version: release beats its rc (semver)",
+          lambda: is_newer_version("1.14.0", "1.14.0-rc1")
+          and is_newer_version("1.14.0-rc2", "1.14.0-rc1")
+          and not is_newer_version("1.14.0-rc1", "1.14.0"))
 
     # 2. asset selection: stable channel must reject pre-releases
     rel = {"tag_name": "v1.13.0", "prerelease": False,
@@ -1103,6 +1398,188 @@ def run_update_selftest():
 
     failed = [c for c in checks if not c[1]]
     return not failed, (checks, failed)
+
+
+def load_geometry():
+    """Saved {window: "WxH+x+y"} sizes, or an empty dict. Never raises."""
+    try:
+        with open(GEOMETRY_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_geometry(geo):
+    """Merge window geometries into the geometry file. Never raises."""
+    try:
+        data = load_geometry()
+        data.update(geo)
+        os.makedirs(os.path.dirname(GEOMETRY_FILE), exist_ok=True)
+        with open(GEOMETRY_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=1)
+    except (OSError, TypeError, ValueError):
+        pass
+
+
+def geometry_of(win):
+    """tk geometry string of a window, or "" when it is already gone."""
+    try:
+        return win.winfo_geometry()
+    except Exception:
+        return ""
+
+
+def apply_geometry(win, key):
+    """Restore a saved size/position for this window (best effort)."""
+    geo = load_geometry().get(key)
+    if geo:
+        try:
+            win.geometry(geo)
+        except Exception:
+            pass
+
+
+def _tooltip_text(temps):
+    """Tray tooltip: one line per disk, or a compact single line.
+
+    compact: '65°C · 58°C (2 disks)' — full: 'Model: 65C | Model: 58C'.
+    """
+    if not temps:
+        return "SSD Temperature Monitor - no data"
+    if SETTINGS.get("compact_tooltip"):
+        parts = [f"{t['temp']}°C" if t["temp"] is not None else "n/a"
+                 for t in temps]
+        if len(parts) > 1:
+            return f"{' · '.join(parts)} ({len(parts)} disks)"
+        return parts[0]
+    return " | ".join(
+        f"{t['model']}: {t['temp']}C" if t["temp"] is not None
+        else f"{t['model']}: n/a"
+        for t in temps)
+
+
+AUTOSTART_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+AUTOSTART_VALUE = "SSDTempMonitor"
+
+
+def autostart_enabled(reg=None):
+    """True when our HKCU Run value exists (the app runs elevated, but the
+    key lives in the ORIGINAL user's hive via the installer/task).
+    ``reg`` is injectable for tests (defaults to winreg).
+    """
+    try:
+        import winreg
+        reg = reg or winreg
+        with reg.OpenKey(reg.HKEY_CURRENT_USER, AUTOSTART_RUN_KEY) as key:
+            reg.QueryValueEx(key, AUTOSTART_VALUE)
+        return True
+    except (OSError, ImportError):
+        return False
+
+
+def set_autostart(enable, reg=None):
+    """Create/remove the HKCU Run value for the current user. Never raises.
+
+    The app self-elevates, so sys.executable may resolve to the admin's
+    copy - but HKCU under an elevated process still points at the same
+    user hive in the common single-user case, which is what we target.
+    """
+    try:
+        import winreg
+        reg = reg or winreg
+        exe = sys.executable if getattr(sys, "frozen", False) \
+            else os.path.abspath(__file__)
+        with reg.OpenKey(reg.HKEY_CURRENT_USER, AUTOSTART_RUN_KEY, 0,
+                         reg.KEY_SET_VALUE) as key:
+            if enable:
+                reg.SetValueEx(key, AUTOSTART_VALUE, 0, reg.REG_SZ,
+                               f'"{exe}"')
+            else:
+                try:
+                    reg.DeleteValue(key, AUTOSTART_VALUE)
+                except FileNotFoundError:
+                    pass
+        return True
+    except OSError:
+        return False
+
+
+def _open_target(target):
+    """ShellExecute a target (the toast activation protocol)."""
+    try:
+        return ctypes.windll.shell32.ShellExecuteW(
+            None, "open", target, None, None, 1) > 32
+    except Exception:
+        return False
+
+
+def _register_protocol():
+    """Register a ssdtempmon: protocol for toast activation (HKCU only).
+
+    Windows toasts can only launch a registered target; we point the
+    protocol at explorer-open of our own exe, which focuses the running
+    tray app. Best effort: without the key, toasts simply do not react
+    to clicks.
+    """
+    try:
+        import winreg
+        exe = sys.executable if getattr(sys, "frozen", False) \
+            else os.path.abspath(__file__)
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER,
+                              r"Software\Classes\ssdtempmon") as key:
+            winreg.SetValueEx(key, None, 0, winreg.REG_SZ,
+                              "URL:SSD Temp Monitor")
+            winreg.SetValueEx(key, "URL Protocol", 0, winreg.REG_SZ, "")
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER,
+                              r"Software\Classes\ssdtempmon"
+                              r"\shell\open\command") as key:
+            winreg.SetValueEx(key, None, 0, winreg.REG_SZ,
+                              f'explorer.exe "{exe}"')
+        return True
+    except OSError:
+        return False
+
+
+def notify_actionable(message, title):
+    """Send a Windows toast that opens the app when clicked.
+
+    Uses PowerShell's raw ToastXml API (no third-party dependency). The
+    activation protocol is registered once; if the toast cannot be
+    delivered we silently fall back to the pystray balloon.
+    """
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            r"Software\Classes\ssdtempmon"):
+            pass
+    except OSError:
+        _register_protocol()
+    ps = (
+        "[Windows.UI.Notifications.ToastNotificationManager, "
+        "Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null;"
+        "[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, "
+        "ContentType = WindowsRuntime] | Out-Null;"
+        "$x=[Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent"
+        "([Windows.UI.Notifications.ToastTemplateType]::ToastText02);"
+        "$t=$x.GetElementsByTagName('text');"
+        f"$t.Item(0).AppendChild($x.CreateTextNode('{title}'))|Out-Null;"
+        f"$t.Item(1).AppendChild($x.CreateTextNode('{message}'))|Out-Null;"
+        "$x.DocumentElement.SetAttribute('launch','ssdtempmon:open');"
+        "$n=[Windows.UI.Notifications.ToastNotification]::new($x);"
+        "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier"
+        "('SSD Temp Monitor').Show($n)"
+    )
+    encoded = base64.b64encode(ps.encode("utf-16le")).decode("ascii")
+    try:
+        subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive",
+             "-EncodedCommand", encoded],
+            capture_output=True, timeout=15,
+            creationflags=subprocess.CREATE_NO_WINDOW)
+        return True
+    except Exception:
+        return False
 
 
 def alert_state(hottest, since, last_alert, now):
@@ -1287,6 +1764,53 @@ def save_history(points):
         pass
 
 
+def write_history_csv(points, path):
+    """Write history points as CSV; returns the path or None on failure."""
+    try:
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(("timestamp", "temperature_c"))
+            for ts, temp in points:
+                w.writerow((f"{ts:.0f}", temp))
+        return path
+    except OSError:
+        return None
+
+
+def export_graph_csv(points, parent=None):
+    """Ask for a destination and write the history as CSV. Returns path."""
+    from tkinter import filedialog
+    name = time.strftime("ssd_temp_history_%Y%m%d_%H%M.csv")
+    path = filedialog.asksaveasfilename(
+        parent=parent, defaultextension=".csv",
+        filetypes=(("CSV", "*.csv"), ("All files", "*.*")),
+        initialfile=name)
+    if not path:
+        return None
+    return write_history_csv(points, path)
+
+
+def export_canvas_png(canvas, parent=None):
+    """Save the on-screen graph canvas as PNG (screen capture). Returns path."""
+    from tkinter import filedialog
+    name = time.strftime("ssd_temp_graph_%Y%m%d_%H%M.png")
+    path = filedialog.asksaveasfilename(
+        parent=parent, defaultextension=".png",
+        filetypes=(("PNG image", "*.png"), ("All files", "*.*")),
+        initialfile=name)
+    if not path:
+        return None
+    try:
+        from PIL import ImageGrab
+        x, y = canvas.winfo_rootx(), canvas.winfo_rooty()
+        img = ImageGrab.grab(bbox=(x, y, x + canvas.winfo_width(),
+                                   y + canvas.winfo_height()))
+        img.save(path)
+        return path
+    except Exception:
+        return None
+
+
 class App:
     def __init__(self):
         log_event("startup", version=effective_version())
@@ -1326,8 +1850,10 @@ class App:
 
     def set_language(self, item):
         """Tray submenu handler: switch UI language and persist it."""
-        lang = str(item.text).split(" ", 1)[0]  # "English" / "ไทย (Thai)"
-        new_lang = "th" if lang == "ไทย" else "en"
+        label = str(item.text)
+        lang_by_label = {"English": "en", "ไทย (Thai)": "th",
+                         "日本語 (Japanese)": "ja", "中文 (Chinese)": "zh"}
+        new_lang = lang_by_label.get(label, "en")
         if SETTINGS.get("language") == new_lang:
             return
         SETTINGS["language"] = new_lang
@@ -1362,6 +1888,10 @@ class App:
                                      radio=lambda item: current == "en"),
                     pystray.MenuItem("ไทย (Thai)", self.set_language,
                                      radio=lambda item: current == "th"),
+                    pystray.MenuItem("日本語 (Japanese)", self.set_language,
+                                     radio=lambda item: current == "ja"),
+                    pystray.MenuItem("中文 (Chinese)", self.set_language,
+                                     radio=lambda item: current == "zh"),
                 )),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(tr("menu.exit"), self.quit),
@@ -1483,6 +2013,8 @@ class App:
                     lines.append((f"{t['model']}:  {t['temp']} °C", temp_color(t["temp"])))
                 else:
                     lines.append((f"{t['model']}:  n/a", UNKNOWN))
+                for flag in health_flags(t):
+                    lines.append((f"  ⚠ {flag}", ORANGE))
 
         import tkinter as tk
         root = tk.Tk()
@@ -1501,6 +2033,10 @@ class App:
         root.bind("<Escape>", lambda e: root.destroy())
         root.mainloop()
 
+        geo = geometry_of(root)
+        if geo:
+            save_geometry({"details": geo})
+
     def _graph_window(self):
         """Create and own the history graph window (runs in its own thread).
 
@@ -1512,12 +2048,33 @@ class App:
         win.title(tr("win.graph"))
         win.attributes("-topmost", True)
         win.resizable(False, False)
+        apply_geometry(win, "graph")
         W, H, PAD = GRAPH_W, GRAPH_H, GRAPH_PAD
         canvas = tk.Canvas(win, width=W, height=H, bg="#0f172a",
                            highlightthickness=0)
         canvas.pack(padx=12, pady=(12, 4))
-        tk.Button(win, text=tr("common.close"), command=win.destroy,
-                  font=("Segoe UI", 10)).pack(pady=(2, 10))
+        btns = tk.Frame(win)
+        btns.pack(pady=(2, 10))
+
+        def _export_csv():
+            data = self._snapshot("history")
+            path = export_graph_csv(data, parent=win)
+            if path:
+                self._notify(tr("notify.exported", path=path), tr("app.title"))
+
+        def _export_png():
+            path = export_canvas_png(canvas, parent=win)
+            if path:
+                self._notify(tr("notify.exported", path=path), tr("app.title"))
+
+        tk.Button(btns, text=tr("graph.export_csv"), width=14,
+                  command=_export_csv,
+                  font=("Segoe UI", 10)).pack(side="left", padx=4)
+        tk.Button(btns, text=tr("graph.export_png"), width=14,
+                  command=_export_png,
+                  font=("Segoe UI", 10)).pack(side="left", padx=4)
+        tk.Button(btns, text=tr("common.close"), command=win.destroy,
+                  font=("Segoe UI", 10)).pack(side="left", padx=4)
         win.protocol("WM_DELETE_WINDOW", win.destroy)
         win.bind("<Return>", lambda e: win.destroy())
         win.bind("<Escape>", lambda e: win.destroy())
@@ -1550,6 +2107,9 @@ class App:
 
         # mainloop returned -> window is gone; finalize on the graph's own
         # thread so the Tcl interpreter is torn down there too
+        geo = geometry_of(win)
+        if geo:
+            save_geometry({"graph": geo})
         with self._lock:
             self._graph_win = None
         self._graph_done.set()
@@ -1612,6 +2172,7 @@ class App:
         root.title(tr("win.disks"))
         root.attributes("-topmost", True)
         root.resizable(False, False)
+        apply_geometry(root, "disks")
         frame = tk.Frame(root, padx=24, pady=12)
         frame.pack()
         tk.Label(frame, text=tr("disks.legend"),
@@ -1634,6 +2195,9 @@ class App:
         root.bind("<Return>", lambda e: root.destroy())
         root.bind("<Escape>", lambda e: root.destroy())
         root.mainloop()
+        geo = geometry_of(root)
+        if geo:
+            save_geometry({"disks": geo})
 
     def _settings_window(self):
         """Settings dialog with tabs (General / Icon / Updates).
@@ -1691,13 +2255,22 @@ class App:
         ttk.Checkbutton(tab_general, text=tr("settings.record"),
                         variable=record_var).grid(
             row=5, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        compact_var = tk.BooleanVar(value=current.get("compact_tooltip", True))
+        ttk.Checkbutton(tab_general, text=tr("settings.compact_tooltip"),
+                        variable=compact_var).grid(
+            row=5, column=1, sticky="w", padx=(14, 0), pady=(8, 0))
         tk.Label(tab_general, text=tr("settings.language"),
                  font=("Segoe UI", 10), anchor="w").grid(
             row=6, column=0, sticky="w", pady=3)
         lang_var = tk.StringVar(value=current.get("language", "en"))
         ttk.Combobox(tab_general, textvariable=lang_var, width=14,
-                     values=("en", "th"), state="readonly").grid(
+                     values=UI_LANGUAGES, state="readonly").grid(
             row=6, column=1, padx=(14, 0), pady=3)
+
+        autostart_var = tk.BooleanVar(value=autostart_enabled())
+        ttk.Checkbutton(tab_general, text=tr("settings.autostart"),
+                        variable=autostart_var).grid(
+            row=7, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
         # ---- Icon tab: theme, size, font, color, offsets, preview -----
         tk.Label(tab_icon, text=tr("settings.theme"), font=("Segoe UI", 10),
@@ -1833,7 +2406,7 @@ class App:
                     pass
 
         for var in (list(vars_.values()) + [font_var, color_var,
-                                            hc_var, lang_var]):
+                                            hc_var, lang_var, compact_var]):
             try:
                 var.trace_add("write", render_preview)
             except Exception:
@@ -1870,6 +2443,7 @@ class App:
                 for key, var in vars_.items():
                     vals[key] = int(var.get())
                 vals["record_history"] = bool(record_var.get())
+                vals["compact_tooltip"] = bool(compact_var.get())
                 vals["high_contrast_icon"] = bool(hc_var.get())
                 vals["icon_font"] = font_var.get()
                 vals["icon_font_style"] = style_var.get()
@@ -1903,6 +2477,7 @@ class App:
             # apply what cannot wait for the next poll: tray title and the
             # menu (pystray menus must be replaced wholesale on retranslate)
             self._apply_language()
+            set_autostart(bool(autostart_var.get()))
             return True
 
         def on_save():
@@ -2092,10 +2667,15 @@ class App:
         root.mainloop()
 
     def _notify(self, message, title):
+        """Toast that opens the app on click; falls back to the tray balloon."""
         try:
-            self.icon.notify(message, title=title)
+            if not notify_actionable(message, title):
+                self.icon.notify(message, title=title)
         except Exception:
-            pass
+            try:
+                self.icon.notify(message, title=title)
+            except Exception:
+                pass
 
     # ---- per-disk icons (multi-SSD support) ----
     def _sync_extra_icons(self, temps):
@@ -2283,7 +2863,7 @@ class App:
             self.temps = temps
         if not temps:
             self.icon.icon = make_icon("--", UNKNOWN)
-            self.icon.title = "SSD Temperature Monitor - no data"
+            self.icon.title = _tooltip_text([])
             return
         # hottest SSD drives the icon
         valid = [t["temp"] for t in temps if t["temp"] is not None]
@@ -2297,10 +2877,7 @@ class App:
         size = int(SETTINGS.get("icon_size", 64))
         hc = bool(SETTINGS.get("high_contrast_icon"))
         self.icon.icon = make_icon(text, color, size=size, high_contrast=hc)
-        self.icon.title = " | ".join(
-            f"{t['model']}: {t['temp']}C" if t["temp"] is not None else f"{t['model']}: n/a"
-            for t in temps
-        )
+        self.icon.title = _tooltip_text(temps)
         # one extra tray icon per additional internal SSD
         self._sync_extra_icons(temps)
 
