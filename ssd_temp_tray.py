@@ -175,8 +175,10 @@ def is_admin() -> bool:
 def relaunch_elevated() -> None:
     """Relaunch this script (or the frozen exe) with a UAC prompt."""
     if getattr(sys, "frozen", False):
-        # PyInstaller build: elevate the exe itself
-        target, params = sys.executable, ""
+        # PyInstaller build: elevate the exe itself (forward CLI flags,
+        # e.g. --update-now, across the UAC boundary)
+        target = sys.executable
+        params = " ".join(f'"{a}"' for a in sys.argv[1:])
     else:
         target = sys.executable
         script = os.path.abspath(__file__)
