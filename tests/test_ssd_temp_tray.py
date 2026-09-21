@@ -758,7 +758,8 @@ class TestUpdateShim:
         try:
             content = open(shim, encoding="utf-8").read()
             assert ":wait" in content and "goto wait" in content   # poll loop
-            assert "ping.exe -n 2 127.0.0.1" in content            # 1 s sleep
+            assert "ping.exe -n 1 127.0.0.1" in content            # ~1 s sleep
+            assert "ping.exe -n 2" not in content   # small blind window (PyInstaller 6.22 parent guard)
             assert "System32\\tasklist.exe" in content
             assert "System32\\find.exe" in content   # never GNU find via PATH
             assert "tasklist.exe /FI" in content and "find.exe /I" in content
@@ -766,6 +767,21 @@ class TestUpdateShim:
             assert '"C:/tmp/setup.exe"' in content                 # quoted
             assert "/CLOSEAPPLICATIONS" in content                 # restart app
             assert "exit /b %ERRORLEVEL%" in content               # code pass
+        finally:
+            os.remove(shim)
+
+    def test_shim_relaunch_is_detached(self):
+        """Relaunch goes through explorer.exe: the shim's cmd dies right
+        after `start`, and a PyInstaller 6.22+ onefile child validates its
+        parent process ("PID not found" dialog) when that parent is gone."""
+        shim = m.build_update_shim("C:/tmp/setup.exe",
+                                   app_exe_path="ssd_temp_monitor.exe",
+                                   restart_path="C:/app/ssd_temp_monitor.exe")
+        try:
+            content = open(shim, encoding="utf-8").read()
+            assert "explorer.exe" in content
+            assert 'start "" /B explorer.exe' in content
+            assert '"C:/app/ssd_temp_monitor.exe"' in content
         finally:
             os.remove(shim)
 
@@ -1381,3 +1397,43 @@ class TestSetLanguage:
         app.icon = types.SimpleNamespace(title="", menu=None, update_menu=lambda: None)
         app.set_language(self._fake_item("English"))
         assert calls == []
+
+
+# ---------------------------------------------------------------------------
+# theme presets + preview robustness (v1.12.0)
+# ---------------------------------------------------------------------------
+class TestThemes:
+    def test_theme_setting_validated(self):
+        assert m._validate_settings({"icon_theme": "neon"})["icon_theme"] == "neon"
+        assert m._validate_settings({"icon_theme": "bogus"})["icon_theme"] == "classic"
+        assert m._validate_settings({})["icon_theme"] == "classic"
+
+    def test_theme_keys_have_font_and_color(self):
+        for name, preset in m.THEMES.items():
+            if name != "custom":
+                assert "icon_font" in preset and "icon_digit_color" in preset
+
+    def test_theme_colors_are_valid(self):
+        for preset in m.THEMES.values():
+            color = preset.get("icon_digit_color")
+            if color and color != "auto":
+                assert m._is_hex_color(color), color
+
+    def test_preview_photoimage_reference_pattern(self):
+        """Regression guard for the v1.11.0 'Settings won't open' bug.
+
+        The preview must keep a real Python reference to each PhotoImage
+        (lbl.image = photo), not assign the label's own string option back.
+        """
+        import inspect
+        src = inspect.getsource(m.App._settings_window)
+        assert "photo = tk.PhotoImage(data=b64, master=lbl)" in src
+        assert "lbl.image = photo" in src
+        assert "preview_lbl.image = preview_lbl.image" not in src
+
+    def test_settings_window_has_tabs(self):
+        import inspect
+        src = inspect.getsource(m.App._settings_window)
+        assert "ttk.Notebook" in src
+        for key in ("tab.general", "tab.icon", "tab.updates"):
+            assert key in src

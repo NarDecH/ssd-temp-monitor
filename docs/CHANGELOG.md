@@ -3,6 +3,37 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.12.0] — 2026-09-22
+
+### Fixed
+
+- 🚑 **เปิดหน้า Settings ไม่ได้ (v1.11.0)** — ตัวอย่างไอคอนใช้รูปแบบ
+  `preview_lbl.image = preview_lbl.image` ที่ทำให้ PhotoImage ใหม่ไม่มีใคร
+  อ้างอิง ถูก GC ทำลายภาพ หน้าต่างจึงวาดไม่ได้ แก้: เก็บ reference จริง
+  (`photo = tk.PhotoImage(...)` → `lbl.image = photo`) และ preview ทั้งก้อน
+  ถูก wrap ด้วย try/except — แม้ preview พัง หน้า Settings ต้องเปิดได้เสมอ
+- 🛡️ **Dialog "Security validation failure: invalid originating onefile
+  parent process (PID not found)"** — ไม่ใช่ไวรัสหรือแอปเสีย แต่เป็นกลไก
+  security ใหม่ของ **PyInstaller 6.22** (GHSA-9fxf-4qw3-ghmr) ที่ให้ onefile
+  child ตรวจว่า parent process ยังมีชีวิตอยู่ ซึ่งขัดกับห่วงโซ่ relaunch
+  ของการอัปเดตอัตโนมัติ (updater → cmd shim → installer → แอปใหม่)
+  แก้ 2 ชั้น: pin `pyinstaller<6.22` ในทุก build และ shim เปลี่ยนไป
+  relaunch ผ่าน `explorer.exe` (detached — ไม่มี parent ให้ตรวจ) พร้อมลด
+  blind window ของ shim จาก ~2 s เหลือ ~1 s
+
+### Added
+
+- 🗂️ **หน้า Settings แบบแท็บ** — General / Icon / Updates (รองรับการตั้งค่า
+  ที่เพิ่มขึ้นเรื่อย ๆ โดยไม่ต้องเลื่อนหน้าต่างยาว ๆ)
+- 🎨 **ธีมไอคอนสำเร็จรูป** — Classic / Minimal / Mono / Neon (+ Custom):
+  เลือกครั้งเดียว ตั้งฟอนต์ สีตัวเลข และ high-contrast ให้ครบ พร้อม
+  **preview ใหญ่ 2 ขนาด** (ขนาดจริงบน tray + 96 px) อัปเดตสดขณะปรับ
+
+### Developer
+
+- 🧪 pytest **167 เคส** (+5: theme validation, สีในธีมถูกต้อง, regression
+  guard ของ preview reference, โครงสร้างแท็บ)
+
 ## [1.11.0] — 2026-09-22
 
 ### Added

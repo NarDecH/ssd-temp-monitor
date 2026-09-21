@@ -41,7 +41,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.11.0"         # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.12.0"         # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -67,6 +67,22 @@ FONT_FILES = {
     "Segoe UI": ("segoeuib.ttf", "Segoe UI"),
     "Tahoma": ("tahoma.ttf", "Tahoma"),
     "Verdana": ("verdanab.ttf", "Verdana"),
+}
+
+
+# icon theme presets: one click applies font+color+contrast combination.
+# "custom" = keep whatever the user has set by hand.
+THEMES = {
+    "custom": {},
+    "classic": {"icon_font": "auto", "icon_digit_color": "auto",
+                "high_contrast_icon": False},
+    "minimal": {"icon_font": "Segoe UI", "icon_digit_color": "auto",
+                "high_contrast_icon": False, "icon_text_dx": 0,
+                "icon_text_dy": 0},
+    "mono": {"icon_font": "Tahoma", "icon_digit_color": "#ffffff",
+             "high_contrast_icon": True},
+    "neon": {"icon_font": "Verdana", "icon_digit_color": "#faff00",
+             "high_contrast_icon": False},
 }
 
 
@@ -97,6 +113,7 @@ DEFAULT_SETTINGS = {
     "icon_size": 64,                          # tray icon edge in px
     "high_contrast_icon": False,              # black pill + white border
     "language": "en",                         # UI language: "en" or "th"
+    "icon_theme": "classic",                 # theme preset (THEMES keys)
     "icon_font": "auto",                     # digit font (auto = Arial bold)
     "icon_digit_color": "auto",              # digit color (auto = by contrast)
     "icon_text_dx": 0,                       # digit offset X in px (-50..50)
@@ -127,6 +144,8 @@ def _validate_settings(cfg):
         out["icon_size"] = DEFAULT_SETTINGS["icon_size"]
     out["high_contrast_icon"] = bool(out["high_contrast_icon"])
     out["language"] = ("th" if out["language"] == "th" else "en")
+    out["icon_theme"] = (out["icon_theme"] if out["icon_theme"] in THEMES
+                         else "classic")
     out["icon_font"] = (out["icon_font"] if out["icon_font"] in FONT_FILES
                         or out["icon_font"] == "auto" else "auto")
     dc = str(out["icon_digit_color"]).strip()
@@ -199,6 +218,9 @@ STRINGS = {
         "win.graph": "SSD Temperature - History",
         "win.disks": "SSD Temperature - All Disks (debug)",
         "win.settings": "SSD Temperature - Settings",
+        "tab.general": "General",
+        "tab.icon": "Icon",
+        "tab.updates": "Updates",
         "win.about": "About SSD Temperature Monitor",
         "menu.details": "Show details",
         "menu.graph": "Show temperature graph",
@@ -251,6 +273,7 @@ STRINGS = {
         "settings.dx": "Digit offset X (px, -50..50)",
         "settings.dy": "Digit offset Y (px, -50..50)",
         "settings.preview": "Preview:",
+        "settings.theme": "Theme preset",
         "settings.bad_color": ("Digit color must be 'auto' or a hex color\n"
                                "like #ffd166."),
         "settings.record": "Record history on startup",
@@ -280,6 +303,9 @@ STRINGS = {
         "win.graph": "อุณหภูมิ SSD - ประวัติย้อนหลัง",
         "win.disks": "อุณหภูมิ SSD - ดิสก์ทั้งหมด (debug)",
         "win.settings": "อุณหภูมิ SSD - ตั้งค่า",
+        "tab.general": "ทั่วไป",
+        "tab.icon": "ไอคอน",
+        "tab.updates": "อัปเดต",
         "win.about": "เกี่ยวกับ SSD Temperature Monitor",
         "menu.details": "ดูรายละเอียด",
         "menu.graph": "แสดงกราฟอุณหภูมิ",
@@ -331,6 +357,7 @@ STRINGS = {
         "settings.dx": "เลื่อนตัวเลขแกน X (px, -50..50)",
         "settings.dy": "เลื่อนตัวเลขแกน Y (px, -50..50)",
         "settings.preview": "ตัวอย่าง:",
+        "settings.theme": "ธีมสำเร็จรูป",
         "settings.bad_color": ("สีตัวเลขต้องเป็น 'auto' หรือโค้ดสี\n"
                                "แบบ #ffd166"),
         "settings.record": "บันทึกประวัติตอนเปิดโปรแกรม",
@@ -763,15 +790,21 @@ def build_update_shim(installer_path, app_exe_path=None, restart_path=None):
             # (%% -> literal % for the cmd %SystemRoot% variable)
             '%%SystemRoot%%\\System32\\tasklist.exe /FI "IMAGENAME eq %s" 2>nul '
             '| %%SystemRoot%%\\System32\\find.exe /I "%s" >nul ' % (app, app)
-            + "&& (%SystemRoot%\\System32\\ping.exe -n 2 127.0.0.1 >nul "
+            + "&& (%SystemRoot%\\System32\\ping.exe -n 1 127.0.0.1 >nul "
               "& goto wait)\r\n"
             "rem hand over to the installer; /CLOSEAPPLICATIONS makes it\r\n"
             "rem close this app and restart it afterwards (RestartManager)\r\n"
             + ('"%s" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART '
                "/CLOSEAPPLICATIONS /RESTARTAPPLICATIONS\r\n" % installer_path)
-            # a silent install skips the postinstall launch, so bring the
-            # updated app back ourselves (only when the install succeeded)
-            + (f'if not errorlevel 1 start "" "{restart_path}"\r\n'
+            # A silent install skips the postinstall launch, so bring the
+            # updated app back ourselves (only when the install succeeded).
+            # launch DETACHED: the shim's cmd parent exits right after
+            # `start`, and a PyInstaller 6.22+ onefile child validates its
+            # parent process and dies with "Security validation failure:
+            # invalid originating onefile parent process (PID not found)"
+            # when that parent is already gone. An explorer-relaunch has no
+            # such parent window at all.
+            + (f'if not errorlevel 1 start "" /B explorer.exe "{restart_path}"\r\n'
                if restart_path else "")
             + "exit /b %ERRORLEVEL%\r\n"
         )
@@ -1289,11 +1322,11 @@ class App:
         root.mainloop()
 
     def _settings_window(self):
-        """Settings dialog: edit values and save to config.json.
+        """Settings dialog with tabs (General / Icon / Updates).
 
-        The icon group (font, digit color, offsets, size, high-contrast)
-        has a live preview that re-renders as values change; everything
-        applies immediately on save (icons re-render on the next poll).
+        The Icon tab has a live preview (two sizes) that re-renders as
+        values change; everything applies immediately on save (icons
+        re-render on the next poll, menu rebuilds on language change).
         """
         import tkinter as tk
         from tkinter import ttk, messagebox
@@ -1307,87 +1340,131 @@ class App:
         root.title(tr("win.settings"))
         root.attributes("-topmost", True)
         root.resizable(False, False)
-        frame = tk.Frame(root, padx=22, pady=14)
-        frame.pack()
+        outer = tk.Frame(root, padx=18, pady=12)
+        outer.pack()
 
-        rows = [
-            (tr("settings.poll"), "poll_seconds", 1, 60),
-            (tr("settings.threshold"), "alert_threshold", 40, 90),
-            (tr("settings.sustain"), "alert_sustain_seconds", 0, 600),
-            (tr("settings.cooldown"), "alert_cooldown_minutes", 1, 120),
-            (tr("settings.history"), "history_minutes", 5, 240),
-            (tr("settings.check_interval"),
-             "update_check_interval_minutes", 5, 1440),
-            (tr("settings.icon_size"), "icon_size", 16, 128),
-            (tr("settings.dx"), "icon_text_dx", -50, 50),
-            (tr("settings.dy"), "icon_text_dy", -50, 50),
-        ]
-        vars_ = {}
-        for i, (label, key, lo, hi) in enumerate(rows):
-            tk.Label(frame, text=label, font=("Segoe UI", 10),
-                     anchor="w").grid(row=i, column=0, sticky="w", pady=3)
+        notebook = ttk.Notebook(outer)
+        notebook.pack(fill="both", expand=True)
+        tab_general = tk.Frame(notebook, padx=14, pady=8)
+        tab_icon = tk.Frame(notebook, padx=14, pady=8)
+        tab_updates = tk.Frame(notebook, padx=14, pady=8)
+        notebook.add(tab_general, text=tr("tab.general"))
+        notebook.add(tab_icon, text=tr("tab.icon"))
+        notebook.add(tab_updates, text=tr("tab.updates"))
+
+        def add_spin(tab, label, key, lo, hi, row):
+            tk.Label(tab, text=label, font=("Segoe UI", 10),
+                     anchor="w").grid(row=row, column=0, sticky="w", pady=3)
             var = tk.StringVar(value=str(current[key]))
-            spin = ttk.Spinbox(frame, from_=lo, to=hi, width=8,
-                               textvariable=var)
-            spin.grid(row=i, column=1, padx=(14, 0), pady=3)
+            ttk.Spinbox(tab, from_=lo, to=hi, width=8,
+                        textvariable=var).grid(
+                row=row, column=1, padx=(14, 0), pady=3)
             vars_[key] = var
 
-        r = len(rows)
-        tk.Label(frame, text=tr("settings.font"), font=("Segoe UI", 10),
-                 anchor="w").grid(row=r, column=0, sticky="w", pady=3)
-        font_var = tk.StringVar(value=current["icon_font"])
-        ttk.Combobox(frame, textvariable=font_var, width=12,
-                     values=tuple(FONT_FILES), state="readonly").grid(
-            row=r, column=1, padx=(14, 0), pady=3)
+        vars_ = {}
 
-        tk.Label(frame, text=tr("settings.digit_color"), font=("Segoe UI", 10),
-                 anchor="w").grid(row=r + 1, column=0, sticky="w", pady=3)
+        # ---- General tab: polling, alerts, history, language ----------
+        add_spin(tab_general, tr("settings.poll"), "poll_seconds", 1, 60, 0)
+        add_spin(tab_general, tr("settings.threshold"),
+                 "alert_threshold", 40, 90, 1)
+        add_spin(tab_general, tr("settings.sustain"),
+                 "alert_sustain_seconds", 0, 600, 2)
+        add_spin(tab_general, tr("settings.cooldown"),
+                 "alert_cooldown_minutes", 1, 120, 3)
+        add_spin(tab_general, tr("settings.history"),
+                 "history_minutes", 5, 240, 4)
+        record_var = tk.BooleanVar(value=current["record_history"])
+        ttk.Checkbutton(tab_general, text=tr("settings.record"),
+                        variable=record_var).grid(
+            row=5, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        tk.Label(tab_general, text=tr("settings.language"),
+                 font=("Segoe UI", 10), anchor="w").grid(
+            row=6, column=0, sticky="w", pady=3)
+        lang_var = tk.StringVar(value=current.get("language", "en"))
+        ttk.Combobox(tab_general, textvariable=lang_var, width=14,
+                     values=("en", "th"), state="readonly").grid(
+            row=6, column=1, padx=(14, 0), pady=3)
+
+        # ---- Icon tab: theme, size, font, color, offsets, preview -----
+        tk.Label(tab_icon, text=tr("settings.theme"), font=("Segoe UI", 10),
+                 anchor="w").grid(row=0, column=0, sticky="w", pady=3)
+        theme_var = tk.StringVar(value=current.get("icon_theme", "classic"))
+        theme_box = ttk.Combobox(tab_icon, textvariable=theme_var, width=12,
+                                 values=tuple(THEMES), state="readonly")
+        theme_box.grid(row=0, column=1, padx=(14, 0), pady=3)
+
+        add_spin(tab_icon, tr("settings.icon_size"), "icon_size", 16, 128, 1)
+        add_spin(tab_icon, tr("settings.dx"), "icon_text_dx", -50, 50, 2)
+        add_spin(tab_icon, tr("settings.dy"), "icon_text_dy", -50, 50, 3)
+
+        tk.Label(tab_icon, text=tr("settings.font"), font=("Segoe UI", 10),
+                 anchor="w").grid(row=4, column=0, sticky="w", pady=3)
+        font_var = tk.StringVar(value=current["icon_font"])
+        ttk.Combobox(tab_icon, textvariable=font_var, width=12,
+                     values=tuple(FONT_FILES), state="readonly").grid(
+            row=4, column=1, padx=(14, 0), pady=3)
+
+        tk.Label(tab_icon, text=tr("settings.digit_color"),
+                 font=("Segoe UI", 10), anchor="w").grid(
+            row=5, column=0, sticky="w", pady=3)
         color_var = tk.StringVar(value=current["icon_digit_color"])
-        ttk.Combobox(frame, textvariable=color_var, width=12,
+        ttk.Combobox(tab_icon, textvariable=color_var, width=12,
                      values=("auto", "#ffffff", "#11111b", "#ffd166"),
                      state="readonly").grid(
-            row=r + 1, column=1, padx=(14, 0), pady=3)
-
-        record_var = tk.BooleanVar(value=current["record_history"])
-        ttk.Checkbutton(frame, text=tr("settings.record"),
-                        variable=record_var).grid(
-            row=r + 2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+            row=5, column=1, padx=(14, 0), pady=3)
 
         hc_var = tk.BooleanVar(value=current["high_contrast_icon"])
-        ttk.Checkbutton(frame, text=tr("settings.high_contrast"),
+        ttk.Checkbutton(tab_icon, text=tr("settings.high_contrast"),
                         variable=hc_var).grid(
-            row=r + 3, column=0, columnspan=2, sticky="w", pady=(4, 0))
+            row=6, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
-        tk.Label(frame, text=tr("settings.channel"), font=("Segoe UI", 10),
-                 anchor="w").grid(row=r + 4, column=0, sticky="w", pady=3)
-        channel_var = tk.StringVar(value=current.get("update_channel", "stable"))
-        ttk.Combobox(frame, textvariable=channel_var, width=14,
-                     values=("stable", "pre-release"), state="readonly").grid(
-            row=r + 4, column=1, padx=(14, 0), pady=3)
+        def apply_theme(*_):
+            """Theme preset: copy its font/color/contrast into the dialog.
 
-        tk.Label(frame, text=tr("settings.language"), font=("Segoe UI", 10),
-                 anchor="w").grid(row=r + 5, column=0, sticky="w", pady=3)
-        lang_var = tk.StringVar(value=current.get("language", "en"))
-        ttk.Combobox(frame, textvariable=lang_var, width=14,
-                     values=("en", "th"), state="readonly").grid(
-            row=r + 5, column=1, padx=(14, 0), pady=3)
+            Selecting "custom" changes nothing - it just marks that the
+            hand-tuned values below are what should be saved.
+            """
+            preset = THEMES.get(theme_var.get())
+            if not preset:
+                return
+            if "icon_font" in preset:
+                font_var.set(preset["icon_font"])
+            if "icon_digit_color" in preset:
+                color_var.set(preset["icon_digit_color"])
+            if "high_contrast_icon" in preset:
+                hc_var.set(preset["high_contrast_icon"])
+            if "icon_text_dx" in preset:
+                vars_["icon_text_dx"].set(str(preset["icon_text_dx"]))
+            if "icon_text_dy" in preset:
+                vars_["icon_text_dy"].set(str(preset["icon_text_dy"]))
 
-        # ---- live icon preview ---------------------------------------
-        preview_row = tk.Frame(frame)
-        preview_row.grid(row=r + 6, column=0, columnspan=2,
-                         sticky="w", pady=(10, 0))
-        tk.Label(preview_row, text=tr("settings.preview"),
-                 font=("Segoe UI", 10)).pack(side="left", padx=(0, 8))
-        preview_lbl = tk.Label(preview_row, bg="#0f172a", bd=1,
-                               relief="solid")
-        preview_lbl.pack(side="left")
+        theme_box.bind("<<ComboboxSelected>>", apply_theme)
+
+        # live preview, two sizes: the actual tray size + a large 96 px one
+        preview_lbls = []
+        try:
+            preview_row = tk.Frame(tab_icon)
+            preview_row.grid(row=7, column=0, columnspan=2,
+                             sticky="w", pady=(12, 0))
+            tk.Label(preview_row, text=tr("settings.preview"),
+                     font=("Segoe UI", 10)).pack(side="left", padx=(0, 8))
+            for _ in range(2):
+                lbl = tk.Label(preview_row, bg="#0f172a", bd=1,
+                               relief="solid", padx=4)
+                lbl.pack(side="left", padx=(0, 10))
+                preview_lbls.append(lbl)
+        except Exception:
+            preview_lbls = []
 
         def render_preview(*_):
-            """Re-render the preview icon from the current dialog values.
+            """Re-render the preview icons from the dialog values.
 
             Overrides SETTINGS only for the render, then restores them -
-            the real settings stay untouched until Save.
+            the real settings stay untouched until Save. Never raises:
+            a preview failure must not break the Settings window.
             """
+            if not preview_lbls:
+                return
             try:
                 trial = dict(current)
                 for key, var in vars_.items():
@@ -1399,35 +1476,58 @@ class App:
                 trial = _validate_settings(trial)
             except (ValueError, tk.TclError):
                 return  # half-typed number: keep the previous preview
-            saved = {k: SETTINGS.get(k) for k in
-                     ("icon_size", "icon_font", "icon_digit_color",
-                      "icon_text_dx", "icon_text_dy", "high_contrast_icon")}
+            keys = ("icon_size", "icon_font", "icon_digit_color",
+                    "icon_text_dx", "icon_text_dy", "high_contrast_icon")
+            saved = {k: SETTINGS.get(k) for k in keys}
             try:
-                for k in saved:
+                for k in keys:
                     SETTINGS[k] = trial[k]
-                img = make_icon("42", GREEN, size=trial["icon_size"])
+                imgs = [make_icon("42", GREEN, size=trial["icon_size"]),
+                        make_icon("42", GREEN, size=96)]
             finally:
                 for k, v in saved.items():
                     SETTINGS[k] = v
-            with io.BytesIO() as buf:
-                img.save(buf, "PNG")
-                b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-            try:
-                preview_lbl.config(image=tk.PhotoImage(
-                    data=b64, master=preview_lbl))
-                preview_lbl.image = preview_lbl.image
-            except tk.TclError:
-                pass
+            for lbl, img in zip(preview_lbls, imgs):
+                try:
+                    with io.BytesIO() as buf:
+                        img.save(buf, "PNG")
+                        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+                    # keep a real reference to the PhotoImage: assigning the
+                    # label's own (string) image option back would leave the
+                    # new PhotoImage unreferenced, so GC destroys the Tk
+                    # image and the settings window fails to draw (the
+                    # v1.11.0 bug)
+                    photo = tk.PhotoImage(data=b64, master=lbl)
+                    lbl.config(image=photo)
+                    lbl.image = photo
+                except tk.TclError:
+                    pass
 
         for var in (list(vars_.values()) + [font_var, color_var,
                                             hc_var, lang_var]):
-            var.trace_add("write", render_preview)
-        render_preview()
+            try:
+                var.trace_add("write", render_preview)
+            except Exception:
+                pass
+        try:
+            render_preview()
+        except Exception:
+            pass  # a broken preview must never stop Settings from opening
 
-        note = tk.Label(frame, text=tr("settings.note"),
+        # ---- Updates tab: channel, check interval ---------------------
+        tk.Label(tab_updates, text=tr("settings.channel"),
+                 font=("Segoe UI", 10), anchor="w").grid(
+            row=0, column=0, sticky="w", pady=3)
+        channel_var = tk.StringVar(value=current.get("update_channel", "stable"))
+        ttk.Combobox(tab_updates, textvariable=channel_var, width=14,
+                     values=("stable", "pre-release"), state="readonly").grid(
+            row=0, column=1, padx=(14, 0), pady=3)
+        add_spin(tab_updates, tr("settings.check_interval"),
+                 "update_check_interval_minutes", 5, 1440, 1)
+
+        note = tk.Label(outer, text=tr("settings.note"),
                         font=("Segoe UI", 8), fg="#64748b")
-        note.grid(row=r + 7, column=0, columnspan=2, sticky="w",
-                  pady=(4, 0))
+        note.pack(anchor="w", pady=(6, 0))
 
         def on_save():
             global POLL_SECONDS, KEEP_HISTORY
@@ -1443,6 +1543,7 @@ class App:
                 current["high_contrast_icon"] = bool(hc_var.get())
                 current["icon_font"] = font_var.get()
                 current["icon_digit_color"] = color
+                current["icon_theme"] = theme_var.get()
                 current["update_channel"] = channel_var.get()
                 current["language"] = lang_var.get()
             except ValueError:
@@ -1466,8 +1567,8 @@ class App:
             # menu (pystray menus must be replaced wholesale on retranslate)
             self._apply_language()
 
-        btns = tk.Frame(frame)
-        btns.grid(row=r + 8, column=0, columnspan=2, pady=(12, 0))
+        btns = tk.Frame(outer)
+        btns.pack(pady=(10, 0))
         tk.Button(btns, text=tr("settings.save"), width=10, command=on_save,
                   font=("Segoe UI", 10)).pack(side="left", padx=4)
         tk.Button(btns, text=tr("settings.cancel"), width=10,

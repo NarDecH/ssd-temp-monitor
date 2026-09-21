@@ -32,8 +32,8 @@ when a disk runs hot.
 - 🔐 **SHA-256-verified auto-updates** from GitHub Releases
 - 🌐 **Bilingual UI (English / ไทย)** — switch from the tray **Language**
   submenu or Settings; menu, windows and notifications change instantly
-- 👁️ **Live icon preview** in Settings — see size/font/color/offset/high-contrast
-  changes before saving
+- 👁️ **Live two-size icon preview** in the tabbed Settings window, plus one-click
+  **theme presets** (Classic / Minimal / Mono / Neon)
 - 🛡️ Automatic UAC elevation (needed to read SMART temperature data)
 - 🔌 **Internal SSDs only** — USB card readers / enclosures are ignored on
   purpose: their bridge chips report bogus temperatures and can stall the
@@ -90,6 +90,7 @@ Saved to `%APPDATA%\SSDTempMonitor\config.json`; changes apply immediately.
 | Digit font | Auto / Arial / Segoe UI / Tahoma / Verdana |
 | Digit color | `auto` (contrast-picked) or any `#rrggbb` |
 | Digit offset X / Y | −50..50 px (clamped to stay on the pill) |
+| Theme preset | Classic / Minimal / Mono / Neon / Custom |
 | High-contrast icon | black pill + white border (readable on light taskbars) |
 | Record history on startup | on/off |
 | Multi-disk icons | on/off |

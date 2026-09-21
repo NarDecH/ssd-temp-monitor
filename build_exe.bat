@@ -1,6 +1,8 @@
 @echo off
 rem Rebuild dist\ssd_temp_monitor.exe
-rem Requires: pip install pyinstaller pillow pystray
+rem Requires: pip install "pyinstaller<6.22" pillow pystray
+rem (pinned <6.22: newer bootloaders add onefile parent-process validation
+rem  that breaks the update flow's detached relaunch)
 python make_icon.py
 python make_version_file.py
 python -m PyInstaller --noconfirm --clean --onefile --windowed --uac-admin ^

@@ -83,9 +83,11 @@
 
 ## ปรับแต่งตัวเลขบน tray
 
-หน้า Settings ปรับหน้าตาตัวเลขอุณหภูมิได้ละเอียด พร้อม **live preview**
-(เห็นไอคอนตามค่าที่กำลังปรับทันทีก่อนกดบันทึก):
+หน้า Settings (แบบแท็บ General / Icon / Updates) ปรับหน้าตาตัวเลขอุณหภูมิได้
+ละเอียด พร้อม **live preview 2 ขนาด** (ขนาดจริงบน tray + 96 px) และ
+**ธีมสำเร็จรูป** — Classic / Minimal / Mono / Neon คลิกเดียวตั้งฟอนต์+สี+contrast ครบ:
 
+| ธีมสำเร็จรูป | Classic / Minimal / Mono / Neon / Custom |
 | การตั้งค่า | ค่า |
 |---|---|
 | ฟอนต์ตัวเลข | Auto / Arial / Segoe UI / Tahoma / Verdana |

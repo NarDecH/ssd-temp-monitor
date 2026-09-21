@@ -104,7 +104,7 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
 ## การทดสอบ
 
 - **รัน pytest ทุกครั้งที่แก้ logic** — `python -m pytest tests/ -v`
-  (161 เคส รันได้โดยไม่ต้องมี admin/PowerShell/GUI; PowerShell ถูก
+  (167 เคส รันได้โดยไม่ต้องมี admin/PowerShell/GUI; PowerShell ถูก
   monkeypatch ที่ `_run_powershell` เสมอ)
 - **การเทสพิกเซลของไอคอน** — ต้องกรอง `alpha > 0` ก่อนเสมอ (มุมโค้งนอก
   เม็ดเป็น (0,0,0,0) ที่ดูเหมือนเลขดำได้) และระวังว่าฟอนต์ถูกย่อให้เต็ม
@@ -165,6 +165,22 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
 - เวอร์ชันของแอปอ่านจาก VERSIONINFO ของ exe จริงผ่าน `effective_version()`
   — ห้าม hardcode ตัวเลขเทียบเอง; การตัดสิน "เวอร์ชันต่างกัน" ที่เชื่อถือได้
   คือ hash เท่านั้น (timestamp ของไฟล์ข้าม build อาจตรงกันเป๊ะ)
+
+## บั๊กที่เคยเจอ (ต้องไม่กลับมา)
+
+- **เปิด Settings ไม่ได้ (v1.11.0)** — `preview_lbl.image = preview_lbl.image`
+  อ่านค่าชื่อ image เดิมกลับใส่ตัวเอง ทำให้ PhotoImage ใหม่ไม่มีใครอ้างอิง
+  → GC destroy ภาพ → หน้าต่างวาดไม่ได้ กฎ: **ต้องเก็บ PhotoImage ในตัวแปร
+  Python จริงเสมอ** (`photo = tk.PhotoImage(...); lbl.config(image=photo);
+  lbl.image = photo`) และ preview ต้อง wrap ด้วย try/except เพื่อไม่ให้
+  หน้าต่าง Settings พังทั้งหน้าตามไปด้วย
+- **Dialog "Security validation failure: invalid originating onefile
+  parent process (PID not found)"** — PyInstaller 6.22 (GHSA-9fxf-4qw3-ghmr)
+  ให้ onefile child ตรวจว่า parent ยังมีชีวิตอยู่ ซึ่งขัดกับ flow
+  อัปเดตของเรา (updater/cmd ตายก่อนแอป relaunch) ปัจจุบันแก้ด้วย
+  (1) pin `pyinstaller<6.22` ใน workflows/build_exe.bat ทุกจุด
+  (2) shim relaunch ผ่าน `explorer.exe` (แอปใหม่ไม่มี parent ที่จะตาย)
+  ห้าม pin ขึ้นอีกจนกว่าจะทดสอบ self-update จริงแล้ว
 
 ## สไตล์โค้ด
 
