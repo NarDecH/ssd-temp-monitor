@@ -542,6 +542,82 @@ class TestFetchLatestRelease:
         assert m.fetch_latest_release("anyone/anything") is None
 
 
+class TestChecksums:
+    DATA = b"installer-bytes"
+    HEX = m.sha256_hex(DATA)
+
+    def test_sha256_hex(self):
+        import hashlib
+        assert m.sha256_hex(self.DATA) == hashlib.sha256(self.DATA).hexdigest()
+
+    def test_parse_standard_sums(self):
+        text = (f"{self.HEX}  ssd_temp_monitor_setup_v1.7.0.exe\n"
+                f"{'a' * 64}  other.exe\n")
+        sums = m.parse_checksums(text)
+        assert sums["ssd_temp_monitor_setup_v1.7.0.exe"] == self.HEX
+        assert sums["other.exe"] == "a" * 64
+
+    def test_parse_binary_marker_and_case(self):
+        text = f"{self.HEX.upper()}  *setup.exe\n"   # sha256sum: two spaces + *
+        assert m.parse_checksums(text)["setup.exe"] == self.HEX
+
+    def test_parse_ignores_junk(self):
+        assert m.parse_checksums("") == {}
+        assert m.parse_checksums("nonsense") == {}
+        assert m.parse_checksums(f"short  file.txt") == {}
+        assert m.parse_checksums(f"{self.HEX}  ") == {}
+
+    def test_verify_asset_ok(self):
+        text = f"{self.HEX}  setup.exe\n"
+        assert m.verify_asset(self.DATA, text, "setup.exe") is True
+
+    def test_verify_asset_tampered(self):
+        text = f"{self.HEX}  setup.exe\n"
+        assert m.verify_asset(b"tampered", text, "setup.exe") is False
+
+    def test_verify_asset_unknown_file(self):
+        assert m.verify_asset(self.DATA, f"{self.HEX}  other.exe\n", "setup.exe") is False
+
+    def test_install_aborts_on_checksum_mismatch(self, app, monkeypatch):
+        """A tampered download must never be written to disk or executed."""
+        app._pending_update = ("https://x/ssd_temp_monitor_setup_v9.9.9.exe", "v9.9.9")
+        notified = []
+        monkeypatch.setattr(app, "_notify", lambda msg, title: notified.append(msg))
+
+        responses = {
+            "exe": "tampered-installer",
+            "sums": f"{'f' * 64}  ssd_temp_monitor_setup_v9.9.9.exe\n",
+        }
+
+        def fake_urlopen(req, timeout=10):
+            body = (responses["sums"]
+                    if str(req.full_url).endswith("SHA256SUMS.txt") else responses["exe"])
+            return type("R", (), {"read": lambda self: body.encode(),
+                                  "__enter__": lambda self: self,
+                                  "__exit__": lambda self, *a: False})()
+
+        monkeypatch.setattr(m.urllib.request, "urlopen", fake_urlopen)
+
+        worker_ran = threading.Event()
+
+        class FakeThread:  # run the worker inline, no real thread
+            def __init__(self, target=None, daemon=None, **kw):
+                self._target = target
+
+            def start(self):
+                self._target()
+                worker_ran.set()
+
+        monkeypatch.setattr(m.threading, "Thread", FakeThread)
+        monkeypatch.setattr(
+            m.subprocess, "Popen",
+            lambda *a, **k: pytest.fail("must not execute tampered installer"))
+        app._install_update()
+        assert worker_ran.is_set()
+        assert notified == ["Downloading v9.9.9...",
+                            "Checksum mismatch - update aborted."]
+
+
 # ---------------------------------------------------------------------------
 # graph window + exit regression guards (the "cannot close" bug)
 # ---------------------------------------------------------------------------

@@ -3,6 +3,21 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.7.0] — 2026-09-21
+
+### Added
+
+- 🔐 **ตรวจ checksum ก่อนอัปเดต** — updater ดาวน์โหลด `SHA256SUMS.txt`
+  จาก release แล้วตรวจ SHA-256 ของตัว installer ก่อนบันทึก/รันทุกครั้ง
+  ถ้าค่าไม่ตรงจะยกเลิกทันที (ไฟล์ถูกแก้/ดาวน์โหลดเสียหาย = ไม่มีการติดตั้ง)
+- ℹ️ **หน้า About** — เวอร์ชัน ลิงก์ไปหน้า releases และปุ่มเช็คอัปเดต
+- 📦 Release แนบ `SHA256SUMS.txt` ให้ด้วยเสมอ (สร้างอัตโนมัติใน release workflow)
+
+### Fixed
+
+- แก้เทส fake `urllib` ที่อ่าน attribute ผิด (`req.url` → `req.full_url`)
+  และปรับ assertion ให้ตรง flow การแจ้งเตือนจริงของ updater
+
 ## [1.6.0] — 2026-09-21
 
 ### Added

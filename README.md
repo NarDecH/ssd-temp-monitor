@@ -1,12 +1,21 @@
 # SSD Temperature Tray Monitor (Windows)
 
+[![CI](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/ci.yml)
+[![Release](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/release.yml/badge.svg)](https://github.com/NarDecH/ssd-temp-monitor/releases)
+![Version](https://img.shields.io/badge/version-1.7.0-blue)
+![Tests](https://img.shields.io/badge/tests-101%20passing-brightgreen)
+![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey)
+
+![Banner](docs/img/banner.svg)
+
 Shows your SSD temperature live on the system tray icon.
 
 - Icon displays the current temperature (°C) of the hottest SSD, refreshed every 1 second.
 - Color coding: **green** ≤ 50 °C, **orange** 51–64 °C, **red** ≥ 65 °C.
 - Hover tooltip shows every SSD with its temperature.
 - Right-click menu: *Show details*, *Show temperature graph* (last 30 min),
-  *Show all disks (debug)*, *Refresh now*, *Record history*, *Exit*.
+  *Show all disks (debug)*, *Settings...*, *Check for updates...*, *About*,
+  *Refresh now*, *Record history*, *Exit*.
 - **Internal SSDs only** — USB card readers and enclosures are ignored on
   purpose (their bridge chips report bogus temperatures and can block the
   counter read for ~40 s). See [docs/RESEARCH.md](docs/RESEARCH.md).
@@ -34,6 +43,15 @@ Double-click `start_ssd_temp_monitor.bat`, or:
     pyw ssd_temp_tray.py
 
 To rebuild the exe: `pip install pyinstaller` then run `build_exe.bat`.
+
+## Auto-update
+
+The app checks GitHub Releases on startup and every 6 hours. When a new
+version is published (push a `v*` tag), a notification appears — open
+**Check for updates...** to download and install it silently. Every
+download is verified against the release's `SHA256SUMS.txt` before
+installation. Disable with `"check_updates": false` in
+`%APPDATA%\SSDTempMonitor\config.json`.
 
 ## History recording (optional)
 

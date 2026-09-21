@@ -26,5 +26,5 @@ if errorlevel 1 (
 )
 echo.
 echo SUCCESS - code is on GitHub. CI will run automatically.
-echo To publish a release:  git tag v1.6.0 ^&^& git push origin v1.6.0
+echo To publish a release:  git tag v1.7.0 ^&^& git push origin v1.7.0
 pause

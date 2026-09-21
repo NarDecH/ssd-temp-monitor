@@ -67,6 +67,23 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
+  <h2><span class="ver-badge">v1.7.0</span> <span class="date">21 กันยายน 2026</span></h2>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>🔐 <strong>ตรวจ checksum ก่อนอัปเดต</strong> — updater ดาวน์โหลด
+        <code>SHA256SUMS.txt</code> จาก release แล้วตรวจ SHA-256 ของ installer
+        ก่อนบันทึก/รัน ถ้าไม่ตรงยกเลิกทันที</li>
+    <li>ℹ️ <strong>หน้า About</strong> — เวอร์ชัน ลิงก์ releases และปุ่มเช็คอัปเดต</li>
+    <li>📦 Release แนบ <code>SHA256SUMS.txt</code> ให้อัตโนมัติ (จาก release workflow)</li>
+  </ul>
+
+  <h3><span class="pill fix-pill">Fixed</span></h3>
+  <ul>
+    <li>แก้เทส fake <code>urllib</code> (attribute <code>req.url</code> →
+        <code>req.full_url</code>) และ assertion ให้ตรง flow จริงของ updater</li>
+  </ul>
+
   <h2><span class="ver-badge">v1.6.0</span> <span class="date">21 กันยายน 2026</span></h2>
 
   <h3><span class="pill add-pill">Added</span></h3>

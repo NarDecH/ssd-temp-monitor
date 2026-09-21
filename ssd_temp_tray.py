@@ -23,6 +23,7 @@ Extras:
 
 import csv
 import ctypes
+import hashlib
 import json
 import os
 import subprocess
@@ -37,7 +38,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.6.0"          # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.7.0"          # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # re-check every 6 hours
 
 GREEN = "#22c55e"
@@ -361,6 +362,39 @@ def fetch_latest_release(repo):
         return None
 
 
+def sha256_hex(data):
+    """SHA-256 of bytes as lowercase hex."""
+    return hashlib.sha256(data).hexdigest()
+
+
+def parse_checksums(text):
+    """Parse a SHA256SUMS.txt file into {filename: lowercase-hex-hash}.
+
+    Accepts standard ``<hash>  <name>`` lines (two spaces, sha256sum
+    compatible) including the ``*<name>`` binary-mode marker; junk lines
+    are ignored.
+    """
+    result = {}
+    for line in str(text).splitlines():
+        line = line.strip()
+        if "  " not in line:
+            continue
+        hash_part, _, name = line.partition("  ")
+        hash_part = hash_part.strip().lower()
+        name = name.strip().lstrip("*")
+        if len(hash_part) == 64 and name:
+            result[name] = hash_part
+    return result
+
+
+def verify_asset(data, sums_text, filename):
+    """True when *data* matches the hash recorded for *filename*."""
+    expected = parse_checksums(sums_text).get(filename)
+    if not expected:
+        return False
+    return sha256_hex(data) == expected
+
+
 def alert_state(hottest, since, last_alert, now):
     """Pure helper for the overheat notification logic.
 
@@ -436,6 +470,7 @@ class App:
         self._graph_open = False
         self._disks_open = False
         self._settings_open = False
+        self._about_open = False
         self._graph_win = None
         self._graph_done = threading.Event()
         self._shutdown_requested = False
@@ -455,6 +490,7 @@ class App:
                 pystray.MenuItem("Refresh now", self.refresh),
                 pystray.MenuItem("Check for updates...", self.check_updates_now),
                 pystray.MenuItem("Settings...", self.show_settings),
+                pystray.MenuItem("About", self.show_about),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("Record history", self.toggle_history,
                                  checked=lambda item: KEEP_HISTORY),
@@ -484,6 +520,9 @@ class App:
     def check_updates_now(self, *_):
         threading.Thread(target=self._check_updates, kwargs={"manual": True},
                          daemon=True).start()
+
+    def show_about(self, *_):
+        self._spawn_once("_about_open", self._about_window)
 
     def _spawn_once(self, flag_attr, target):
         """Run target() in its own thread, one instance at a time."""
@@ -814,19 +853,29 @@ class App:
             self._pending_update = (url, version)
 
     def _install_update(self, *_):
-        """Download the new setup exe and run it (the installer closes us)."""
+        """Download the new setup exe, verify its SHA-256, then run it."""
         with self._lock:
             pending = self._pending_update
         if not pending:
             return
         url, version = pending
-        self.icon.notify(f"Downloading v{version}...", "SSD Temp Monitor")
+        self._notify(f"Downloading {version}...", "SSD Temp Monitor")
 
         def worker():
             try:
                 req = urllib.request.Request(url, headers={"User-Agent": "ssd-temp-monitor"})
                 with urllib.request.urlopen(req, timeout=60) as resp:
                     data = resp.read()
+                # verify against SHA256SUMS.txt published with the release
+                sums_url = url.rsplit("/", 1)[0] + "/SHA256SUMS.txt"
+                req = urllib.request.Request(sums_url, headers={"User-Agent": "ssd-temp-monitor"})
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    sums_text = resp.read().decode("utf-8", "replace")
+                filename = url.rsplit("/", 1)[1]
+                if not verify_asset(data, sums_text, filename):
+                    self._notify("Checksum mismatch - update aborted.",
+                                 "SSD Temp Monitor — Update")
+                    return
                 dest = os.path.join(os.environ.get("TEMP", os.path.expanduser("~")),
                                     f"ssd_temp_monitor_setup_{version}.exe")
                 with open(dest, "wb") as f:
@@ -843,6 +892,40 @@ class App:
             self.icon.stop()  # exit so the installer can replace the exe
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _about_window(self):
+        """Small About dialog: version, repo link, update check button."""
+        import tkinter as tk
+        import webbrowser
+
+        root = tk.Tk()
+        root.title("About SSD Temperature Monitor")
+        root.attributes("-topmost", True)
+        root.resizable(False, False)
+        frame = tk.Frame(root, padx=26, pady=14)
+        frame.pack()
+        tk.Label(frame, text="SSD Temperature Monitor",
+                 font=("Segoe UI", 15, "bold"),
+                 fg="#e2e8f0").pack(anchor="w")
+        tk.Label(frame, text=f"Version {APP_VERSION}",
+                 font=("Segoe UI", 10),
+                 fg="#94a3b8").pack(anchor="w", pady=(2, 6))
+        repo = SETTINGS.get("github_repo") or DEFAULT_SETTINGS["github_repo"]
+        link = tk.Label(frame, text=f"github.com/{repo}",
+                        font=("Segoe UI", 10, "underline"), fg="#38bdf8",
+                        cursor="hand2")
+        link.pack(anchor="w")
+        link.bind("<Button-1>",
+                  lambda e: webbrowser.open(f"https://github.com/{repo}/releases/latest"))
+        btns = tk.Frame(frame)
+        btns.pack(pady=(12, 0))
+        tk.Button(btns, text="Check for updates", width=16,
+                  command=lambda: self.check_updates_now(),
+                  font=("Segoe UI", 9)).pack(side="left", padx=4)
+        tk.Button(btns, text="Close", width=10, command=root.destroy,
+                  font=("Segoe UI", 9)).pack(side="left", padx=4)
+        root.bind("<Escape>", lambda e: root.destroy())
+        root.mainloop()
 
     def _notify(self, message, title):
         try:

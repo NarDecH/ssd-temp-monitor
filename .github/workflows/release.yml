@@ -64,6 +64,17 @@ jobs:
           Copy-Item "dist\ssd_temp_monitor.exe" "ssd_temp_monitor_v${{ steps.ver.outputs.version }}.exe"
           Copy-Item "installer\ssd_temp_monitor_setup.exe" "ssd_temp_monitor_setup_v${{ steps.ver.outputs.version }}.exe"
 
+      - name: Generate SHA256SUMS.txt
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem "ssd_temp_monitor*_v*.exe"
+          $lines = foreach ($f in $files) {
+            $h = (Get-FileHash -Algorithm SHA256 $f.FullName).Hash.ToLower()
+            "$h  $($f.Name)"
+          }
+          $lines -join "`n" | Set-Content -NoNewline -Encoding ascii SHA256SUMS.txt
+          Write-Output (Get-Content SHA256SUMS.txt)
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -76,8 +87,12 @@ jobs:
             - `ssd_temp_monitor_v${{ steps.ver.outputs.version }}.exe` — portable, รันได้ทันที
 
             ทั้งสองไฟล์ต้องการสิทธิ์ Administrator (UAC) เพื่ออ่านอุณหภูมิ SMART
+
+            🔒 ความปลอดภัย: `SHA256SUMS.txt` มี checksum ของทั้งสองไฟล์ —
+            แอปจะตรวจสอบ checksum อัตโนมัติก่อนติดตั้งอัปเดตเสมอ
           draft: false
           prerelease: false
           files: |
             ssd_temp_monitor_v${{ steps.ver.outputs.version }}.exe
             ssd_temp_monitor_setup_v${{ steps.ver.outputs.version }}.exe
+            SHA256SUMS.txt

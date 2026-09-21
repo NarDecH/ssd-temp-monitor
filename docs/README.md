@@ -18,7 +18,8 @@
 - 💺 **SSD หลายตัวได้หลายไอคอน** — ดิสก์เพิ่มเติม (ตัวที่ 2 เป็นต้นไป)
   มี tray icon ของตัวเอง อัตโนมัติเมื่อเสียบ/ถอด
 - 🖱️ คลิกขวา: *Show details*, *Show temperature graph* (ย้อนหลัง 30 นาที),
-  *Show all disks (debug)*, *Refresh now*, *Record history*, *Exit*
+  *Show all disks (debug)*, *Settings...*, *Check for updates...*, *About*,
+  *Refresh now*, *Record history*, *Exit*
 - 🔔 **แจ้งเตือนอุณหภูมิเกิน** — ≥ 65 °C ติดกัน 30 วินาที เตือนซ้ำทุก 5 นาที
 - 🚦 เปิดซ้ำไม่ได้ — โปรแกรมรันได้ครั้งละ 1 อินสแตนซ์เท่านั้น
   (อินสแตนซ์ซ้ำขึ้นข้อความแล้วออก · มีตัวติดตั้ง 64-bit ลง Program Files)
