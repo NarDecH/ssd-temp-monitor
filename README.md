@@ -3,7 +3,7 @@
 [![CI](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/ci.yml)
 [![Release](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/release.yml/badge.svg)](https://github.com/NarDecH/ssd-temp-monitor/releases)
 ![Version](https://img.shields.io/badge/version-1.12.0-orange)
-![Tests](https://img.shields.io/badge/tests-167%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-186%20passing-brightgreen)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey)
 
 ![Banner](docs/img/banner.svg)
@@ -19,13 +19,18 @@ Shows your SSD temperature live on the system tray icon.
   3-digit temperatures shrink to fit.
 - **Bilingual UI** — switch the whole interface (menu, windows, notifications) between
   English and Thai from the **Language tray submenu** or Settings; applies immediately.
-- **Customizable tray digits** — pick the font (Arial / Segoe UI / Tahoma / Verdana),
-  the digit color (`auto` contrast or any `#rrggbb`), and nudge the digit position
-  along X/Y — all with a live two-size preview in the tabbed Settings window,
-  plus one-click **theme presets** (Classic / Minimal / Mono / Neon).
+- **Customizable tray digits** — pick the font (13 Windows families), the style
+  (regular / bold / italic / bold italic), the digit size (50–150 %), the digit color
+  (`auto` contrast, 8 presets, or any `#rrggbb`), and nudge the digit position
+  along X/Y — all with a live two-size preview in the tabbed Settings window
+  (with an **Apply** button that saves without closing) plus one-click
+  **theme presets** (Classic / Minimal / Mono / Neon).
 - Right-click menu: *Show details*, *Show temperature graph* (last 30 min),
-  *Show all disks (debug)*, *Copy diagnostics*, *Settings...*, *Check for updates...*, *About*,
+  *Show all disks (debug)*, *Copy diagnostics*, *Settings...*, *Check for updates...*,
+  *Self-test update system*, *About*,
   *Refresh now*, *Record history*, *Exit*.
+- **Stale `_MEI` cleanup** — leftover PyInstaller temp dirs from killed runs are
+  removed at startup (locked dirs of running apps are never touched).
 - **Event log** (rotating) in `%APPDATA%\SSDTempMonitor\ssd_temp_monitor.log`.
 - **Internal SSDs only** — USB card readers and enclosures are ignored on
   purpose (their bridge chips report bogus temperatures and can block the

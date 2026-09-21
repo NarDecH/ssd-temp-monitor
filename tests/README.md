@@ -24,6 +24,10 @@ are exercised for real.
 | `alert_state` | 65 °C sustained 30 s, 5-min cooldown, reset on drop |
 | CSV history | roundtrip, 30-min cutoff, corrupt rows, cap/trim, 60-s flush interval |
 | tray icon | cache hit returns the same image object; size/high-contrast settings clamp correctly; high-contrast pill is black with a white border |
+| digit fonts (v1.13.0) | 13 families × 4 styles resolve to real `.ttf` files on any machine (family fallback), styles/scale change rendered pixels, scale 50–150 clamped |
+| digit colors (v1.13.0) | 8 presets valid, custom `#rrggbb` actually appears on the rendered icon |
+| update self-test (v1.13.0) | `run_update_selftest` passes 12/12 and covers version/asset/checksum/shim stages |
+| stale `_MEI` cleanup (v1.13.0) | rename-probe: stale dirs removed, fresh/own/locked dirs survive, source runs are a no-op |
 | `log_event` | writes structured lines, never raises, rotating handler is configured at import |
 | uninstaller | `setup.iss` `[UninstallDelete]` removes `config.json` and the event log |
 | single instance | second `acquire_single_instance()` on the same mutex returns `False` |

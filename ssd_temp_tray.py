@@ -28,6 +28,7 @@ import json
 import logging
 import logging.handlers
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -41,7 +42,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.12.1"         # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.13.0"         # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -58,24 +59,132 @@ TEMP_MIN, TEMP_MAX = -20, 100
 CONFIG_FILE = os.path.join(
     os.environ.get("APPDATA", os.path.expanduser("~")),
     "SSDTempMonitor", "config.json")
-# digit fonts offered in Settings (name shown -> (file, family) for PIL/tk).
-# "Segoe UI"/Tahoma ship with every Windows 10/11 install; the other two
-# gracefully fall back to Arial when absent.
-FONT_FILES = {
-    "auto": ("arialbd.ttf", "Segoe UI"),
-    "Arial": ("arialbd.ttf", "Arial"),
-    "Segoe UI": ("segoeuib.ttf", "Segoe UI"),
-    "Tahoma": ("tahoma.ttf", "Tahoma"),
-    "Verdana": ("verdanab.ttf", "Verdana"),
+# Digit fonts offered in Settings: {family: {style -> (ttf file, tk name)}}.
+# Every family below ships with Windows 10/11; a missing .ttf file or an
+# unknown family gracefully falls back to Arial (bold).
+FONT_FAMILIES = {
+    "Segoe UI": {
+        "regular":     ("segoeui.ttf", "Segoe UI"),
+        "bold":        ("segoeuib.ttf", "Segoe UI"),
+        "italic":      ("segoeuii.ttf", "Segoe UI"),
+        "bold italic": ("segoeuiz.ttf", "Segoe UI"),
+    },
+    "Arial": {
+        "regular":     ("arial.ttf", "Arial"),
+        "bold":        ("arialbd.ttf", "Arial"),
+        "italic":      ("ariali.ttf", "Arial"),
+        "bold italic": ("arialbi.ttf", "Arial"),
+    },
+    "Tahoma": {
+        "regular":     ("tahoma.ttf", "Tahoma"),
+        "bold":        ("tahomabd.ttf", "Tahoma"),
+        "italic":      ("tahoma.ttf", "Tahoma"),          # no true italic
+        "bold italic": ("tahomabd.ttf", "Tahoma"),
+    },
+    "Verdana": {
+        "regular":     ("verdana.ttf", "Verdana"),
+        "bold":        ("verdanab.ttf", "Verdana"),
+        "italic":      ("verdanai.ttf", "Verdana"),
+        "bold italic": ("verdanabi.ttf", "Verdana"),
+    },
+    "Calibri": {
+        "regular":     ("calibri.ttf", "Calibri"),
+        "bold":        ("calibrib.ttf", "Calibri"),
+        "italic":      ("calibrii.ttf", "Calibri"),
+        "bold italic": ("calibriz.ttf", "Calibri"),
+    },
+    "Candara": {
+        "regular":     ("Candara.ttf", "Candara"),
+        "bold":        ("Candarab.ttf", "Candara"),
+        "italic":      ("Candarai.ttf", "Candara"),
+        "bold italic": ("Candaraz.ttf", "Candara"),
+    },
+    "Corbel": {
+        "regular":     ("corbel.ttf", "Corbel"),
+        "bold":        ("corbelb.ttf", "Corbel"),
+        "italic":      ("corbeli.ttf", "Corbel"),
+        "bold italic": ("corbelz.ttf", "Corbel"),
+    },
+    "Franklin Gothic": {
+        "regular":     ("framd.ttf", "Franklin Gothic Medium"),
+        "bold":        ("fradb.ttf", "Franklin Gothic Medium"),
+        "italic":      ("framd.ttf", "Franklin Gothic Medium"),
+        "bold italic": ("fradb.ttf", "Franklin Gothic Medium"),
+    },
+    "Georgia": {
+        "regular":     ("georgia.ttf", "Georgia"),
+        "bold":        ("georgiab.ttf", "Georgia"),
+        "italic":      ("georgiai.ttf", "Georgia"),
+        "bold italic": ("georgiaz.ttf", "Georgia"),
+    },
+    "Trebuchet MS": {
+        "regular":     ("trebuc.ttf", "Trebuchet MS"),
+        "bold":        ("trebucbd.ttf", "Trebuchet MS"),
+        "italic":      ("trebucit.ttf", "Trebuchet MS"),
+        "bold italic": ("trebucbi.ttf", "Trebuchet MS"),
+    },
+    "Consolas": {
+        "regular":     ("consola.ttf", "Consolas"),
+        "bold":        ("consolab.ttf", "Consolas"),
+        "italic":      ("consolai.ttf", "Consolas"),
+        "bold italic": ("consolaz.ttf", "Consolas"),
+    },
+    "Times New Roman": {
+        "regular":     ("times.ttf", "Times New Roman"),
+        "bold":        ("timesbd.ttf", "Times New Roman"),
+        "italic":      ("timesi.ttf", "Times New Roman"),
+        "bold italic": ("timesbi.ttf", "Times New Roman"),
+    },
+    "Courier New": {
+        "regular":     ("cour.ttf", "Courier New"),
+        "bold":        ("courbd.ttf", "Courier New"),
+        "italic":      ("couri.ttf", "Courier New"),
+        "bold italic": ("courbi.ttf", "Courier New"),
+    },
 }
+
+# styles offered in Settings (keys of every FONT_FAMILIES entry)
+FONT_STYLES = ("regular", "bold", "italic", "bold italic")
+
+_FONT_FALLBACK = FONT_FAMILIES["Arial"]
+
+
+def _resolve_font_file(family, style):
+    """(ttf file, tk family) for a family/style pair, with fallbacks.
+
+    Unknown family/style -> Arial bold. A missing .ttf file falls back to
+    Arial bold too, so the icon can never end up with a broken font.
+    """
+    if family not in FONT_FAMILIES:
+        family, style = "Arial", "bold"
+    if style not in FONT_STYLES:
+        style = "bold"
+    entry = FONT_FAMILIES[family]
+    file_and_name = entry.get(style) or entry["bold"]
+    fonts_dir = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts")
+    if os.path.isfile(os.path.join(fonts_dir, file_and_name[0])):
+        return file_and_name
+    # missing file for the requested style: fall back within the family,
+    # then to Arial bold (e.g. Franklin Gothic has no real bold italic)
+    for alt in ("bold", "regular"):
+        cand = entry.get(alt)
+        if cand and os.path.isfile(os.path.join(fonts_dir, cand[0])):
+            return cand
+    return _FONT_FALLBACK["bold"]
+
+
+# digit color presets offered in Settings; the combobox stays editable so
+# any #rrggbb value can be typed or pasted directly
+COLOR_PRESETS = ("auto", "#ffffff", "#11111b", "#ffd166",
+                 "#ff3b30", "#38bdf8", "#22c55e", "#f472b6")
 
 
 # icon theme presets: one click applies font+color+contrast combination.
 # "custom" = keep whatever the user has set by hand.
 THEMES = {
     "custom": {},
-    "classic": {"icon_font": "auto", "icon_digit_color": "auto",
-                "high_contrast_icon": False},
+    "classic": {"icon_font": "Segoe UI", "icon_font_style": "bold",
+                "icon_digit_color": "auto", "high_contrast_icon": False},
     "minimal": {"icon_font": "Segoe UI", "icon_digit_color": "auto",
                 "high_contrast_icon": False, "icon_text_dx": 0,
                 "icon_text_dy": 0},
@@ -114,7 +223,9 @@ DEFAULT_SETTINGS = {
     "high_contrast_icon": False,              # black pill + white border
     "language": "en",                         # UI language: "en" or "th"
     "icon_theme": "classic",                 # theme preset (THEMES keys)
-    "icon_font": "auto",                     # digit font (auto = Arial bold)
+    "icon_font": "Segoe UI",                 # digit font family (FONT_FAMILIES)
+    "icon_font_style": "bold",               # regular|bold|italic|bold italic
+    "icon_digit_scale": 100,                 # digit size, % of the auto-fit size
     "icon_digit_color": "auto",              # digit color (auto = by contrast)
     "icon_text_dx": 0,                       # digit offset X in px (-50..50)
     "icon_text_dy": 0,                       # digit offset Y in px (-50..50)
@@ -146,8 +257,17 @@ def _validate_settings(cfg):
     out["language"] = ("th" if out["language"] == "th" else "en")
     out["icon_theme"] = (out["icon_theme"] if out["icon_theme"] in THEMES
                          else "classic")
-    out["icon_font"] = (out["icon_font"] if out["icon_font"] in FONT_FILES
-                        or out["icon_font"] == "auto" else "auto")
+    if out.get("icon_font") == "auto":      # v1.12.x name for Segoe UI bold
+        out["icon_font"] = "Segoe UI"
+    out["icon_font"] = (out["icon_font"] if out["icon_font"] in FONT_FAMILIES
+                        else "Segoe UI")
+    out["icon_font_style"] = (out["icon_font_style"]
+                              if out["icon_font_style"] in FONT_STYLES
+                              else "bold")
+    try:
+        out["icon_digit_scale"] = min(150, max(50, int(out["icon_digit_scale"])))
+    except (TypeError, ValueError):
+        out["icon_digit_scale"] = 100
     dc = str(out["icon_digit_color"]).strip()
     out["icon_digit_color"] = dc if dc == "auto" or _is_hex_color(dc) else "auto"
     for key in ("icon_text_dx", "icon_text_dy"):
@@ -228,6 +348,7 @@ STRINGS = {
         "menu.diagnostics": "Copy diagnostics to clipboard",
         "menu.refresh": "Refresh now",
         "menu.updates": "Check for updates...",
+        "menu.selftest": "Self-test update system",
         "menu.settings": "Settings...",
         "menu.about": "About",
         "menu.language": "Language",
@@ -269,6 +390,8 @@ STRINGS = {
         "settings.history": "History window (minutes, 5-240)",
         "settings.check_interval": "Update check interval (minutes, 5-1440)",
         "settings.font": "Digit font",
+        "settings.font_style": "Digit style",
+        "settings.digit_scale": "Digit size (% of auto, 50-150)",
         "settings.digit_color": "Digit color (auto or #rrggbb)",
         "settings.dx": "Digit offset X (px, -50..50)",
         "settings.dy": "Digit offset Y (px, -50..50)",
@@ -283,6 +406,7 @@ STRINGS = {
         "settings.language": "Language / ภาษา",
         "settings.note": "Values apply immediately - no restart needed.",
         "settings.save": "Save",
+        "settings.apply": "Apply",
         "settings.cancel": "Cancel",
         "settings.int_error": "Please enter whole numbers only.",
         "settings.save_error": "Could not write {path}",
@@ -294,6 +418,13 @@ STRINGS = {
         "about.check_updates": "Check for updates",
         "about.close": "Close",
         "common.close": "Close",
+        "selftest.title": "Update self-test",
+        "selftest.pass": (
+            "ALL PASSED ({n}/{n} checks)\n\n"
+            "version compare · release asset selection · checksum verify\n"
+            "update shim (env isolation + detached relaunch)\n\n"
+            "The update system is ready for the next release."),
+        "selftest.fail": "FAILURES ({n} of {total} checks failed):",
         "diag.header": "SSD Temperature Monitor diagnostics",
         "diag.no_data": "  (no data yet)",
     },
@@ -313,6 +444,7 @@ STRINGS = {
         "menu.diagnostics": "คัดลอกข้อมูลวินิจฉัย",
         "menu.refresh": "รีเฟรชเดี๋ยวนี้",
         "menu.updates": "ตรวจหาการอัปเดต...",
+        "menu.selftest": "ทดสอบระบบอัปเดตด้วยตัวเอง",
         "menu.settings": "ตั้งค่า...",
         "menu.about": "เกี่ยวกับ",
         "menu.language": "ภาษา",
@@ -353,6 +485,8 @@ STRINGS = {
         "settings.history": "ความยาวประวัติ (นาที, 5-240)",
         "settings.check_interval": "ช่วงเวลาตรวจอัปเดต (นาที, 5-1440)",
         "settings.font": "ฟอนต์ตัวเลข",
+        "settings.font_style": "หนา-เอียงตัวเลข",
+        "settings.digit_scale": "ขนาดตัวเลข (% ของอัตโนมัติ, 50-150)",
         "settings.digit_color": "สีตัวเลข (auto หรือ #rrggbb)",
         "settings.dx": "เลื่อนตัวเลขแกน X (px, -50..50)",
         "settings.dy": "เลื่อนตัวเลขแกน Y (px, -50..50)",
@@ -367,6 +501,7 @@ STRINGS = {
         "settings.language": "ภาษา / Language",
         "settings.note": "ค่าทั้งหมดมีผลทันที - ไม่ต้องรีสตาร์ท",
         "settings.save": "บันทึก",
+        "settings.apply": "ใช้ค่า",
         "settings.cancel": "ยกเลิก",
         "settings.int_error": "กรุณากรอกตัวเลขจำนวนเต็มเท่านั้น",
         "settings.save_error": "เขียนไฟล์ {path} ไม่สำเร็จ",
@@ -378,6 +513,13 @@ STRINGS = {
         "about.check_updates": "ตรวจหาการอัปเดต",
         "about.close": "ปิด",
         "common.close": "ปิด",
+        "selftest.title": "ทดสอบระบบอัปเดต",
+        "selftest.pass": (
+            "ผ่านทั้งหมด ({n}/{n} รายการ)\n\n"
+            "เปรียบเทียบเวอร์ชัน · เลือกไฟล์ release · ตรวจ checksum\n"
+            "update shim (กัน env ค้าง + relaunch แบบ detached)\n\n"
+            "ระบบอัปเดตพร้อมสำหรับ release ถัดไป"),
+        "selftest.fail": "ไม่ผ่าน ({n} จาก {total} รายการ):",
         "diag.header": "SSD Temperature Monitor diagnostics",
         "diag.no_data": "  (ยังไม่มีข้อมูล)",
     },
@@ -849,6 +991,120 @@ def wait_and_install(shim_path, timeout=90):
         return None
 
 
+def cleanup_stale_mei(min_age_seconds=60):
+    """Delete leftover PyInstaller onefile temp dirs from dead processes.
+
+    A crashed or killed onefile run leaves ``_MEIxxxxxx`` behind in %TEMP%
+    forever (pyinstaller/pyinstaller#5518). Liveness probe: a directory
+    whose DLLs are still mapped by a running process cannot be renamed
+    (sharing violation), so "rename succeeded" proves the owner is gone.
+    Our own extraction dir (``sys._MEIPASS``) and dirs younger than
+    ``min_age_seconds`` (an app may be starting up right now) are kept.
+    Source runs are a no-op. Never raises.
+    """
+    if not getattr(sys, "frozen", False):
+        return
+    temp = os.environ.get("TEMP") or os.environ.get("TMP")
+    if not temp:
+        return
+    own = os.path.normcase(os.path.abspath(
+        getattr(sys, "_MEIPASS", "") or os.devnull))
+    try:
+        now = time.time()
+        for name in os.listdir(temp):
+            if not (name.startswith("_MEI") and len(name) > 4
+                    and name[4:].isdigit()):
+                continue
+            path = os.path.join(temp, name)
+            if os.path.normcase(os.path.abspath(path)) == own:
+                continue  # that is us - definitely alive
+            try:
+                if now - os.path.getmtime(path) < min_age_seconds:
+                    continue  # brand new: its owner may be starting up
+            except OSError:
+                continue
+            staged = path + "_stale"
+            try:
+                os.rename(path, staged)  # fails while a process holds it
+            except OSError:
+                continue
+            shutil.rmtree(staged, ignore_errors=True)
+    except OSError:
+        pass
+
+
+def run_update_selftest():
+    """Exercise the update pipeline's pure helpers; returns (ok, lines).
+
+    Simulates the exact semantics the real updater depends on: version
+    comparison, release-asset selection, SHA-256 verification and the
+    shim contract (env isolation + detached relaunch). Never touches the
+    network or runs anything - safe to click at any time.
+    """
+    checks = []
+
+    def check(name, fn):
+        try:
+            checks.append((name, bool(fn()), ""))
+        except Exception as exc:  # a failing probe is a failed check
+            checks.append((name, False, f"{type(exc).__name__}: {exc}"))
+
+    # 1. version comparison drives "is there an update?"
+    check("version: 1.13.0 > 1.12.1",
+          lambda: is_newer_version("1.13.0", "1.12.1"))
+    check("version: not newer 1.12.1 > 1.12.1",
+          lambda: not is_newer_version("1.12.1", "1.12.1"))
+    check("version: 1.10.0 > 1.9.0",
+          lambda: is_newer_version("1.10.0", "1.9.0"))
+
+    # 2. asset selection: stable channel must reject pre-releases
+    rel = {"tag_name": "v1.13.0", "prerelease": False,
+           "draft": False,
+           "assets": [{"name": "ssd_temp_monitor_setup_1.13.0.exe",
+                       "state": "uploaded",
+                       "browser_download_url":
+                           "https://example.invalid/setup_1.13.0.exe"}]}
+    check("asset: picks setup exe",
+          lambda: select_release_asset(rel)[1] == "v1.13.0")
+    rel_pre = dict(rel, tag_name="v1.14.0-rc1", prerelease=True)
+    check("asset: stable skips pre-release",
+          lambda: select_release_asset(rel_pre) == (None, None))
+
+    # 3. checksum gate: the only thing standing between a corrupted
+    #    download and Program Files
+    good = sha256_hex(b"data")
+    sums = good + "  setup.exe\n"
+    check("checksum: matching hash passes",
+          lambda: verify_asset(b"data", sums, "setup.exe"))
+    check("checksum: wrong hash fails",
+          lambda: not verify_asset(b"other", sums, "setup.exe"))
+    check("checksum: unknown file fails",
+          lambda: not verify_asset(b"data", sums, "missing.exe"))
+
+    # 4. shim contract: env isolation (the v1.12.1 _MEIPASS2 fix) and the
+    #    detached relaunch (the v1.12.0 parent-validation fix)
+    shim = build_update_shim("C:\\setup.exe", restart_path="C:\\app.exe")
+    try:
+        with open(shim, encoding="utf-8") as f:
+            body = f.read()
+        check("shim: clears _MEIPASS2",
+              lambda: 'set "_MEIPASS2="' in body)
+        check("shim: clears _PYI_* vars",
+              lambda: body.count('set "_PYI_') >= 4)
+        check("shim: detached relaunch via explorer",
+              lambda: 'explorer.exe' in body and "/B" in body)
+        check("shim: waits for app exit before install",
+              lambda: "tasklist" in body and ":wait" in body)
+    finally:
+        try:
+            os.remove(shim)
+        except OSError:
+            pass
+
+    failed = [c for c in checks if not c[1]]
+    return not failed, (checks, failed)
+
+
 def alert_state(hottest, since, last_alert, now):
     """Pure helper for the overheat notification logic.
 
@@ -880,16 +1136,24 @@ def _pill_text_color(pill):
     return (17, 17, 27, 255) if lum > 150 else (255, 255, 255, 255)
 
 
-def _icon_font(size, text, font_key=None):
-    """Bold font for tray digits, scaled to fill the pill without overflow.
+def _icon_font(size, text, family=None, style=None, scale=None):
+    """Tray-digit font, auto-fit to the pill and then scaled by Settings.
 
-    font_key selects the typeface (see FONT_FILES; "auto" = Arial bold).
-    Three-digit temperatures (or a wide string) shrink to fit the pill's
-    inner width. Results are cached per (size, text, font).
+    family/style select the typeface (see FONT_FAMILIES/_resolve_font_file).
+    The base pixel size fills the pill's inner width; ``scale`` (50-150 %)
+    grows or shrinks the digits afterwards, shrinking further when three
+    digits would overflow. Results are cached per parameter set.
     """
-    font_key = font_key or SETTINGS.get("icon_font", "auto")
-    font_file = FONT_FILES.get(font_key, FONT_FILES["auto"])[0]
-    key = ("font", size, text, font_file)
+    family = family or SETTINGS.get("icon_font", "Segoe UI")
+    style = style or SETTINGS.get("icon_font_style", "bold")
+    if scale is None:
+        try:
+            scale = int(SETTINGS.get("icon_digit_scale", 100))
+        except (TypeError, ValueError):
+            scale = 100
+    scale = min(150, max(50, scale))
+    font_file, _tk_name = _resolve_font_file(family, style)
+    key = ("font", size, text, font_file, scale)
     cached = _ICON_CACHE.get(key)
     if cached is not None:
         return cached
@@ -903,6 +1167,15 @@ def _icon_font(size, text, font_key=None):
         if w > max_w:
             font = ImageFont.truetype(font_file,
                                       max(8, int(px * max_w / w)))
+        if scale != 100:
+            px2 = max(8, int(font.size * scale / 100))
+            if px2 != font.size:
+                font = ImageFont.truetype(font_file, px2)
+                bbox = font.getbbox(text)
+                w = bbox[2] - bbox[0]
+                if w > max_w:   # scaled digits must still fit the pill
+                    font = ImageFont.truetype(
+                        font_file, max(8, int(px2 * max_w / w)))
     except OSError:
         font = ImageFont.load_default()
     _ICON_CACHE[key] = font
@@ -919,10 +1192,12 @@ def make_icon(text, color, size=None, high_contrast=None):
     """Render the tray temperature icon.
 
     size: icon edge in px (default ICON_SIZE). The colored pill fills
-    nearly the whole icon. Digit font, digit color and position all come
-    from Settings: "icon_font" (see FONT_FILES, "auto" = Arial bold),
-    "icon_digit_color" ("auto" = contrast-picked, or "#rrggbb") and
-    "icon_text_dx"/"icon_text_dy" pixel offsets from center.
+    nearly the whole icon. Digit font family, style (regular/bold/italic/
+    bold italic), digit scale and digit color all come from Settings:
+    "icon_font" (FONT_FAMILIES), "icon_font_style", "icon_digit_scale"
+    (50-150 % of the auto-fit size), "icon_digit_color" ("auto" =
+    contrast-picked, or "#rrggbb") and "icon_text_dx"/"icon_text_dy"
+    pixel offsets from center.
     Digit color adapts to the pill when auto (dark on green/orange, white
     on red) and a subtle same-color stroke keeps digits crisp at small
     sizes. high_contrast swaps the pill for black with a white border so
@@ -932,11 +1207,16 @@ def make_icon(text, color, size=None, high_contrast=None):
         size = ICON_SIZE
     if high_contrast is None:
         high_contrast = bool(SETTINGS.get("high_contrast_icon"))
-    font_key = SETTINGS.get("icon_font", "auto")
+    font_key = SETTINGS.get("icon_font", "Segoe UI")
+    style = SETTINGS.get("icon_font_style", "bold")
+    try:
+        scale = int(SETTINGS.get("icon_digit_scale", 100))
+    except (TypeError, ValueError):
+        scale = 100
     digit_color_setting = str(SETTINGS.get("icon_digit_color", "auto"))
     dx = int(SETTINGS.get("icon_text_dx", 0) or 0)
     dy = int(SETTINGS.get("icon_text_dy", 0) or 0)
-    key = (text, color, size, high_contrast, font_key,
+    key = (text, color, size, high_contrast, font_key, style, scale,
            digit_color_setting, dx, dy)
     cached = _ICON_CACHE.get(key)
     if cached is not None:
@@ -954,7 +1234,7 @@ def make_icon(text, color, size=None, high_contrast=None):
         pill = color
         d.rounded_rectangle([margin, margin, size - 1 - margin, size - 1 - margin],
                             radius=max(4, size // 5), fill=pill)
-    font = _icon_font(size, text, font_key)
+    font = _icon_font(size, text, font_key, style, scale)
     if _is_hex_color(digit_color_setting):
         h = digit_color_setting.lstrip("#")
         rgb = tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
@@ -1069,6 +1349,7 @@ class App:
             pystray.MenuItem(tr("menu.diagnostics"), self.copy_diagnostics),
             pystray.MenuItem(tr("menu.refresh"), self.refresh),
             pystray.MenuItem(tr("menu.updates"), self.check_updates_now),
+            pystray.MenuItem(tr("menu.selftest"), self.run_update_selftest_ui),
             pystray.MenuItem(tr("menu.settings"), self.show_settings),
             pystray.MenuItem(tr("menu.about"), self.show_about),
             pystray.Menu.SEPARATOR,
@@ -1106,6 +1387,30 @@ class App:
     def check_updates_now(self, *_):
         threading.Thread(target=self._check_updates, kwargs={"manual": True},
                          daemon=True).start()
+
+    def run_update_selftest_ui(self, *_):
+        """Run the update-pipeline self-test and show the result."""
+        def work():
+            try:
+                ok, (checks, failed) = run_update_selftest()
+            except Exception:
+                ok, checks, failed = False, [], [("self-test crashed", False, "")]
+            log_event("selftest", ok=ok, total=len(checks),
+                      failed=len(failed))
+            total = len(checks)
+            if ok:
+                body = tr("selftest.pass", n=total)
+                icon = 0x40  # MB_ICONINFORMATION
+            else:
+                names = "\n".join(f"- {name} {detail}".rstrip()
+                                  for name, _ok, detail in failed)
+                body = tr("selftest.fail", n=len(failed), total=total) \
+                    + "\n" + names
+                icon = 0x30  # MB_ICONWARNING
+            ctypes.windll.user32.MessageBoxW(
+                None, body, tr("selftest.title"),
+                icon | 0x40000 | 0x10000)  # topmost | set foreground
+        threading.Thread(target=work, daemon=True).start()
 
     def show_about(self, *_):
         self._spawn_once("_about_open", self._about_window)
@@ -1403,29 +1708,40 @@ class App:
         theme_box.grid(row=0, column=1, padx=(14, 0), pady=3)
 
         add_spin(tab_icon, tr("settings.icon_size"), "icon_size", 16, 128, 1)
-        add_spin(tab_icon, tr("settings.dx"), "icon_text_dx", -50, 50, 2)
-        add_spin(tab_icon, tr("settings.dy"), "icon_text_dy", -50, 50, 3)
 
         tk.Label(tab_icon, text=tr("settings.font"), font=("Segoe UI", 10),
-                 anchor="w").grid(row=4, column=0, sticky="w", pady=3)
+                 anchor="w").grid(row=2, column=0, sticky="w", pady=3)
         font_var = tk.StringVar(value=current["icon_font"])
-        ttk.Combobox(tab_icon, textvariable=font_var, width=12,
-                     values=tuple(FONT_FILES), state="readonly").grid(
-            row=4, column=1, padx=(14, 0), pady=3)
+        ttk.Combobox(tab_icon, textvariable=font_var, width=14,
+                     values=tuple(FONT_FAMILIES), state="readonly").grid(
+            row=2, column=1, padx=(14, 0), pady=3)
+
+        tk.Label(tab_icon, text=tr("settings.font_style"),
+                 font=("Segoe UI", 10), anchor="w").grid(
+            row=3, column=0, sticky="w", pady=3)
+        style_var = tk.StringVar(value=current["icon_font_style"])
+        ttk.Combobox(tab_icon, textvariable=style_var, width=14,
+                     values=FONT_STYLES, state="readonly").grid(
+            row=3, column=1, padx=(14, 0), pady=3)
+
+        add_spin(tab_icon, tr("settings.digit_scale"),
+                 "icon_digit_scale", 50, 150, 4)
 
         tk.Label(tab_icon, text=tr("settings.digit_color"),
                  font=("Segoe UI", 10), anchor="w").grid(
             row=5, column=0, sticky="w", pady=3)
         color_var = tk.StringVar(value=current["icon_digit_color"])
-        ttk.Combobox(tab_icon, textvariable=color_var, width=12,
-                     values=("auto", "#ffffff", "#11111b", "#ffd166"),
-                     state="readonly").grid(
+        ttk.Combobox(tab_icon, textvariable=color_var, width=14,
+                     values=COLOR_PRESETS).grid(
             row=5, column=1, padx=(14, 0), pady=3)
+
+        add_spin(tab_icon, tr("settings.dx"), "icon_text_dx", -50, 50, 6)
+        add_spin(tab_icon, tr("settings.dy"), "icon_text_dy", -50, 50, 7)
 
         hc_var = tk.BooleanVar(value=current["high_contrast_icon"])
         ttk.Checkbutton(tab_icon, text=tr("settings.high_contrast"),
                         variable=hc_var).grid(
-            row=6, column=0, columnspan=2, sticky="w", pady=(4, 0))
+            row=8, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         def apply_theme(*_):
             """Theme preset: copy its font/color/contrast into the dialog.
@@ -1438,6 +1754,8 @@ class App:
                 return
             if "icon_font" in preset:
                 font_var.set(preset["icon_font"])
+            if "icon_font_style" in preset:
+                style_var.set(preset["icon_font_style"])
             if "icon_digit_color" in preset:
                 color_var.set(preset["icon_digit_color"])
             if "high_contrast_icon" in preset:
@@ -1453,7 +1771,7 @@ class App:
         preview_lbls = []
         try:
             preview_row = tk.Frame(tab_icon)
-            preview_row.grid(row=7, column=0, columnspan=2,
+            preview_row.grid(row=9, column=0, columnspan=2,
                              sticky="w", pady=(12, 0))
             tk.Label(preview_row, text=tr("settings.preview"),
                      font=("Segoe UI", 10)).pack(side="left", padx=(0, 8))
@@ -1479,13 +1797,15 @@ class App:
                 for key, var in vars_.items():
                     trial[key] = int(var.get())
                 trial["icon_font"] = font_var.get()
+                trial["icon_font_style"] = style_var.get()
                 trial["icon_digit_color"] = color_var.get().strip() or "auto"
                 trial["high_contrast_icon"] = bool(hc_var.get())
                 trial["language"] = lang_var.get()
                 trial = _validate_settings(trial)
             except (ValueError, tk.TclError):
                 return  # half-typed number: keep the previous preview
-            keys = ("icon_size", "icon_font", "icon_digit_color",
+            keys = ("icon_size", "icon_font", "icon_font_style",
+                    "icon_digit_scale", "icon_digit_color",
                     "icon_text_dx", "icon_text_dy", "high_contrast_icon")
             saved = {k: SETTINGS.get(k) for k in keys}
             try:
@@ -1538,28 +1858,37 @@ class App:
                         font=("Segoe UI", 8), fg="#64748b")
         note.pack(anchor="w", pady=(6, 0))
 
-        def on_save():
-            global POLL_SECONDS, KEEP_HISTORY
+        def collect_validated():
+            """Dialog values -> validated settings dict (None on error)."""
             color = color_var.get().strip()
             if color != "auto" and not _is_hex_color(color):
                 messagebox.showerror(tr("mb.title"), tr("settings.bad_color"),
                                      parent=root)
-                return
+                return None
             try:
+                vals = dict(current)
                 for key, var in vars_.items():
-                    current[key] = int(var.get())
-                current["record_history"] = bool(record_var.get())
-                current["high_contrast_icon"] = bool(hc_var.get())
-                current["icon_font"] = font_var.get()
-                current["icon_digit_color"] = color
-                current["icon_theme"] = theme_var.get()
-                current["update_channel"] = channel_var.get()
-                current["language"] = lang_var.get()
+                    vals[key] = int(var.get())
+                vals["record_history"] = bool(record_var.get())
+                vals["high_contrast_icon"] = bool(hc_var.get())
+                vals["icon_font"] = font_var.get()
+                vals["icon_font_style"] = style_var.get()
+                vals["icon_digit_color"] = color
+                vals["icon_theme"] = theme_var.get()
+                vals["update_channel"] = channel_var.get()
+                vals["language"] = lang_var.get()
             except ValueError:
                 messagebox.showerror(tr("mb.title"), tr("settings.int_error"),
                                      parent=root)
-                return
-            validated = _validate_settings(current)
+                return None
+            return _validate_settings(vals)
+
+        def on_apply():
+            """Save + live-apply WITHOUT closing the window. True on success."""
+            global POLL_SECONDS, KEEP_HISTORY
+            validated = collect_validated()
+            if validated is None:
+                return False
             with self._lock:
                 SETTINGS.clear()
                 SETTINGS.update(validated)
@@ -1570,15 +1899,21 @@ class App:
                 messagebox.showerror(
                     tr("mb.title"),
                     tr("settings.save_error", path=CONFIG_FILE), parent=root)
-                return
-            root.destroy()
+                return False
             # apply what cannot wait for the next poll: tray title and the
             # menu (pystray menus must be replaced wholesale on retranslate)
             self._apply_language()
+            return True
+
+        def on_save():
+            if on_apply():
+                root.destroy()
 
         btns = tk.Frame(outer)
         btns.pack(pady=(10, 0))
         tk.Button(btns, text=tr("settings.save"), width=10, command=on_save,
+                  font=("Segoe UI", 10)).pack(side="left", padx=4)
+        tk.Button(btns, text=tr("settings.apply"), width=10, command=on_apply,
                   font=("Segoe UI", 10)).pack(side="left", padx=4)
         tk.Button(btns, text=tr("settings.cancel"), width=10,
                   command=root.destroy,
@@ -2035,6 +2370,7 @@ def main():
         # unattended update: check for a newer release and, if one exists,
         # download, verify and install it with no tray UI (CI/e2e friendly)
         run_unattended_update()
+    cleanup_stale_mei()
     App().run()
 
 

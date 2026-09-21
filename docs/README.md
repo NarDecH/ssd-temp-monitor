@@ -90,8 +90,10 @@
 | ธีมสำเร็จรูป | Classic / Minimal / Mono / Neon / Custom |
 | การตั้งค่า | ค่า |
 |---|---|
-| ฟอนต์ตัวเลข | Auto / Arial / Segoe UI / Tahoma / Verdana |
-| สีตัวเลข | `auto` (ตัดกับพื้นอัตโนมัติ) หรือระบุ `#rrggbb` เอง |
+| ฟอนต์ตัวเลข | **13 ตระกูล** — Segoe UI, Arial, Tahoma, Verdana, Calibri, Candara, Corbel, Franklin Gothic, Georgia, Trebuchet MS, Consolas, Times New Roman, Courier New |
+| สไตล์ตัวเลข | Regular / Bold / Italic / Bold Italic |
+| ขนาดตัวเลข | 50–150 % ของขนาดอัตโนมัติ (เลข 3 หลักยังย่อพอดีเม็ด) |
+| สีตัวเลข | `auto` (ตัดกับพื้นอัตโนมัติ), พรีเซ็ต 8 สี หรือพิมพ์ `#rrggbb` เอง |
 | เลื่อนตัวเลขแกน X / Y | −50..50 px (clamp ไม่ให้เลขหลุดเม็ด) |
 | ขนาดไอคอน | 16–128 px |
 | โหมด high-contrast | เม็ดดำขอบขาวสำหรับ taskbar สีอ่อน |
@@ -108,6 +110,8 @@ record-on-start, **ขนาดไอคอน (16–128 px)**, **โหมด h
 pre-release), **ช่วงเวลาเช็คอัปเดต (5–1440 นาที)** และ multi-disk icons —
 บันทึกลง `%APPDATA%\SSDTempMonitor\config.json` และ**มีผลทันทีทุกค่า**
 (รวมถึงขนาดไอคอนและ polling interval — ไม่ต้องรีสตาร์ท)
+ปุ่ม **บันทึก** = ใช้ค่าแล้วปิดหน้าต่าง, ปุ่ม **ใช้ค่า (Apply)** = ใช้ค่าทันที
+แต่เปิดหน้าต่างค้างไว้ลองค่าอื่นต่อได้
 ลบไฟล์ config เพื่อรีเซ็ตค่าเริ่มต้น
 
 ## Event log

@@ -87,7 +87,9 @@ Saved to `%APPDATA%\SSDTempMonitor\config.json`; changes apply immediately.
 | Update channel | `stable` or `pre-release` (sees `v1.9.0-rc1` tags) |
 | Language | `en` (English) or `th` (ไทย) — applies immediately |
 | Icon size | 16–128 px |
-| Digit font | Auto / Arial / Segoe UI / Tahoma / Verdana |
+| Digit font | 13 Windows families (Segoe UI, Arial, Tahoma, Verdana, Calibri, Candara, Corbel, Franklin Gothic, Georgia, Trebuchet MS, Consolas, Times New Roman, Courier New) |
+| Digit style | Regular / Bold / Italic / Bold Italic |
+| Digit size | 50–150 % of the auto-fit size (3-digit values still shrink to fit) |
 | Digit color | `auto` (contrast-picked) or any `#rrggbb` |
 | Digit offset X / Y | −50..50 px (clamped to stay on the pill) |
 | Theme preset | Classic / Minimal / Mono / Neon / Custom |

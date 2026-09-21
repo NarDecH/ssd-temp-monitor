@@ -1280,8 +1280,10 @@ class TestI18n:
 class TestIconFontColorPosition:
     def test_font_setting_validated(self):
         assert m._validate_settings({"icon_font": "Tahoma"})["icon_font"] == "Tahoma"
-        assert m._validate_settings({"icon_font": "Comic Sans"})["icon_font"] == "auto"
-        assert m._validate_settings({})["icon_font"] == "auto"
+        assert m._validate_settings({"icon_font": "Comic Sans"})["icon_font"] == "Segoe UI"
+        assert m._validate_settings({})["icon_font"] == "Segoe UI"
+        # v1.12.x config migration: the old "auto" value maps to Segoe UI bold
+        assert m._validate_settings({"icon_font": "auto"})["icon_font"] == "Segoe UI"
 
     def test_digit_color_setting_validated(self):
         ok = m._validate_settings({"icon_digit_color": "#ffd166"})
@@ -1453,3 +1455,204 @@ class TestThemes:
         assert "ttk.Notebook" in src
         for key in ("tab.general", "tab.icon", "tab.updates"):
             assert key in src
+
+
+# ---------------------------------------------------------------------------
+# v1.13.0: font families/styles, digit scale, Apply button, update self-test,
+# stale _MEI cleanup
+# ---------------------------------------------------------------------------
+class TestFontFamiliesStyles:
+    def test_family_table_shape(self):
+        for fam, styles in m.FONT_FAMILIES.items():
+            assert set(styles) == set(m.FONT_STYLES), fam
+            for s, (ttf, _tk) in styles.items():
+                assert ttf.endswith(".ttf"), (fam, s)
+
+    def test_offers_13_families(self):
+        assert len(m.FONT_FAMILIES) >= 13  # "เลือกได้มากกว่าเดิม" (เดิม 4+auto)
+
+    def test_resolve_never_returns_missing_file(self):
+        """Any family/style combo must resolve to a ttf that exists here.
+
+        Machines ship different font sets (e.g. no verdanabi.ttf), so the
+        resolver must fall back within the family / to Arial bold.
+        """
+        fonts_dir = os.path.join(os.environ.get("WINDIR", r"C:\Windows"),
+                                 "Fonts")
+        for fam in list(m.FONT_FAMILIES) + ["Bogus Family"]:
+            for style in list(m.FONT_STYLES) + ["weird"]:
+                f, _tk = m._resolve_font_file(fam, style)
+                assert os.path.isfile(os.path.join(fonts_dir, f)), (fam, style, f)
+
+    def test_resolve_font_file_fallbacks(self):
+        f, tk_name = m._resolve_font_file("Segoe UI", "regular")
+        assert f == "segoeui.ttf" and tk_name == "Segoe UI"
+        # unknown family/style -> Arial bold
+        assert m._resolve_font_file("Comic Sans", "bold") == ("arialbd.ttf", "Arial")
+        assert m._resolve_font_file("Arial", "ultra") == ("arialbd.ttf", "Arial")
+
+    def test_styles_render_differently(self):
+        """Italic/bold glyphs differ from regular at the same settings."""
+        pytest.importorskip("PIL")
+        saved = dict(m.SETTINGS)
+        try:
+            m.SETTINGS["icon_font"] = "Georgia"
+            m.SETTINGS["icon_font_style"] = "regular"
+            m._ICON_CACHE.clear()
+            reg = m.make_icon("42", m.GREEN, size=64)
+            m.SETTINGS["icon_font_style"] = "italic"
+            m._ICON_CACHE.clear()
+            ita = m.make_icon("42", m.GREEN, size=64)
+            assert reg.tobytes() != ita.tobytes()
+        finally:
+            m.SETTINGS.clear()
+            m.SETTINGS.update(saved)
+            m._ICON_CACHE.clear()
+
+    def test_scale_changes_digit_height(self):
+        pytest.importorskip("PIL")
+        saved = dict(m.SETTINGS)
+        try:
+            m.SETTINGS["icon_font"] = "Segoe UI"
+            m.SETTINGS["icon_font_style"] = "bold"
+
+            def digit_height(scale):
+                m.SETTINGS["icon_digit_scale"] = scale
+                m._ICON_CACHE.clear()
+                img = m.make_icon("88", m.GREEN, size=128)
+                # digits are the dark (auto-contrast) pixels on the green pill
+                ys = [y for y in range(128) for x in range(128)
+                      if img.getpixel((x, y))[3] > 0
+                      and sum(img.getpixel((x, y))[:3]) < 150]
+                return (max(ys) - min(ys)) if ys else 0
+
+            small = digit_height(60)
+            big = digit_height(140)
+            assert big > small + 10
+        finally:
+            m.SETTINGS.clear()
+            m.SETTINGS.update(saved)
+            m._ICON_CACHE.clear()
+
+    def test_scale_validated(self):
+        assert m._validate_settings({"icon_digit_scale": 999})["icon_digit_scale"] == 150
+        assert m._validate_settings({"icon_digit_scale": 1})["icon_digit_scale"] == 50
+        assert m._validate_settings({"icon_digit_scale": "x"})["icon_digit_scale"] == 100
+        assert m._validate_settings({})["icon_digit_scale"] == 100
+
+    def test_style_validated(self):
+        assert m._validate_settings({"icon_font_style": "italic"})["icon_font_style"] == "italic"
+        assert m._validate_settings({"icon_font_style": "heavy"})["icon_font_style"] == "bold"
+        assert m._validate_settings({})["icon_font_style"] == "bold"
+
+
+class TestColorPresets:
+    def test_presets_valid_hex_or_auto(self):
+        for c in m.COLOR_PRESETS:
+            assert c == "auto" or m._is_hex_color(c), c
+        assert len(m.COLOR_PRESETS) >= 8  # "เลือกได้มากกว่าเดิม" (เดิม 4)
+
+    def test_digit_color_override_rendered(self):
+        pytest.importorskip("PIL")
+        saved = dict(m.SETTINGS)
+        try:
+            m.SETTINGS["icon_digit_color"] = "#38bdf8"
+            m._ICON_CACHE.clear()
+            img = m.make_icon("42", m.GREEN, size=64)
+            cyan = [1 for y in range(64) for x in range(64)
+                    if img.getpixel((x, y))[:3] == (0x38, 0xbd, 0xf8)]
+            assert cyan, "custom digit color not found on the icon"
+        finally:
+            m.SETTINGS.clear()
+            m.SETTINGS.update(saved)
+            m._ICON_CACHE.clear()
+
+
+class TestUpdateSelftest:
+    def test_all_checks_pass(self):
+        ok, (checks, failed) = m.run_update_selftest()
+        assert ok, [c for c in checks if not c[1]]
+        assert len(checks) >= 10
+        assert failed == []
+
+    def test_covers_pipeline_stages(self):
+        ok, (checks, _failed) = m.run_update_selftest()
+        assert ok
+        names = " ".join(n for n, _o, _d in checks)
+        for token in ("version", "asset", "checksum", "shim"):
+            assert token in names, token
+
+    def test_strings_exist_both_languages(self):
+        for key in ("selftest.title", "selftest.pass", "selftest.fail",
+                    "menu.selftest", "settings.apply"):
+            assert key in m.STRINGS["en"] and key in m.STRINGS["th"]
+
+
+class TestStaleMeiCleanup:
+    @staticmethod
+    def _fake_frozen(monkeypatch, tmp_path, own=None):
+        import sys as _sys
+        monkeypatch.setattr(_sys, "frozen", True, raising=False)
+        if own is not None:
+            monkeypatch.setattr(_sys, "_MEIPASS", str(own), raising=False)
+        else:
+            monkeypatch.delattr(_sys, "_MEIPASS", raising=False)
+        monkeypatch.setenv("TEMP", str(tmp_path))
+
+    def _age(self, path, minutes):
+        old = time.time() - minutes * 60
+        os.utime(path, (old, old))
+
+    def test_noop_for_source_runs(self, tmp_path, monkeypatch):
+        # getattr(sys, "frozen") is False under pytest -> must do nothing
+        junk = tmp_path / "_MEI123456"
+        junk.mkdir()
+        self._age(junk, 60)
+        m.cleanup_stale_mei()
+        assert junk.exists()
+
+    def test_removes_stale_dir(self, tmp_path, monkeypatch):
+        junk = tmp_path / "_MEI123456"
+        junk.mkdir()
+        self._age(junk, 60)
+        self._fake_frozen(monkeypatch, tmp_path)
+        m.cleanup_stale_mei()
+        assert not junk.exists()
+
+    def test_keeps_fresh_dir(self, tmp_path, monkeypatch):
+        """A dir younger than the grace period may be starting up: keep it."""
+        fresh = tmp_path / "_MEI000001"
+        fresh.mkdir()
+        self._fake_frozen(monkeypatch, tmp_path)
+        m.cleanup_stale_mei()
+        assert fresh.exists()
+
+    def test_keeps_own_meipass(self, tmp_path, monkeypatch):
+        mine = tmp_path / "_MEI000002"
+        mine.mkdir()
+        self._age(mine, 60)
+        self._fake_frozen(monkeypatch, tmp_path, own=mine)
+        m.cleanup_stale_mei()
+        assert mine.exists()
+
+    def test_keeps_locked_dir(self, tmp_path, monkeypatch):
+        """A dir whose DLL is held open ("running app") must survive."""
+        live = tmp_path / "_MEI000003"
+        live.mkdir()
+        self._age(live, 60)
+        lock = open(os.path.join(live, "python312.dll"), "a")
+        try:
+            self._fake_frozen(monkeypatch, tmp_path)
+            m.cleanup_stale_mei()
+            assert live.exists()   # rename denied -> treated as alive
+            assert not list(tmp_path.glob("*_stale"))
+        finally:
+            lock.close()
+
+    def test_ignores_unrelated_names(self, tmp_path, monkeypatch):
+        keep = tmp_path / "_MEIPASS_backup"
+        keep.mkdir()
+        self._age(keep, 60)
+        self._fake_frozen(monkeypatch, tmp_path)
+        m.cleanup_stale_mei()
+        assert keep.exists()  # not _MEI<digits>: never touched

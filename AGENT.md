@@ -104,7 +104,7 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
 ## การทดสอบ
 
 - **รัน pytest ทุกครั้งที่แก้ logic** — `python -m pytest tests/ -v`
-  (167 เคส รันได้โดยไม่ต้องมี admin/PowerShell/GUI; PowerShell ถูก
+  (186 เคส รันได้โดยไม่ต้องมี admin/PowerShell/GUI; PowerShell ถูก
   monkeypatch ที่ `_run_powershell` เสมอ)
 - **การเทสพิกเซลของไอคอน** — ต้องกรอง `alpha > 0` ก่อนเสมอ (มุมโค้งนอก
   เม็ดเป็น (0,0,0,0) ที่ดูเหมือนเลขดำได้) และระวังว่าฟอนต์ถูกย่อให้เต็ม
@@ -181,6 +181,19 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   (1) pin `pyinstaller<6.22` ใน workflows/build_exe.bat ทุกจุด
   (2) shim relaunch ผ่าน `explorer.exe` (แอปใหม่ไม่มี parent ที่จะตาย)
   ห้าม pin ขึ้นอีกจนกว่าจะทดสอบ self-update จริงแล้ว
+- **อย่าสมมติ API ของไลบรารีภายนอกโดยไม่ verify** — ฟีเจอร์เก็บกวาด `_MEI`
+  (v1.13.0) รอบแรกเขียนอ้าง marker file `PYINSTAINER_ONFILE_PARENT` ที่
+  **ไม่มีอยู่จริงใน PyInstaller** (ค้นเว็บยืนยัน) ก่อนเผยแพร่ต้องเปลี่ยนเป็น
+  เทคนิคที่พึ่งพฤติกรรม OS ล้วน ๆ: โฟลเดอร์ที่ DLL ถูก map โดยโปรเซสมีชีวิต
+  จะ **rename ไม่ได้** (sharing violation) → rename สำเร็จ = เจ้าของตายแล้ว
+  จึงลบได้ปลอดภัย (รวมถึงต้องเว้นโฟลเดอร์ที่เพิ่งสร้าง < 60 วิ และ
+  `sys._MEIPASS` ของตัวเอง) เวลาต้องการ "ตรวจว่าโปรเซสยังใช้ไฟล์อยู่ไหม"
+  ให้คิดที่ file-locking ของ OS ก่อนเสมอ ไม่ใช่ marker ที่เราสมมติ
+- **ทดสอบเทียบกับ semantic จริงของโค้ด ไม่ใช่ความจำ** — self-test รอบแรก
+  ใช้สมมติฐานผิด 3 จุด: `_parse_version("1.9.0-rc1")` ตัด suffix ทิ้ง
+  (จึงไม่ใหม่กว่า 1.9.0), `select_release_asset` ต้องมี `state: uploaded`
+  ใน asset และ version ที่คืนเป็น tag เต็มพร้อม `v` — เขียนเทส/self-test
+  ทีไร ให้รัน probe ยืนยันพฤติกรรมจริงก่อนเขียน assertion
 
 ## สไตล์โค้ด
 

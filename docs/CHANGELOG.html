@@ -67,6 +67,27 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
+  <h2><span class="ver-badge">v1.13.0</span> <span class="date">22 กันยายน 2026</span></h2>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>➕ <strong>ปุ่ม Apply</strong> — บันทึกและใช้ค่าทันทีโดยไม่ปิดหน้าต่าง Settings</li>
+    <li>🔠 <strong>ฟอนต์ตัวเลข 13 ตระกูล</strong> + fallback อัตโนมัติถ้าเครื่องขาดไฟล์ฟอนต์</li>
+    <li>🅰️ <strong>สไตล์ตัวเลข</strong> Regular / Bold / Italic / Bold Italic</li>
+    <li>📏 <strong>ขนาดตัวเลข 50–150 %</strong> ของขนาดอัตโนมัติ (เลข 3 หลักยังพอดีเม็ด)</li>
+    <li>🎨 <strong>พรีเซ็ตสี 8 ค่า + พิมพ์ #rrggbb เองได้</strong></li>
+    <li>🧪 <strong>เมนูทดสอบระบบอัปเดตด้วยตัวเอง</strong> — 12 เช็คจำลองวงจรอัปเดต
+        (เวอร์ชัน / release / checksum / shim) สรุปผลเป็น dialog เดียว</li>
+    <li>🧹 <strong>เก็บกวาดโฟลเดอร์ <code>_MEI</code> ค้าง</strong> ตอนเปิดโปรแกรม —
+        rename-probe ยืนยันว่าเจ้าของโฟลเดอร์ตายแล้วก่อนลบเสมอ</li>
+  </ul>
+
+  <h3><span class="pill chg-pill">Changed</span></h3>
+  <ul>
+    <li>🔄 config เดิม <code>icon_font: "auto"</code> → <code>"Segoe UI"</code> + bold
+        (ภาพไอคอนเหมือนเดิม) · pytest <strong>186 เคส</strong> (+19)</li>
+  </ul>
+
   <h2><span class="ver-badge">v1.12.1</span> <span class="date">22 กันยายน 2026</span></h2>
 
   <h3><span class="pill fix-pill">Fixed</span></h3>
