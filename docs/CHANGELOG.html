@@ -67,6 +67,16 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
+  <h2><span class="ver-badge">v1.12.1</span> <span class="date">22 กันยายน 2026</span></h2>
+
+  <h3><span class="pill fix-pill">Fixed</span></h3>
+  <ul>
+    <li>💥 <strong>Dialog "Failed to load Python DLL …_MEIxxxxx"</strong> — shim
+        ล้าง <code>_MEIPASS2</code>/<code>_PYI_*</code> ก่อน installer/relaunch
+        (แอปที่ได้ env ตัวเก่าจะข้ามการแตกไฟล์แล้วหา DLL ไม่เจอ)</li>
+    <li>🧪 เทสไอคอน flaky — fixture แยก global state ทุกเคส</li>
+  </ul>
+
   <h2><span class="ver-badge">v1.12.0</span> <span class="date">22 กันยายน 2026</span></h2>
 
   <h3><span class="pill fix-pill">Fixed</span></h3>

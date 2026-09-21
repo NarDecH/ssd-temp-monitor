@@ -62,6 +62,22 @@ def app():
     return a
 
 
+@pytest.fixture(autouse=True)
+def _clean_global_state():
+    """Isolate SETTINGS and the icon cache around every test.
+
+    make_icon() reads SETTINGS directly and caches by a key that includes
+    the settings - without this fixture a test that leaks e.g.
+    icon_digit_color makes later icon tests flaky depending on order.
+    """
+    saved = dict(m.SETTINGS)
+    m._ICON_CACHE.clear()
+    yield
+    m.SETTINGS.clear()
+    m.SETTINGS.update(saved)
+    m._ICON_CACHE.clear()
+
+
 @pytest.fixture
 def history_file(tmp_path, monkeypatch):
     f = tmp_path / "hist.csv"

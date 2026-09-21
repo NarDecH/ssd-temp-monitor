@@ -3,6 +3,20 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.12.1] — 2026-09-22
+
+### Fixed
+
+- 💥 **Dialog "Failed to load Python DLL ..._MEIxxxxx\\python3xx.dll"** —
+  กรณีพี่น้องกับปัญหา parent-guard ของ 6.22: แอปที่ถูก relaunch ถ้าได้รับ
+  ตัวแปรแวดล้อม `_MEIPASS2` ตัวเก่าจะ**ข้ามการแตกไฟล์** แล้วไปหา DLL ใน
+  โฟลเดอร์ชั่วคราวของ updater ที่ถูกลบไปแล้ว shim ตอนนี้**ล้างตัวแปร
+  `_MEIPASS2` / `_PYI_*` ทั้งชุดก่อน** เรียก installer/relaunch
+  (เครื่องที่ยังเห็น dialog นี้ตอนอัปเดตจาก v1.12.0 = ตัว shim เก่า —
+  อัปเดตถึง v1.12.1 แล้วจะไม่เกิดอีก)
+- 🧪 เทสไอคอน flaky (global `SETTINGS` รั่วข้ามเทส) — เพิ่ม autouse
+  fixture ที่ snapshot/restore `SETTINGS` + `_ICON_CACHE` ทุกเคส
+
 ## [1.12.0] — 2026-09-22
 
 ### Fixed

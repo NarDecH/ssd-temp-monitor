@@ -41,7 +41,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.12.0"         # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.12.1"         # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -784,6 +784,15 @@ def build_update_shim(installer_path, app_exe_path=None, restart_path=None):
             "@echo off\r\n"
             "rem SSD Temperature Monitor update shim: wait for the app to\r\n"
             "rem exit, then run the installer (AppMutex must be free).\r\n"
+            "rem Clear PyInstaller onefile env vars: a relaunched app that\r\n"
+            "rem inherits _MEIPASS2 would skip extraction and reuse THIS\r\n"
+            "rem shim's already-deleted temp dir -> 'Failed to load Python\r\n"
+            "rem DLL ... _MEIxxxx\\python3xx.dll'\r\n"
+            'set "_MEIPASS2="\r\n'
+            'set "_PYI_APPLICATION_HOME_DIR="\r\n'
+            'set "_PYI_ARCHIVE_FILE="\r\n'
+            'set "_PYI_PARENT_PROCESS_LEVEL="\r\n'
+            'set "_PYI_SPLASH_IPC="\r\n'
             ":wait\r\n"
             # absolute paths: never resolve `find` to GNU find from a
             # Git-bash PATH, which would silently break the pipeline
