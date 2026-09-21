@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SSD Temperature Tray Monitor — คู่มือผู้ใช้</title>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8;
+    --green: #22c55e; --orange: #f59e0b; --red: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", "Noto Sans Thai", Tahoma, sans-serif;
+    line-height: 1.7;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 24px 20px 64px; }
+  .banner { width: 100%; border-radius: 16px; display: block; margin: 12px 0 8px; }
+  figure { margin: 20px 0; text-align: center; }
+  figure img, figure svg { max-width: 100%; height: auto; }
+  figcaption { font-size: 0.85rem; color: var(--muted); margin-top: 6px; }
+  h1 { font-size: 1.9rem; margin: 20px 0 4px; }
+  h2 { font-size: 1.3rem; margin-top: 36px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  h2 .en { color: var(--muted); font-size: 0.85rem; font-weight: 400; margin-left: 8px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: #0b1220; border: 1px solid var(--border); border-radius: 6px;
+    padding: 1px 7px; font-family: Consolas, "Cascadia Mono", monospace; font-size: 0.9em;
+  }
+  pre {
+    background: #0b1220; border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 18px; overflow-x: auto;
+  }
+  pre code { border: none; padding: 0; background: none; }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
+  .badge {
+    font-size: 0.78rem; padding: 3px 12px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+  }
+  .badge.ok { color: #86efac; border-color: #14532d; }
+  .badge.warn { color: #fcd34d; border-color: #78350f; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 20px; margin: 16px 0;
+  }
+  .card.tip { border-left: 4px solid var(--accent); }
+  .card.warn { border-left: 4px solid var(--orange); }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 0.95rem; }
+  th, td { border: 1px solid var(--border); padding: 8px 14px; text-align: left; }
+  th { background: var(--surface); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 16px 0; }
+  .feature { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; }
+  .feature b { color: #fff; }
+  ul { padding-left: 22px; }
+  .legend { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
+  .dot { width: 14px; height: 14px; border-radius: 4px; display: inline-block; margin-right: 6px; vertical-align: -2px; }
+  .footer { margin-top: 48px; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--border); padding-top: 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <img class="banner" src="img/banner.svg" alt="SSD Temperature Tray Monitor">
+  <h1>SSD Temperature Tray Monitor</h1>
+  <div class="badges">
+    <span class="badge">Windows 10 / 11</span>
+    <span class="badge">Python ไฟล์เดียว</span>
+    <span class="badge ok">v1.1.0</span>
+    <span class="badge warn">ต้องการสิทธิ์ Admin</span>
+  </div>
+  <p>แอปเล็ก ๆ ที่แสดง<strong>อุณหภูมิ SSD</strong> ไว้บน system tray icon ของ Windows
+  แบบเรียลไทม์ (อัปเดตทุก 1 วินาที) พร้อมสีเตือนเมื่อดิสก์ร้อนเกินไป</p>
+
+  <h2>คุณสมบัติ <span class="en">Features</span></h2>
+  <div class="grid">
+    <div class="feature">🔢 <b>ไอคอนแสดงตัวเลข</b><br>อุณหภูมิของ SSD ที่ร้อนที่สุด อัปเดตทุก 1 วินาที</div>
+    <div class="feature">💬 <b>Tooltip ครบทุกดิสก์</b><br>ชี้เมาส์ที่ไอคอนเพื่อดูอุณหภูมิแยกตามดิสก์</div>
+    <div class="feature">🛡️ <b>UAC อัตโนมัติ</b><br>ขอสิทธิ์ Administrator เองตอนเปิดโปรแกรม</div>
+    <div class="feature">📈 <b>กราฟ real-time</b><br>ย้อนหลัง 30 นาที วาดใหม่ทุกวินาที</div>
+    <div class="feature">🔔 <b>แจ้งเตือนอุณหภูมิเกิน</b><br>≥ 65 °C ติดกัน 30 วิ + cooldown 5 นาที</div>
+    <div class="feature">⚙️ <b>หน้า Settings</b><br>ปรับ polling/การเตือน/history เก็บลง config.json</div>
+    <div class="feature">📦 <b>มี .exe สำเร็จรูป</b><br>ผู้ใช้ไม่ต้องติดตั้ง Python</div>
+    <div class="feature">🔌 <b>ไม่สน USB reader</b><br>แสดงเฉพาะ SSD ภายใน — ค่าถูกต้องเสมอ</div>
+  </div>
+
+  <div class="legend">
+    <span><span class="dot" style="background:#22c55e"></span>เขียว ≤ 50 °C</span>
+    <span><span class="dot" style="background:#f59e0b"></span>ส้ม 51–64 °C</span>
+    <span><span class="dot" style="background:#ef4444"></span>แดง ≥ 65 °C</span>
+  </div>
+
+  <figure>
+    <img src="img/tray-icons.svg" alt="ตัวอย่างไอคอนบน system tray">
+    <figcaption>ตัวอย่างไอคอนในแต่ละระดับอุณหภูมิ</figcaption>
+  </figure>
+
+  <h2>ความต้องการ <span class="en">Requirements</span></h2>
+  <table>
+    <tr><th>รายการ</th><th>รายละเอียด</th></tr>
+    <tr><td>ระบบปฏิบัติการ</td><td>Windows 10 / 11</td></tr>
+    <tr><td>Python</td><td>3.8 ขึ้นไป</td></tr>
+    <tr><td>Libraries</td><td><code>pip install pystray Pillow</code></td></tr>
+    <tr><td>สิทธิ์</td><td>Administrator (แอปขอเองผ่าน UAC)</td></tr>
+  </table>
+
+  <h2>วิธีใช้งาน <span class="en">Usage</span></h2>
+  <p>ง่ายที่สุด: ดับเบิลคลิก <code>dist\ssd_temp_monitor.exe</code>
+  (หรือถ้ามี Python: <code>start_ssd_temp_monitor.bat</code> หรือ <code>pyw ssd_temp_tray.py</code>)</p>
+  <p>รอบแรกจะมีหน้าต่าง UAC ขึ้นมา กด <strong>Yes</strong> แล้วไอคอนอุณหภูมิจะปรากฏ
+  ที่มุมขวาล่างของ taskbar — คลิกขวาที่ไอคอนเพื่อเปิด <em>Show details</em>,
+  <em>Show temperature graph</em>, <em>Show all disks (debug)</em>,
+  <em>Refresh now</em>, <em>Record history</em> หรือ <em>Exit</em></p>
+
+  <div class="card tip">
+    <strong>📈 บันทึกประวัติ:</strong> เปิด <em>Record history</em> ในเมนู
+    โปรแกรมจะเก็บอุณหภูมิลง <code>%TEMP%\ssd_temp_history.csv</code>
+    (30 นาทีล่าสุด) แล้วเปิด <em>Show temperature graph</em> เพื่อดูกราฟแบบ
+    <strong>real-time</strong> พร้อม min/max/avg — หรือตั้ง
+    <code>SSD_TEMP_RECORD_HISTORY=1</code> ให้เปิดตลอด
+  </div>
+
+  <div class="card warn">
+    <strong>🔔 การแจ้งเตือน:</strong> เมื่อดิสก์ร้อน ≥ 65 °C <strong>ติดต่อกัน 30 วินาที</strong>
+    จะได้รับ notification ของ Windows (กันตัวเลขกระโดดหลอก)
+    เตือนซ้ำไม่ถี่กว่าทุก 5 นาที — อุณหภูมิลดลงแล้วกลับมาร้อนใหม่
+    จะเริ่มนับใหม่เสมอ · เปิดโปรแกรมซ้ำไม่ได้ (รันได้ครั้งละ 1 อินสแตนซ์)
+  </div>
+
+  <div class="card tip">
+    <strong>⚙️ Settings:</strong> ในเมนูคลิกขวา — ปรับ polling interval (1–60 s),
+    alert threshold (40–90 °C), sustain/cooldown, ความยาว history (5–240 นาที)
+    เก็บลง <code>%APPDATA%\SSDTempMonitor\config.json</code> มีผลทันที
+    (poll interval ใช้หลังรีสตาร์ท) · ลบไฟล์เพื่อรีเซ็ต
+  </div>
+
+  <div class="card tip">
+    <strong>💡 ตั้งให้รันตอนเปิดเครื่อง:</strong> กด <code>Win+R</code> พิมพ์
+    <code>shell:startup</code> แล้ววาง shortcut ของ <code>start_ssd_temp_monitor.bat</code>
+    ไว้ในโฟลเดอร์นั้น (Windows จะถาม UAC ทุกครั้งตอนล็อกอิน)
+  </div>
+
+  <h2>ทำไมไอคอนถึงขึ้น "--"?</h2>
+  <div class="card warn">
+    ไอคอนสีเทา <code>--</code> หมายถึงไม่พบข้อมูลอุณหภูมิ สาเหตุที่พบบ่อย:
+    <ul>
+      <li>แอปไม่ได้รันในสิทธิ์ Administrator</li>
+      <li>ไม่มี SSD ภายในเครื่อง (เช่น มีแต่ HDD)</li>
+      <li>SSD รุ่นนั้นไม่รายงาน temperature counter ผ่าน <code>Get-StorageReliabilityCounter</code></li>
+    </ul>
+    <strong>USB card reader จะไม่ถูกนับ</strong> — เป็นการตั้งใจออกแบบ
+    เพราะ bridge chip ของอุปกรณ์ USB มักรายงานค่าอุณหภูมิที่ผิดพลาด
+    อ่านเหตุผลฉบับเต็มใน <a href="RESEARCH.html">RESEARCH.html</a>
+  </div>
+
+  <h2>เอกสารอื่น ๆ <span class="en">Docs</span></h2>
+  <ul>
+    <li><a href="RESEARCH.html">RESEARCH.html</a> — วิเคราะห์ปัญหา USB reader และวิธีแก้</li>
+    <li><a href="CHANGELOG.html">CHANGELOG.html</a> — ประวัติการเปลี่ยนแปลง</li>
+    <li><a href="../README.md">README.md</a> — คู่มือภาษาอังกฤษ (ไฟล์ markdown ที่ root)</li>
+  </ul>
+
+  <div class="footer">SSD Temperature Tray Monitor · เอกสารฉบับภาษาไทย · อัปเดต 2026-09-21</div>
+</div>
+</body>
+</html>

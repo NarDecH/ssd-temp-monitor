@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Research — ปัญหาอ่านอุณหภูมิผิดพลาดจาก USB Card Reader</title>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8;
+    --green: #22c55e; --orange: #f59e0b; --red: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", "Noto Sans Thai", Tahoma, sans-serif;
+    line-height: 1.7;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 24px 20px 64px; }
+  .banner { width: 100%; border-radius: 16px; display: block; margin: 12px 0 8px; }
+  figure { margin: 20px 0; text-align: center; }
+  figure img, figure svg { max-width: 100%; height: auto; }
+  figcaption { font-size: 0.85rem; color: var(--muted); margin-top: 6px; }
+  h1 { font-size: 1.8rem; margin: 20px 0 4px; }
+  h2 { font-size: 1.3rem; margin-top: 36px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  h2 .en { color: var(--muted); font-size: 0.85rem; font-weight: 400; margin-left: 8px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: #0b1220; border: 1px solid var(--border); border-radius: 6px;
+    padding: 1px 7px; font-family: Consolas, "Cascadia Mono", monospace; font-size: 0.9em;
+  }
+  pre {
+    background: #0b1220; border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 18px; overflow-x: auto;
+  }
+  pre code { border: none; padding: 0; background: none; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 20px; margin: 16px 0;
+  }
+  .card.bad { border-left: 4px solid var(--red); }
+  .card.good { border-left: 4px solid var(--green); }
+  .card.info { border-left: 4px solid var(--accent); }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 0.95rem; }
+  th, td { border: 1px solid var(--border); padding: 8px 14px; text-align: left; }
+  th { background: var(--surface); }
+  .tag { display: inline-block; padding: 1px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 600; }
+  .tag.real { background: #14532d; color: #86efac; }
+  .tag.usb { background: #7f1d1d; color: #fca5a5; }
+  .footer { margin-top: 48px; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--border); padding-top: 16px; }
+  .crumb { font-size: 0.85rem; color: var(--muted); }
+  del { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="crumb"><a href="README.html">← คู่มือผู้ใช้</a> · Research</div>
+  <img class="banner" src="img/banner.svg" alt="SSD Temperature Tray Monitor">
+  <h1>ปัญหาอ่านอุณหภูมิผิดพลาดเมื่อเสียบ USB Card Reader</h1>
+  <p>เอกสารวิเคราะห์สาเหตุและวิธีแก้ของบั๊กหลักประจำเวอร์ชัน 1.1.0</p>
+
+  <h2>อาการ <span class="en">Symptoms</span></h2>
+  <div class="card bad">
+    เมื่อเสียบ <strong>USB card reader / external NVMe enclosure</strong> เข้ากับเครื่อง:
+    <ul>
+      <li>ไอคอน tray แสดงอุณหภูมิที่<strong>ผิดจากความจริง</strong></li>
+      <li>หรือแสดงตัวเลขแปลก ๆ เช่น 0 °C หรือค่ามหึมา</li>
+      <li>หรือไอคอนค้าง <code>--</code> ทั้งที่ SSD ภายในทำงานปกติ</li>
+    </ul>
+  </div>
+
+  <h2>หลักฐานจากเครื่องจริง <span class="en">Evidence</span></h2>
+  <p>ผลจาก <code>Get-PhysicalDisk</code> บนเครื่องที่เกิดปัญหา:</p>
+  <table>
+    <tr><th>Model</th><th>MediaType</th><th>BusType</th><th>คืออะไร</th></tr>
+    <tr><td>TS1TMTE220S</td><td>SSD</td><td>NVMe</td><td><span class="tag real">SSD ภายในตัวจริง</span></td></tr>
+    <tr><td>ASM236X NVME ASMT</td><td><strong>SSD</strong></td><td><strong>USB</strong></td><td><span class="tag usb">Card reader / enclosure</span></td></tr>
+  </table>
+  <div class="card info">
+    จุดสำคัญ: <strong>Windows รายงาน USB enclosure หลายรุ่นเป็น <code>MediaType = 'SSD'</code></strong>
+    เพราะ bridge chip (เช่น ASMedia ASM236X) โฆษณาตัวเองกับระบบแบบนั้น —
+    ทั้งที่เป็นอุปกรณ์ภายนอกที่ต่อผ่าน USB
+  </div>
+
+  <h2>สาเหตุ <span class="en">Root Cause</span></h2>
+  <p>โค้ดเดิมกรองดิสก์แค่เงื่อนไขเดียว:</p>
+  <pre><code>Get-PhysicalDisk | Where-Object MediaType -eq 'SSD'</code></pre>
+  <p>USB reader จึงหลุดเข้ามาในการคำนวณด้วย แล้วเกิดปัญหา 2 ชั้น:</p>
+
+  <figure>
+    <img src="img/problem.svg" alt="แผนภาพสาเหตุของบั๊ก">
+    <figcaption>USB reader หลุดเงื่อนไข MediaType เข้ามาร่วมคำนวณกับ SSD จริง</figcaption>
+  </figure>
+
+  <div class="card bad">
+    <strong>ชั้นที่ 1 — ค่าจาก bridge chip ไม่น่าเชื่อถือ</strong><br>
+    <code>Get-StorageReliabilityCounter</code> กับดิสก์ USB มักได้ค่า
+    <code>Temperature</code> เป็น<strong>ค่าว่าง, 0 หรือ 65535</strong> —
+    bridge chip ส่วนใหญ่ไม่ได้ส่งต่อ SMART temperature จริง
+    โปรแกรมจึงเอาค่ามั่วไปแสดง หรือเอาไป <code>max()</code> รวมกับ SSD จริง
+    ทำให้ไอคอนโชว์ตัวเลขผิดทั้งที่ SSD จริงปกติ
+  </div>
+
+  <div class="card bad">
+    <strong>ชั้นที่ 2 (บั๊กแฝง) — <code>int()</code> กับค่าว่างทำเธรดล่ม</strong><br>
+    โค้ดเดิม: <code>temp = int(temp) if temp is not None else None</code><br>
+    เมื่อ PowerShell ส่ง temp มาเป็น<strong>สตริงว่าง</strong> <code>""</code>
+    (พบบ่อยกับอุปกรณ์ USB) เงื่อนไข <code>is not None</code> ผ่าน แล้ว
+    <code>int("")</code> ยก <code>ValueError</code> — exception เกิดในเธรด poll
+    พื้นหลัง ทำให้<strong>เธรดอัปเดตตายเงียบ ๆ</strong> ไอคอนค้างค่าเดิมตลอดไป
+  </div>
+
+  <h2>วิธีแก้ <span class="en">The Fix</span></h2>
+  <figure>
+    <img src="img/fix.svg" alt="แผนภาพวิธีแก้">
+    <figcaption>กรอง BusType ตั้งแต่ต้นทาง + sanity check ค่าก่อนแสดงผล</figcaption>
+  </figure>
+
+  <div class="card good">
+    <strong>1) กรองด้วย BusType ในฝั่ง PowerShell</strong>
+<pre><code>Get-PhysicalDisk | Where-Object {
+    $_.MediaType -eq 'SSD' -and $_.BusType -ne 'USB'
+}</code></pre>
+    ดิสก์ที่ต่อผ่าน USB ทุกชนิด (card reader, enclosure, adapter) ถูกตัดออก
+    ตั้งแต่ต้นทาง ไม่ว่า bridge chip จะโฆษณา MediaType ว่าอะไร
+  </div>
+
+  <div class="card good">
+    <strong>2) Sanity check ในฝั่ง Python</strong>
+<pre><code>try:
+    temp = int(raw) if raw not in (None, "") else None
+except (TypeError, ValueError):
+    temp = None
+if temp is not None and not -20 &lt;= temp &lt;= 100:
+    temp = None   # ค่านอกช่วง = ขยะจาก bridge chip</code></pre>
+    กัน <code>None</code> <strong>และ</strong>สตริงว่างก่อนแปลง → เธรดไม่ล่ม ·
+    อุณหภูมิ SMART ของ SSD จริงอยู่ในช่วง -20..100 °C เสมอ
+    (threshold วิกฤตของ SSD ส่วนใหญ่ ~70–85 °C) — ค่านอกช่วงแสดง n/a แทน
+  </div>
+
+  <h2>ทำไมไม่ใช้วิธีอื่น <span class="en">Alternatives Considered</span></h2>
+  <table>
+    <tr><th>ทางเลือก</th><th>ทำไมไม่เลือก</th></tr>
+    <tr><td>กรองด้วย <code>DeviceId</code> ตายตัว</td><td>หมายเลขดิสก์เปลี่ยนตามการเสียบ/ถอดอุปกรณ์</td></tr>
+    <tr><td>Blacklist ชื่อรุ่น (เช่น "ASM236X")</td><td>มี bridge chip อีกหลายสิบรุ่น ไล่ตามไม่ไหว</td></tr>
+    <tr><td>อ่าน SMART ตรง ๆ ด้วย WinAPI</td><td>ต้องเขียน driver ioctl เอง ซับซ้อนเกินจำเป็น</td></tr>
+    <tr><td>Smartctl (smartmontools)</td><td>ต้องติดตั้งโปรแกรมเพิ่ม ขัดกับคอนเซ็ปต์ไฟล์เดียว</td></tr>
+  </table>
+
+  <h2>การค้นครั้งที่ 2 — USB bridge ทำให้การอ่านค้าง 42 วินาที</h2>
+  <p>การวัดเวลาแบบ elevated (รันต่อดิสก์) ให้ผลที่น่าตกใจ:</p>
+  <table>
+    <tr><th>ดิสก์</th><th>เวลาที่ <code>Get-StorageReliabilityCounter</code> ใช้</th><th>temp ที่ได้</th></tr>
+    <tr><td>TS1TMTE220S [NVMe]</td><td>0.1 s</td><td><strong style="color:#86efac">36 °C</strong> (ถูกต้อง)</td></tr>
+    <tr><td>ASM236X [USB]</td><td><strong style="color:#fca5a5">42.1 s</strong> (แทบค้าง)</td><td>0 (ค่ามั่ว)</td></tr>
+  </table>
+  <div class="card bad">
+    Bridge chip USB ไม่ได้แค่รายงานค่าผิด แต่<strong>บล็อกการอ่าน counter นาน ~42 วินาที</strong>
+    — query เดิมที่อ่าน counter ของทุกดิสก์จึงชน timeout 30 s และคืนค่าว่างทั้งหมด
+    (และทำให้เธรด poll ค้างเป็นรอบ ๆ ด้วย)
+  </div>
+  <div class="card good">
+    <strong>วิธีแก้รอบสอง — แยก 2 query, กรองก่อนอ่าน</strong>
+    <ul>
+      <li><code>PS_TEMPS</code> (tray): กรอง USB เสร็จ<strong>ก่อน</strong>อ่าน counter → ~1 s</li>
+      <li><code>PS_LIST</code> (debug): รายชื่อทุกดิสก์แบบไม่อ่าน counter (~1 s เสมอ)
+          แล้ว merge temp ตามชื่อรุ่น — USB แสดง n/a แต่เปิดหน้าต่างได้ทันที</li>
+    </ul>
+    <em>บทเรียน: ตำแหน่งของ filter สำคัญเท่ากับตัว filter เอง ใน pipeline ที่มี
+    command ที่อาจค้าง — ต้องกรองตัวที่มีปัญหาออกก่อนถึงขั้นที่แพงที่สุด</em>
+  </div>
+
+  <h2>ข้อจำกัด <span class="en">Limitations</span></h2>
+  <div class="card info">
+    <ul>
+      <li>External enclosure ที่<strong>อ่าน temp ได้จริง</strong> (เช่น บางรุ่นผ่าน Thunderbolt)
+          จะไม่ถูกแสดง — แลกกับความถูกต้องของดิสก์ภายใน</li>
+      <li>ถ้า SSD ภายในโดน Windows ติดป้าย BusType เป็น USB ในทางกลับกัน
+          จะต้องเพิ่ม whitelist — ยังไม่พบกรณีนี้ในทางปฏิบัติ</li>
+    </ul>
+  </div>
+
+  <h2>ทดสอบด้วยตัวเอง <span class="en">Reproduce / Verify</span></h2>
+<pre><code># ดูว่าเครื่องเรามีดิสก์อะไร BusType อะไรบ้าง
+Get-PhysicalDisk | Select-Object Model, MediaType, BusType</code></pre>
+  <p>เสียบ/ถอด USB reader แล้วรันซ้ำ จะเห็นว่าดิสก์ USB มี <code>BusType = USB</code>
+  เสมอ — ซึ่งจะถูกกรองออกโดย logic ใหม่ใน <code>read_temps()</code></p>
+
+  <div class="footer">
+    SSD Temperature Tray Monitor · Research v1.1.0 · 2026-09-21 ·
+    <a href="README.html">คู่มือผู้ใช้</a> · <a href="CHANGELOG.html">Changelog</a>
+  </div>
+</div>
+</body>
+</html>

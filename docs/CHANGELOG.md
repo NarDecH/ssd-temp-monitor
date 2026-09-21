@@ -1,0 +1,151 @@
+# Changelog
+
+รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
+เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
+
+## [1.5.0] — 2026-09-21
+
+### Added
+
+- 💺 **ไอคอนแยกต่อดิสก์** — เครื่องที่มี NVMe/SATA SSD หลายตัว จะมี tray icon
+  เพิ่มโดยอัตโนมัติ ดิสก์ละ 1 ไอคอน (ไอคอนหลักโชว์ดิสก์ที่ร้อนที่สุดตามเดิม)
+  ไอคอนถูกเพิ่ม/ลบตามการเสียบ/ถอดดิสก์ ปิดได้ด้วย
+  `"multi_disk_icons": false` ใน config.json
+- 🧪 **CI ทดสอบ installer จริง** — job `installer-test` ติดตั้งแบบ silent,
+  ตรวจไฟล์ใน Program Files, ทดสอบ duplicate instance (exit code 2),
+  และถอนติดตั้ง ทุก push
+- 🚀 **Release automation** — push tag `v*` เข้าสู่งาน build + smoke test
+  แล้วสร้าง GitHub Release อัตโนมัติพร้อมแนบ exe (portable) และ installer
+
+### Changed
+
+- pytest suite เพิ่มเป็น 79 เคส (ต่อดิสก์ lifecycle 4 เคส)
+
+## [1.4.0] — 2026-09-21
+
+### Fixed — หน้าต่าง History ปิดไม่ได้ / tray ค้างตอน Exit
+
+- **สาเหตุ:** หน้าต่างกราฟรัน `mainloop()` บนเธรดของเมนู pystray
+  (ต่างจากหน้าต่างอื่นที่ผ่าน `_spawn_once`) ทำให้ tray ถูกบล็อก —
+  กด Close ไม่ตอบสนอง และ Exit ค้างตาม บวกการเรียก tk method
+  ข้ามเธรดตอนเปิดซ้ำ (`deiconify/lift`) ซึ่งทำให้ tk interpreter พัง
+- **วิธีแก้:** กราฟผ่าน `_spawn_once` เหมือนหน้าต่างอื่น (เธรดของตัวเอง),
+  เปิดซ้ำ = ยกหน้าต่างเดิมด้วย Win32 (`FindWindowW`/`SetForegroundWindow`)
+  แทน tk, และการออกจากโปรแกรมเปลี่ยนเป็น "ตั้งธง `_shutdown_requested`
+  แล้วรอเธรดกราฟปิดตัวเอง" (timeout 3 วินาที กันค้าง) — ไม่มี tk call
+  ข้ามเธรดอีกต่อไป
+- **ทดสอบการออกจากโปรแกรม:** E2E จำลองกด Exit ขณะกราฟเปิด —
+  icon.run() คืนค่าใน 2.6 วินาที, history flush, โปรเซสจบสนิท
+  พร้อม unit test ครอบ quit() ทุกเส้นทาง
+
+### Added
+
+- ⚙️ **หน้า Settings** (เมนู → Settings...) — แก้ polling interval,
+  alert threshold/sustain/cooldown, ความยาว history และ record-on-start
+  บันทึกลง `%APPDATA%\SSDTempMonitor\config.json` มีผลทันที
+  (ยกเว้น poll interval ที่ใช้หลังรีสตาร์ท) ค่าผิดช่วงถูก clamp อัตโนมัติ
+- 🤖 **GitHub Actions CI** (`.github/workflows/ci.yml`) — รัน pytest
+  บน windows-latest แล้ว build exe + installer เป็น artifacts ทุก push
+- 🧪 **ทดสอบติดตั้ง/ถอนติดตั้ง/single-instance จริง**: installer ติดตั้งลง
+  Program Files (แก้ `ArchitecturesInstallIn64BitMode` — เดิมหลุดไป x86),
+  uninstall/reinstall ผ่าน, mutex ถูกยืนยันด้วย external probe
+  (held ขณะรัน = error 183, ปล่อยหลังปิด = 0) และอินสแตนซ์ซ้ำ
+  **ออกด้วย exit code 2** — มนุษย์เห็น MessageBox, ระบบอัตโนมัติใช้
+  flag `--duplicate-silent` (env `SSD_TEMP_SILENT_DUPLICATE=1` ก็ได้ —
+  แต่ระวัง UAC elevation **ไม่ส่งต่อ environment variables**)
+
+### Changed
+
+- ค่าคงที่ทั้งหมด (poll/alert/history) มาจาก config.json ผ่าน
+  `load_settings()` แทนการ hardcode — env `SSD_TEMP_RECORD_HISTORY`
+  ยังใช้ override ได้
+- pytest suite เพิ่มเป็น 71 เคส (รวม regression guard ของบั๊กนี้)
+
+## [1.3.0] — 2026-09-21
+
+### Added
+
+- 🔔 **แจ้งเตือนอุณหภูมิเกิน** — notification ของ Windows เมื่อดิสก์ร้อน
+  ≥ 65 °C **ติดต่อกัน 30 วินาที** (กันตัวเลขกระโดดหลอก) และเตือนซ้ำ
+  ไม่ถี่กว่าทุก **5 นาที** (cooldown) หากอุณหภูมิลดลงต่ำกว่าเกณฑ์
+  นาฬิกาจะรีเซ็ตใหม่ — logic อยู่ใน `alert_state()` ที่ทดสอบแยกได้
+- 📈 **กราฟแบบ real-time** — หน้าต่างกราฟวาดใหม่ทุก 1 วินาที
+  ไม่ต้องปิด-เปิดใหม่ และเปิดเมนูซ้ำจะ**โฟกัสหน้าต่างเดิม**แทนที่จะเปิดซ้อน
+- 🚦 **Single instance** — เปิดโปรแกรมซ้ำจะขึ้นข้อความแล้วออก
+  (Windows named mutex `SSDTempMonitor_SingleInstance`)
+- 🧪 **pytest suite 55 เคส** (`tests/`) — รันได้โดยไม่ต้องมี admin,
+  PowerShell หรือ GUI พร้อม regression guard กันบั๊กเดิม
+  (ต้องกรอง USB ก่อนอ่าน counter / ห้าม `int("")` พัง)
+- 📦 **setup.iss** — สคริปต์ Inno Setup สร้างตัวติดตั้ง
+  `installer\ssd_temp_monitor_setup.exe` พร้อมตัวเลือก auto-start on login,
+  desktop icon, และ AppMutex ที่ผูกกับ single-instance ของแอป
+  (ห้ามติดตั้ง/ถอนติดตั้งขณะแอปรันอยู่)
+
+### Changed
+
+- exe ขอสิทธิ์ admin ผ่าน **manifest โดยตรง** (`--uac-admin`) —
+  Windows จะแสดง shield บนไอคอน และไม่ต้องพึ่ง self-elevate เป็นทางหลัก
+- `build_exe.bat` สั่ง build installer ต่อได้ด้วย `iscc setup.iss`
+
+## [1.2.0] — 2026-09-21
+
+### Fixed — polling ค้าง/timeout เมื่อเสียบ USB reader (ผลวิจัยเพิ่มเติม)
+
+- พบว่า bridge chip USB (ASM236X) ไม่ได้แค่รายงาน temp เป็น 0 แต่**ทำให้การอ่าน
+  `Get-StorageReliabilityCounter` ค้างถึง 42 วินาที** (วัดจริง: NVMe 0.1 s,
+  USB 42.1 s) ทำให้ query เดิมที่อ่าน counter ทุกดิสก์ชน timeout 30 s และได้ค่าว่าง
+- แก้ด้วยการแยกเป็น 2 query: กรอง USB เสร็จ**ก่อน**อ่าน counter
+  (`PS_TEMPS` — เหลือ ~1 s) ส่วนรายชื่อ debug ใช้ query แยกที่ไม่อ่าน counter เลย
+
+### Added
+
+- เมนู **Show all disks (debug)** — แสดงทุกดิสก์พร้อม MediaType / BusType
+  และเครื่องหมาย ✓/✗ ว่าตัวไหนถูกนับหรือถูกกรอง พร้อมอุณหภูมิ (USB แสดง n/a)
+- เมนู **Record history** (เปิด/ปิดได้) + **Show temperature graph** —
+  กราฟย้อนหลัง 30 นาทีพร้อม min/max/avg เก็บลง CSV ที่ `%TEMP%\ssd_temp_history.csv`
+  (auto-flush ทุก 60 s, ตั้งค่าเริ่มต้นด้วย env `SSD_TEMP_RECORD_HISTORY=1`)
+- แจกจ่ายเป็น **exe สำเร็จรูป** `dist\ssd_temp_monitor.exe` (PyInstaller,
+  ผู้ใช้ไม่ต้องติดตั้ง Python) พร้อม `build_exe.bat` และ `make_icon.py`
+  สำหรับ rebuild + ไฟล์ไอคอน `app_icon.ico`
+
+### Changed
+
+- Self-elevate (UAC) รองรับทั้งสคริปต์ `.py` และ exe ที่ถูก freeze แล้ว
+- ไอคอน tray มี cache — ลดการวาดภาพซ้ำทุกวินาที
+
+## [1.1.0] — 2026-09-21
+
+### Fixed — อ่านอุณหภูมิผิดพลาดเมื่อเสียบ USB card reader
+
+- กรองดิสก์ที่ต่อผ่าน **BusType USB** ออกจากการอ่านอุณหภูมิทั้งหมด
+  เพราะ USB card reader / external enclosure หลายรุ่นถูก Windows
+  รายงานเป็น `MediaType = 'SSD'` แต่ bridge chip ให้ค่าอุณหภูมิที่ผิด
+  (ค่าว่าง, 0, 65535) ทำให้ไอคอนแสดงตัวเลขมั่วหรือค้าง `--`
+  รายละเอียดใน [RESEARCH.md](RESEARCH.md)
+- แก้บั๊กแฝง: ค่า `Temperature` เป็นสตริงว่างจากอุปกรณ์ USB ทำให้
+  `int("")` ยก `ValueError` และ**เธรดอัปเดตล่มเงียบ ๆ** — ไอคอนค้างค่าเดิม
+  ตลอดไป ตอนนี้แปลงค่าแบบปลอดภัยแล้ว
+- เพิ่ม sanity check อุณหภูมิต้องอยู่ในช่วง -20..100 °C ค่านอกช่วง
+  ถือเป็นขยะและแสดงเป็น n/a แทน
+
+### Changed
+
+- `start_ssd_temp_monitor.bat` ใช้ `%~dp0` อ้าง path ของสคริปต์
+  แทน path ตายตัว `C:\_Project\ssd_temp_monitor\` — ย้ายโฟลเดอร์/
+  ใช้หลายเครื่องได้
+
+### Added
+
+- เอกสารประกอบใน `docs/`: คู่มือผู้ใช้ภาษาไทย, เอกสารวิจัยสาเหตุของบั๊ก,
+  changelog (ทั้ง .md และ .html พร้อมรูปแผนภาพ SVG)
+- `AGENT.md` — คู่มือสำหรับ AI coding agent
+
+## [1.0.0] — 2026-08-22
+
+### Added
+
+- แสดงอุณหภูมิ SSD ที่ร้อนที่สุดบน system tray icon อัปเดตทุก 1 วินาที
+- สีเตือนตามระดับอุณหภูมิ: เขียว ≤ 50 °C, ส้ม 51–64 °C, แดง ≥ 65 °C
+- Tooltip แสดงอุณหภูมิทุกดิสก์, หน้าต่าง details, เมนู Refresh / Exit
+- Self-elevate ขอสิทธิ์ Administrator ผ่าน UAC อัตโนมัติ
+- อ่านค่าผ่าน `Get-PhysicalDisk | Get-StorageReliabilityCounter` (PowerShell)

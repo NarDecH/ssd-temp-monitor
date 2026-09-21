@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="470" viewBox="0 0 920 470" role="img" aria-label="Diagram of the USB reader bug">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#ef4444"/>
+    </marker>
+  </defs>
+  <rect width="920" height="470" rx="18" fill="#0f172a"/>
+  <text x="460" y="48" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="24" fill="#f8fafc" font-weight="700">ปัญหาเดิม — อ่านอุณหภูมิผิดเมื่อเสียบ USB Card Reader</text>
+
+  <!-- Windows query -->
+  <rect x="60" y="90" width="230" height="90" rx="12" fill="#1e293b" stroke="#475569" stroke-width="2"/>
+  <text x="175" y="128" text-anchor="middle" font-family="Consolas, monospace" font-size="15" fill="#7dd3fc">Get-PhysicalDisk</text>
+  <text x="175" y="152" text-anchor="middle" font-family="Consolas, monospace" font-size="13" fill="#94a3b8">| Where MediaType = 'SSD'</text>
+
+  <!-- two disks -->
+  <rect x="60" y="240" width="230" height="90" rx="12" fill="#14532d" stroke="#22c55e" stroke-width="2"/>
+  <text x="175" y="275" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="16" fill="#f8fafc" font-weight="600">NVMe SSD ภายใน</text>
+  <text x="175" y="300" text-anchor="middle" font-family="Consolas, monospace" font-size="13" fill="#86efac">TS1TMTE220S · BusType NVMe</text>
+
+  <rect x="60" y="360" width="230" height="90" rx="12" fill="#7f1d1d" stroke="#ef4444" stroke-width="2"/>
+  <text x="175" y="395" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="16" fill="#f8fafc" font-weight="600">USB Card Reader ✗</text>
+  <text x="175" y="420" text-anchor="middle" font-family="Consolas, monospace" font-size="13" fill="#fca5a5">ASM236X · BusType USB</text>
+
+  <!-- arrows from query to disks -->
+  <line x1="175" y1="180" x2="175" y2="232" stroke="#64748b" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="175" y1="330" x2="175" y2="352" stroke="#ef4444" stroke-width="2" marker-end="url(#arrRed)"/>
+  <text x="192" y="212" font-family="Segoe UI, sans-serif" font-size="12" fill="#94a3b8">✓ ตรงเงื่อนไข</text>
+  <text x="192" y="346" font-family="Segoe UI, sans-serif" font-size="12" fill="#fca5a5">✗ แอบเข้ามาด้วย! (Windows รายงานเป็น SSD)</text>
+
+  <!-- bridge chip note -->
+  <rect x="380" y="360" width="240" height="90" rx="12" fill="#3f1d1d" stroke="#ef4444" stroke-width="2" stroke-dasharray="6 4"/>
+  <text x="500" y="392" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="14" fill="#fca5a5" font-weight="600">Bridge chip USB→NVMe</text>
+  <text x="500" y="414" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="12" fill="#f87171">รายงาน temp มั่ว: ค่าว่าง / 0 / 65535</text>
+  <text x="500" y="434" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="12" fill="#f87171">ไม่ใช่ค่า SMART จริง</text>
+  <line x1="290" y1="405" x2="372" y2="405" stroke="#ef4444" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrRed)"/>
+
+  <!-- result icon -->
+  <rect x="700" y="140" width="160" height="160" rx="20" fill="#ef4444"/>
+  <text x="780" y="215" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="58" fill="#ffffff" font-weight="700">??</text>
+  <text x="780" y="255" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="18" fill="#fee2e2" font-weight="600">°C</text>
+  <text x="780" y="330" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="15" fill="#f8fafc">ไอคอน tray โชว์ค่าผิด</text>
+  <text x="780" y="352" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="15" fill="#f8fafc">หรือค้าง "--"</text>
+  <line x1="500" y1="360" x2="660" y2="240" stroke="#ef4444" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrRed)"/>
+
+  <!-- flow from query to icon -->
+  <path d="M290 135 C 420 60, 560 60, 690 130" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arr)"/>
+  <text x="475" y="80" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="13" fill="#94a3b8">max(temps) → ไอคอน</text>
+</svg>

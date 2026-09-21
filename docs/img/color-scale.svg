@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="120" viewBox="0 0 760 120" role="img" aria-label="Color scale legend">
+  <defs>
+    <linearGradient id="scale" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#22c55e"/>
+      <stop offset="0.55" stop-color="#f59e0b"/>
+      <stop offset="1" stop-color="#ef4444"/>
+    </linearGradient>
+  </defs>
+  <rect width="760" height="120" rx="14" fill="#0f172a"/>
+  <rect x="50" y="38" width="660" height="22" rx="11" fill="url(#scale)"/>
+  <g font-family="Segoe UI, sans-serif" font-size="14" fill="#e2e8f0">
+    <text x="50" y="86">≤ 50</text>
+    <text x="330" y="86" text-anchor="middle">51–64</text>
+    <text x="662" y="86">≥ 65 °C</text>
+  </g>
+  <g font-family="Segoe UI, sans-serif" font-size="12">
+    <text x="118" y="86" fill="#86efac">เขียว — ปกติ</text>
+    <text x="404" y="86" text-anchor="middle" fill="#fcd34d">ส้ม — เฝ้าระวัง</text>
+  </g>
+  <text x="640" y="86" fill="#fca5a5">แดง — ร้อน</text>
+</svg>

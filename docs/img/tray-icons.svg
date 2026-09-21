@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="300" viewBox="0 0 640 300" role="img" aria-label="Tray icons mockup">
+  <rect width="640" height="300" rx="18" fill="#0f172a"/>
+  <text x="320" y="42" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="20" fill="#f8fafc" font-weight="700">ไอคอนบน System Tray</text>
+
+  <!-- taskbar strip -->
+  <rect x="40" y="80" width="560" height="64" rx="8" fill="#1e293b" stroke="#334155"/>
+  <text x="60" y="122" font-family="Segoe UI, sans-serif" font-size="13" fill="#64748b">41°</text>
+
+  <!-- green icon -->
+  <rect x="130" y="90" width="44" height="44" rx="10" fill="#22c55e"/>
+  <text x="152" y="119" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="20" fill="#fff" font-weight="700">41</text>
+  <text x="152" y="168" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="13" fill="#86efac">≤ 50 °C ปกติ</text>
+
+  <!-- orange icon -->
+  <rect x="290" y="90" width="44" height="44" rx="10" fill="#f59e0b"/>
+  <text x="312" y="119" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="20" fill="#fff" font-weight="700">58</text>
+  <text x="312" y="168" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="13" fill="#fcd34d">51–64 °C เฝ้าระวัง</text>
+
+  <!-- red icon -->
+  <rect x="450" y="90" width="44" height="44" rx="10" fill="#ef4444"/>
+  <text x="472" y="119" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="20" fill="#fff" font-weight="700">71</text>
+  <text x="472" y="168" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="13" fill="#fca5a5">≥ 65 °C ร้อน</text>
+
+  <!-- unknown icon -->
+  <rect x="130" y="200" width="44" height="44" rx="10" fill="#6b7280"/>
+  <text x="152" y="229" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="20" fill="#fff" font-weight="700">--</text>
+  <text x="152" y="272" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="13" fill="#cbd5e1">ไม่มีข้อมูล</text>
+
+  <text x="360" y="228" font-family="Segoe UI, sans-serif" font-size="13" fill="#94a3b8">Tooltip เมื่อชี้เมาส์:</text>
+  <text x="360" y="252" font-family="Consolas, monospace" font-size="12" fill="#7dd3fc">TS1TMTE220S: 41C</text>
+  <text x="360" y="270" font-family="Segoe UI, sans-serif" font-size="12" fill="#64748b">(แสดงทุกดิสก์ที่มีข้อมูล)</text>
+</svg>

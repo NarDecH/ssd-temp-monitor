@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Changelog — SSD Temperature Tray Monitor</title>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8;
+    --green: #22c55e; --orange: #f59e0b; --red: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", "Noto Sans Thai", Tahoma, sans-serif;
+    line-height: 1.7;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 24px 20px 64px; }
+  .banner { width: 100%; border-radius: 16px; display: block; margin: 12px 0 8px; }
+  h1 { font-size: 1.8rem; margin: 20px 0 4px; }
+  h2 { font-size: 1.25rem; margin-top: 40px; }
+  h3 {
+    font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted); margin: 22px 0 8px;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: #0b1220; border: 1px solid var(--border); border-radius: 6px;
+    padding: 1px 7px; font-family: Consolas, "Cascadia Mono", monospace; font-size: 0.9em;
+  }
+  ul { padding-left: 24px; }
+  li { margin: 5px 0; }
+  .version {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--border); padding-bottom: 6px;
+  }
+  .ver-badge {
+    font-size: 1.05rem; font-weight: 700; color: #fff;
+    background: #14532d; border: 1px solid #22c55e; border-radius: 8px; padding: 1px 14px;
+  }
+  .ver-badge.old { background: #1e293b; border-color: var(--border); color: var(--muted); }
+  .date { color: var(--muted); font-size: 0.9rem; }
+  .fix-pill { background: #7f1d1d; color: #fca5a5; }
+  .add-pill { background: #14532d; color: #86efac; }
+  .chg-pill { background: #78350f; color: #fcd34d; }
+  .pill {
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em;
+    padding: 2px 10px; border-radius: 999px; margin-right: 6px;
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 20px; margin: 14px 0;
+  }
+  .card.hl { border-left: 4px solid var(--green); }
+  .footer { margin-top: 48px; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--border); padding-top: 16px; }
+  .crumb { font-size: 0.85rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="crumb"><a href="README.html">← คู่มือผู้ใช้</a> · Changelog</div>
+  <img class="banner" src="img/banner.svg" alt="SSD Temperature Tray Monitor">
+  <h1>Changelog</h1>
+  <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
+  <a href="RESEARCH.html">RESEARCH.html</a></p>
+
+  <h2><span class="ver-badge">v1.5.0</span> <span class="date">21 กันยายน 2026</span></h2>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>💺 <strong>ไอคอนแยกต่อดิสก์</strong> — SSD หลายตัวได้ tray icon หลายอัน
+        อัตโนมัติ (ปิดได้ด้วย <code>multi_disk_icons: false</code>)</li>
+    <li>🧪 <strong>CI ทดสอบ installer จริง</strong> — silent install, ตรวจไฟล์,
+        duplicate instance (exit code 2) และ uninstall ทุก push</li>
+    <li>🚀 <strong>Release automation</strong> — push tag <code>v*</code> →
+        build + smoke test + GitHub Release พร้อมแนบ exe/installer</li>
+  </ul>
+
+  <h3><span class="pill chg-pill">Changed</span></h3>
+  <ul>
+    <li>pytest เพิ่มเป็น 79 เคส</li>
+  </ul>
+
+  <h2><span class="ver-badge">v1.4.0</span> <span class="date">21 กันยายน 2026</span></h2>
+
+  <div class="card hl">
+    🐞 <strong>แก้บั๊ก:</strong> หน้าต่าง History ปิดไม่ได้ / tray ค้างตอน Exit —
+    สาเหตุคือ mainloop ของกราฟบล็อกเธรดเมนู pystray + tk call ข้ามเธรดตอนเปิดซ้ำ
+    ตอนนี้กราฟอยู่บนเธรดของตัวเอง เปิดซ้ำยกหน้าต่างเดิมด้วย Win32
+    และการออกจากโปรแกรมใช้ธง shutdown + รอเธรดกราฟปิดตัวเอง (ไม่มี tk ข้ามเธรด)
+    ทดสอบ E2E แล้ว: Exit จบใน 2.6 วินาที ไม่ค้าง
+  </div>
+
+  <h3><span class="pill fix-pill">Fixed</span></h3>
+  <ul>
+    <li>หน้าต่าง History ปิดได้ปกติ, Exit ไม่ค้างแม้กราฟเปิดอยู่,
+        history ถูก flush ก่อนจบโปรแกรมเสมอ</li>
+  </ul>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>⚙️ <strong>หน้า Settings</strong> — แก้ polling/alert/history ได้
+        เก็บลง <code>%APPDATA%\SSDTempMonitor\config.json</code> มีผลทันที</li>
+    <li>🤖 <strong>GitHub Actions CI</strong> — รัน pytest แล้ว build exe +
+        installer เป็น artifacts ทุก push</li>
+    <li>🧪 <strong>ทดสอบ installer/single-instance จริง</strong> — ติดตั้งลง
+        Program Files (แก้ 64-bit mode), mutex ยืนยันด้วย external probe,
+        duplicate instance ออกด้วย exit code 2 (<code>--duplicate-silent</code>)</li>
+  </ul>
+
+  <h3><span class="pill chg-pill">Changed</span></h3>
+  <ul>
+    <li>ค่าคงที่ทั้งหมดมาจาก config.json แทน hardcode · pytest เพิ่มเป็น 71 เคส</li>
+  </ul>
+
+  <h2><span class="ver-badge">v1.3.0</span> <span class="date">21 กันยายน 2026</span></h2>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>🔔 <strong>แจ้งเตือนอุณหภูมิเกิน</strong> — notification เมื่อ ≥ 65 °C
+        ติดกัน 30 วินาที + cooldown 5 นาที กันเตือนรัว</li>
+    <li>📈 <strong>กราฟ real-time</strong> — วาดใหม่ทุก 1 วินาที เปิดซ้ำ = โฟกัสหน้าต่างเดิม</li>
+    <li>🚦 <strong>Single instance</strong> — เปิดซ้ำจะขึ้นข้อความแล้วออก (named mutex)</li>
+    <li>🧪 <strong>pytest 55 เคส</strong> — รันได้ไม่ต้องมี admin/PowerShell/GUI
+        พร้อม regression guard กันบั๊กเดิมทุกตัว</li>
+    <li>📦 <strong>setup.iss</strong> — Inno Setup installer พร้อม auto-start on login
+        และ AppMutex (ห้ามติดตั้ง/ถอนขณะแอปรัน)</li>
+  </ul>
+
+  <h3><span class="pill chg-pill">Changed</span></h3>
+  <ul>
+    <li>exe ขอสิทธิ์ admin ผ่าน <strong>manifest</strong> (<code>--uac-admin</code>) —
+        ไอคอนมี shield ไม่ต้องพึ่ง self-elevate เป็นทางหลัก</li>
+  </ul>
+
+  <h2><span class="ver-badge">v1.2.0</span> <span class="date">21 กันยายน 2026</span></h2>
+
+  <div class="card hl">
+    🔬 <strong>ผลวิจัยเพิ่มเติม:</strong> วัดจริงพบว่า bridge chip USB (ASM236X)
+    ทำให้การอ่าน reliability counter <strong>ค้าง 42 วินาที</strong> (NVMe ปกติ 0.1 วินาที)
+    — ไม่ใช่แค่รายงานค่าผิด แต่ทำให้ query ที่อ่าน counter ทุกดิสก์ชน timeout เสมอ
+    วิธีแก้: กรอง USB ให้เสร็จก่อนอ่าน counter (query เหลือ ~1 วินาที)
+  </div>
+
+  <h3><span class="pill fix-pill">Fixed</span></h3>
+  <ul>
+    <li>Polling ค้าง/timeout เมื่อเสียบ USB reader — แยกเป็น 2 query:
+        อ่านอุณหภูมิเฉพาะดิสก์ภายใน (เร็ว) ส่วน debug list ไม่อ่าน counter ของ USB เลย</li>
+  </ul>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>เมนู <strong>Show all disks (debug)</strong> — ทุกดิสก์พร้อม MediaType / BusType
+        และเครื่องหมาย ✓/✗ ว่าถูกนับหรือถูกกรอง</li>
+    <li>เมนู <strong>Record history</strong> + <strong>Show temperature graph</strong> —
+        กราฟ 30 นาที (min/max/avg) เก็บลง CSV ใน %TEMP% (auto-flush ทุก 60 s)</li>
+    <li><strong>ssd_temp_monitor.exe</strong> สำเร็จรูป (PyInstaller) —
+        ผู้ใช้ไม่ต้องติดตั้ง Python พร้อม <code>build_exe.bat</code>, <code>make_icon.py</code>,
+        <code>app_icon.ico</code> สำหรับ rebuild</li>
+  </ul>
+
+  <h3><span class="pill chg-pill">Changed</span></h3>
+  <ul>
+    <li>Self-elevate (UAC) รองรับทั้งสคริปต์ .py และ exe</li>
+    <li>ไอคอน tray มี cache ลดการวาดซ้ำทุกวินาที</li>
+  </ul>
+
+  <h2><span class="ver-badge">v1.1.0</span> <span class="date">21 กันยายน 2026</span></h2>
+
+  <div class="card hl">
+    🎯 <strong>แก้บั๊กหลัก:</strong> เมื่อเสียบ USB card reader เครื่องจะอ่านอุณหภูมิ SSD
+    ผิดพลาด — ตอนนี้โปรแกรมแสดงเฉพาะ SSD ภายในเครื่องเท่านั้น
+    (USB reader ที่ Windows รายงานเป็น SSD ถูกกรองด้วย <code>BusType -ne 'USB'</code>)
+  </div>
+
+  <h3><span class="pill fix-pill">Fixed</span></h3>
+  <ul>
+    <li>กรองดิสก์ที่ต่อผ่าน <strong>BusType USB</strong> ออกจากการอ่านอุณหภูมิ —
+        USB card reader / enclosure หลายรุ่นถูกรายงานเป็น <code>MediaType = 'SSD'</code>
+        แต่ bridge chip ให้ค่า temp ที่ผิด (ค่าว่าง, 0, 65535)</li>
+    <li>แก้บั๊กแฝง: ค่า temp เป็นสตริงว่างทำ <code>int("")</code> ยก <code>ValueError</code>
+        และเธรดอัปเดตล่มเงียบ ๆ (ไอคอนค้างค่าเดิม) — แปลงค่าแบบปลอดภัยแล้ว</li>
+    <li>Sanity check อุณหภูมิต้องอยู่ช่วง -20..100 °C — ค่านอกช่วงแสดง n/a</li>
+  </ul>
+
+  <h3><span class="pill chg-pill">Changed</span></h3>
+  <ul>
+    <li><code>start_ssd_temp_monitor.bat</code> ใช้ <code>%~dp0</code> แทน path ตายตัว
+        <code>C:\_Project\ssd_temp_monitor\</code> — ย้ายโฟลเดอร์ได้อย่างอิสระ</li>
+  </ul>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>เอกสารใน <code>docs/</code>: คู่มือผู้ใช้ไทย, research, changelog
+        (.md + .html พร้อมรูปแผนภาพ SVG)</li>
+    <li><code>AGENT.md</code> — คู่มือสำหรับ AI coding agent</li>
+  </ul>
+
+  <h2><span class="ver-badge old">v1.0.0</span> <span class="date">22 สิงหาคม 2026</span></h2>
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>ไอคอน tray แสดงอุณหภูมิ SSD ที่ร้อนที่สุด อัปเดตทุก 1 วินาที</li>
+    <li>สีเตือน: เขียว ≤ 50 °C · ส้ม 51–64 °C · แดง ≥ 65 °C</li>
+    <li>Tooltip ทุกดิสก์, หน้าต่าง details, เมนู Refresh / Exit</li>
+    <li>Self-elevate ขอสิทธิ์ Administrator ผ่าน UAC อัตโนมัติ</li>
+    <li>อ่านค่าผ่าน <code>Get-PhysicalDisk | Get-StorageReliabilityCounter</code></li>
+  </ul>
+
+  <div class="footer">
+    SSD Temperature Tray Monitor · Changelog v1.1.0 ·
+    <a href="README.html">คู่มือผู้ใช้</a> · <a href="RESEARCH.html">Research</a>
+  </div>
+</div>
+</body>
+</html>
