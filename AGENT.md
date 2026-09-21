@@ -148,6 +148,15 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
 - **ระวัง shell layer ของเทอร์มินัล**: บางชั้นแปลง `>nul` เป็น `>/dev/null`
   อัตโนมัติแล้ว cmd.exe พัง — ในเทสจึงเรียก `ping` แบบ list ไม่ใช้
   redirection
+- **`--version-file` ของ PyInstaller ไม่ใช่ไฟล์ .rc** — มัน parse เป็น
+  Python literal ของ `VSVersionInfo` (ดู `make_version_file.py`); .rc
+  มาตรฐานจะ deserialize ไม่ได้
+- **`run: |` ใน GitHub Actions (pwsh) ไม่ต่อบรรทัดให้** — คำสั่งยาว ๆ
+  เช่น PyInstaller ต้องอยู่บรรทัดเดียว หรือใช้ backtick ต่อท้ายบรรทัด
+  (เครื่องหมาย `--` ขึ้นต้นบรรทัด = unary operator error)
+- เวอร์ชันของแอปอ่านจาก VERSIONINFO ของ exe จริงผ่าน `effective_version()`
+  — ห้าม hardcode ตัวเลขเทียบเอง; การตัดสิน "เวอร์ชันต่างกัน" ที่เชื่อถือได้
+  คือ hash เท่านั้น (timestamp ของไฟล์ข้าม build อาจตรงกันเป๊ะ)
 
 ## สไตล์โค้ด
 
