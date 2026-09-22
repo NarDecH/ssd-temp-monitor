@@ -1904,6 +1904,11 @@ class TestRollback:
         assert not os.path.exists(os.path.join(data, m.ROLLBACK_REPORTED))
 
     def test_broken_version_skips_update_checks(self, tmp_path, monkeypatch):
+        # isolate: without this the test would append to the REAL
+        # update_broken_versions.txt and make the app skip a future
+        # legitimate release of that version
+        monkeypatch.setattr(m, "_rollback_marker_path",
+                            lambda name: os.path.join(str(tmp_path), name))
         m.remember_broken_version("v1.15.0")
         m.remember_broken_version("v1.15.0")  # dedup
         assert m.version_is_broken("v1.15.0")

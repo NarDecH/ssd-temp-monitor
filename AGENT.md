@@ -212,6 +212,12 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
 - **rollback ต้องกันวงจรอัปเดตซ้ำ** — คืนเวอร์ชันเก่าแล้วแต่ไม่จำเวอร์ชันที่พัง
   = auto-update จะเสนอเวอร์ชันเดิมใหม่ทันที → วน rollback ไม่รู้จบ
   จึงมี `update_broken_versions.txt` (updater ข้าม tag ที่เคย rollback)
+- **เทสที่เขียนไฟล์ "ดำ (blacklist)" = ปนเปื้อนระดับ production** — เทส
+  `remember_broken_version` ที่ไม่ isolate ทำให้เครื่อง dev บันทึก `v1.15.0`
+  ลงไฟล์จริง → ถ้าปล่อยไว้ ตัวอัปเดตจะ**ข้าม release v1.15.0 ตัวจริงตลอดไป**
+  กฎ: ทุกฟังก์ชันที่เขียน state ถาวรของแอป ต้องมีเทส monkeypatch path และ
+  ตรวจด้วย `stat` ขนาดไฟล์จริงก่อน/หลังรันเทส อย่าเชื่อว่า conftest จับครบ
+  (โพรบ standalone ที่รัน `python -c` นอก pytest ไม่ผ่าน conftest เสมอ)
 
 ## สไตล์โค้ด
 
