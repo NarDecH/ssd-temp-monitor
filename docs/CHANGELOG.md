@@ -3,9 +3,10 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
-## [1.14.0-rc1] — 2026-09-22
+## [1.14.0] — 2026-09-22
 
-รอบนี้คือชุดฟีเจอร์ 10 ข้อ (rc = รอการพิสูจน์ผ่านช่องทาง pre-release ก่อนปล่อย stable)
+ชุดฟีเจอร์ 10 ข้อ — พิสูจน์ผ่านช่องทาง pre-release ด้วย rc1/rc2 ก่อนปล่อย stable
+(rc2 build ด้วย PyInstaller 6.22.3 และ self-update จาก v1.13.0 สำเร็จ)
 
 ### Added
 
@@ -36,7 +37,7 @@
 ### Changed
 
 - 📦 release มี 4 assets: เพิ่ม `..._portable.zip` (มีโฟลเดอร์ `portable_data`)
-- 🧪 pytest **212 เคส** (+26)
+- 🧪 pytest **217 เคส** (+31)
 
 ## [1.13.0] — 2026-09-22
 

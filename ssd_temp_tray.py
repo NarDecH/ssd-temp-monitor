@@ -43,7 +43,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.14.0-rc1"     # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.14.0"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -874,7 +874,11 @@ def relaunch_elevated() -> None:
 def read_file_version(path):
     """Read the embedded VERSIONINFO (File Version) of an exe.
 
-    Returns e.g. "1.8.1" or None when unavailable (script run, old exe).
+    Returns the string FileVersion (e.g. "1.14.0-rc2", "10.0.26100.1 ...")
+    when available - it preserves semver pre-release suffixes that the
+    numeric FILEVERSION resource cannot carry - otherwise falls back to
+    the first three numeric parts. None when unavailable (script run,
+    old exe).
     """
     try:
         version_dll = ctypes.WinDLL("version", use_last_error=True)
@@ -893,6 +897,26 @@ def read_file_version(path):
         ffi = ctypes.cast(ptr, ctypes.POINTER(ctypes.c_uint * 4)).contents
         if ffi[0] != 0xFEEF04BD:
             return None
+        # Prefer the string FileVersion: it keeps semver pre-release
+        # suffixes ("1.14.0-rc2") that the numeric FILEVERSION resource
+        # cannot carry - without it an rc build reports itself as the
+        # stable version and never upgrades to the final release.
+        wptr = ctypes.c_void_p()
+        wlen = ctypes.c_uint()
+        if version_dll.VerQueryValueW(
+                data, "\\VarFileInfo\\Translation",
+                ctypes.byref(wptr), ctypes.byref(wlen)) and wlen.value >= 4:
+            lang_cp = ctypes.cast(wptr,
+                                  ctypes.POINTER(ctypes.c_ushort * 2)).contents
+            locale = "%04x%04x" % (lang_cp[0], lang_cp[1])
+            sptr = ctypes.c_void_p()
+            slen = ctypes.c_uint()
+            if version_dll.VerQueryValueW(
+                    data, "\\StringFileInfo\\%s\\FileVersion" % locale,
+                    ctypes.byref(sptr), ctypes.byref(slen)) and slen.value:
+                s = ctypes.wstring_at(sptr, slen.value).split("\x00")[0].strip()
+                if s:
+                    return s
         ms, ls = ffi[2], ffi[3]
         parts = (ms >> 16, ms & 0xFFFF, ls >> 16, ls & 0xFFFF)
         return ".".join(str(x) for x in parts[:3])

@@ -62,21 +62,6 @@ def app():
     return a
 
 
-@pytest.fixture(autouse=True)
-def _clean_global_state():
-    """Isolate SETTINGS and the icon cache around every test.
-
-    make_icon() reads SETTINGS directly and caches by a key that includes
-    the settings - without this fixture a test that leaks e.g.
-    icon_digit_color makes later icon tests flaky depending on order.
-    """
-    saved = dict(m.SETTINGS)
-    m._ICON_CACHE.clear()
-    yield
-    m.SETTINGS.clear()
-    m.SETTINGS.update(saved)
-    m._ICON_CACHE.clear()
-
 
 @pytest.fixture
 def history_file(tmp_path, monkeypatch):
@@ -992,15 +977,16 @@ class TestFileVersion:
             os.remove(f.name)
 
     def test_read_real_exe_without_versioninfo(self, tmp_path):
-        # copy cmd.exe? it HAS version info -> should read a number
+        # cmd.exe HAS version info; since v1.14.0 the string FileVersion is
+        # preferred (it can carry pre-release suffixes), so the result is
+        # the string form which may include build metadata.
         import shutil
         src = os.path.join(os.environ["WINDIR"], "System32", "cmd.exe")
         dst = str(tmp_path / "cmd_copy.exe")
         shutil.copy(src, dst)
         v = m.read_file_version(dst)
-        assert v is not None
-        parts = v.split(".")
-        assert len(parts) == 3 and all(p.isdigit() for p in parts)
+        assert v is not None and v
+        assert v.split(".")[0].isdigit()
 
     def test_effective_version_falls_back_to_app_version(self, monkeypatch):
         monkeypatch.setattr(m, "_own_exe_fullpath", lambda: None)
