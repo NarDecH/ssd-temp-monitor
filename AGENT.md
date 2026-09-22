@@ -181,11 +181,14 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   หน้าต่าง Settings พังทั้งหน้าตามไปด้วย
 - **Dialog "Security validation failure: invalid originating onefile
   parent process (PID not found)"** — PyInstaller 6.22 (GHSA-9fxf-4qw3-ghmr)
-  ให้ onefile child ตรวจว่า parent ยังมีชีวิตอยู่ ซึ่งขัดกับ flow
-  อัปเดตของเรา (updater/cmd ตายก่อนแอป relaunch) ปัจจุบันแก้ด้วย
-  (1) pin `pyinstaller<6.22` ใน workflows/build_exe.bat ทุกจุด
-  (2) shim relaunch ผ่าน `explorer.exe` (แอปใหม่ไม่มี parent ที่จะตาย)
-  ห้าม pin ขึ้นอีกจนกว่าจะทดสอบ self-update จริงแล้ว
+  ให้ onefile child ตรวจว่า parent ยังมีชีวิตอยู่ ซึ่งเคยขัดกับ flow
+  อัปเดตของเรา (updater/cmd ตายก่อนแอป relaunch) แก้ด้วย
+  (1) shim relaunch ผ่าน `explorer.exe` (แอปใหม่ไม่มี parent ที่จะตาย)
+  (2) ตั้งแต่ 6.22.3 ทีม PyInstaller แก้ guard แล้ว — **พิสูจน์ด้วยโพรบ
+  onefile จำลอง 3 เคส (parent ตายก่อน boot / parent มีชีวิตตลอด /
+  explorer-relaunch) บน 6.22.3 ผ่านหมด** จึง unpin เป็น
+  `pyinstaller>=6.22.3,<7` ทุกจุด บทเรียน: pin ที่เกิดจากบั๊ก upstream
+  ควรถูกทดสอบคลายเมื่อ upstream ออก patch อย่าปล่อย pin ถาวรโดยไม่พิสูจน์ซ้ำ
 - **อย่าสมมติ API ของไลบรารีภายนอกโดยไม่ verify** — ฟีเจอร์เก็บกวาด `_MEI`
   (v1.13.0) รอบแรกเขียนอ้าง marker file `PYINSTAINER_ONFILE_PARENT` ที่
   **ไม่มีอยู่จริงใน PyInstaller** (ค้นเว็บยืนยัน) ก่อนเผยแพร่ต้องเปลี่ยนเป็น
