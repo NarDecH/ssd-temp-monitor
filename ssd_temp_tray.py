@@ -313,7 +313,10 @@ def load_settings(path=None):
     path = path or CONFIG_FILE
     cfg = dict(DEFAULT_SETTINGS)
     try:
-        with open(path, encoding="utf-8") as f:
+        # utf-8-sig also reads plain UTF-8 but survives a BOM, which tools
+        # like PowerShell 5.1 (Set-Content -Encoding UTF8) prepend; with a
+        # plain BOM json.load would fail and every setting would reset.
+        with open(path, encoding="utf-8-sig") as f:
             data = json.load(f)
     except (OSError, ValueError):
         data = {}

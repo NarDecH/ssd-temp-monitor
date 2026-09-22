@@ -1191,10 +1191,28 @@ class TestEventLog:
         m.log_event("weird", obj=object(), none=None)
         m.log_event("empty")
 
-    def test_rotating_handler_configured(self):
+    def test_rotating_handler_configured(self, tmp_path):
+        # The real RotatingFileHandler is detached for the whole test session
+        # (tests/conftest.py) so tests never write the user's real log.
+        # Verify the logging contract itself against a temp handler instead:
+        # INFO level, module formatter, and log_event() writes one line.
         logger = logging.getLogger("ssd_temp_monitor")
-        assert any(isinstance(h, logging.handlers.RotatingFileHandler)
-                   for h in logger.handlers)
+        saved = list(logger.handlers)
+        logger.handlers.clear()
+        h = logging.handlers.RotatingFileHandler(
+            tmp_path / "probe.log", maxBytes=512 * 1024,
+            backupCount=2, encoding="utf-8")
+        h.setFormatter(logging.Formatter(
+            "%(asctime)s %(levelname)s %(message)s"))
+        logger.addHandler(h)
+        try:
+            m.log_event("contract_probe", k="v")
+            h.flush()
+            content = (tmp_path / "probe.log").read_text(encoding="utf-8")
+            assert "INFO contract_probe k=v" in content
+        finally:
+            logger.handlers.clear()
+            logger.handlers.extend(saved)
 
 
 # ---------------------------------------------------------------------------
@@ -1233,8 +1251,8 @@ class TestUninstallCleansUp:
         lines = [ln.strip() for ln in iss.splitlines()]
         idx = lines.index("[UninstallDelete]")
         block = "\n".join(lines[idx + 1:idx + 6])
-        assert "Type: files; Name: \"{userappdata}\SSDTempMonitor\config.json\"" in block
-        assert "Type: files; Name: \"{userappdata}\SSDTempMonitor\ssd_temp_monitor.log\"" in block
+        assert r"Type: files; Name: \"{userappdata}\SSDTempMonitor\config.json\"" in block
+        assert r"Type: files; Name: \"{userappdata}\SSDTempMonitor\ssd_temp_monitor.log\"" in block
 
 
 # ---------------------------------------------------------------------------
