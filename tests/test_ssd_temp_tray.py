@@ -1251,8 +1251,8 @@ class TestUninstallCleansUp:
         lines = [ln.strip() for ln in iss.splitlines()]
         idx = lines.index("[UninstallDelete]")
         block = "\n".join(lines[idx + 1:idx + 6])
-        assert r"Type: files; Name: \"{userappdata}\SSDTempMonitor\config.json\"" in block
-        assert r"Type: files; Name: \"{userappdata}\SSDTempMonitor\ssd_temp_monitor.log\"" in block
+        assert r'Type: files; Name: "{userappdata}\SSDTempMonitor\config.json"' in block
+        assert r'Type: files; Name: "{userappdata}\SSDTempMonitor\ssd_temp_monitor.log"' in block
 
 
 # ---------------------------------------------------------------------------
