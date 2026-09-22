@@ -67,6 +67,21 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
+  <h2><span class="ver-badge">v1.14.1</span> <span class="date">22 กันยายน 2026</span></h2>
+
+  <h3><span class="pill fix-pill">Fixed</span></h3>
+  <ul>
+    <li>🌡️ <strong>อ่านอุณหภูมิไม่ได้เลย (dialog "No SSD temperature data")</strong> — query ของ v1.14.0 เขียน
+        <code>$c.Prop|ReadErrorsTotal</code> ทำให้ PowerShell พังทั้ง statement ทุกรอบ → ไม่มีข้อมูลแม้รันแบบ Administrator แก้เป็น property access ตรง ๆ</li>
+  </ul>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>🛟 <strong>Rollback อัตโนมัติ</strong> — เก็บ exe เดิมก่อนติดตั้ง ถ้าเวอร์ชันใหม่ไม่บูตใน 90 วิ คืนเวอร์ชันเดิม + แจ้งผู้ใช้</li>
+    <li>🚫 <strong>จำเวอร์ชันที่พัง</strong> — updater ข้ามเวอร์ชันที่เคย rollback (กันวงจรอัปเดตซ้ำ) · 🔁 <strong>เมนู "คืนเวอร์ชันก่อนหน้า"</strong></li>
+    <li>🧪 pytest <strong>226 เคส</strong> (+9)</li>
+  </ul>
+
   <h2><span class="ver-badge">v1.14.0</span> <span class="date">22 กันยายน 2026</span></h2>
 
   <h3><span class="pill add-pill">Added</span></h3>

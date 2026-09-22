@@ -202,6 +202,16 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   (จึงไม่ใหม่กว่า 1.9.0), `select_release_asset` ต้องมี `state: uploaded`
   ใน asset และ version ที่คืนเป็น tag เต็มพร้อม `v` — เขียนเทส/self-test
   ทีไร ให้รัน probe ยืนยันพฤติกรรมจริงก่อนเขียน assertion
+- **PowerShell: property ไม่ใช่คำสั่ง (v1.14.0)** — เขียน
+  `$c.Prop|ReadErrorsTotal` (pipeline ไปยังชื่อ property) ทำให้ PS ตีความ
+  `ReadErrorsTotal` เป็นคำสั่ง → statement พังทุกรอบ loop → stdout ว่างหมด
+  แม้ `$ErrorActionPreference='SilentlyContinue'` จะซ่อน error ก็ตาม
+  (**stdout ว่าง + stderr เงียบ ≠ query ถูก** — ต้องจับ stderr ด้วยเมื่อ probe)
+  แก้เป็น property access ตรง ๆ `$c.ReadErrorsTotal` บทเรียน: query PS ทุก
+  ตัวที่แก้ ต้องรันจริงและอ่าน stderr ก่อนเผยแพร่เสมอ
+- **rollback ต้องกันวงจรอัปเดตซ้ำ** — คืนเวอร์ชันเก่าแล้วแต่ไม่จำเวอร์ชันที่พัง
+  = auto-update จะเสนอเวอร์ชันเดิมใหม่ทันที → วน rollback ไม่รู้จบ
+  จึงมี `update_broken_versions.txt` (updater ข้าม tag ที่เคย rollback)
 
 ## สไตล์โค้ด
 

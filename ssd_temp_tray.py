@@ -43,7 +43,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.14.0"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.14.1"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -407,6 +407,17 @@ STRINGS = {
                            "(check the system tray)."),
         "mb.title": "SSD Temp Monitor",
         "details.no_data": "No SSD temperature data (run as Administrator).",
+        "rollback.title": "Update rolled back",
+        "rollback.body": ("The update could not start. The previous version "
+                          "has been restored and the failed release will be "
+                          "skipped."),
+        "menu.restore": "Restore previous version...",
+        "restore.confirm": ("Put the backed-up previous version back and "
+                            "restart the app now?"),
+        "restore.none": ("No pre-update backup was found on this machine. "
+                         "A backup appears only after an update has been "
+                         "installed."),
+        "restore.failed": "Could not start the restore process.",
         "graph.no_history": ("No history recorded yet.\n"
                              "Enable 'Record history' in the tray menu."),
         "graph.span": "last {minutes} min",
@@ -511,6 +522,15 @@ STRINGS = {
                            "(ดูที่ system tray)"),
         "mb.title": "SSD Temp Monitor",
         "details.no_data": "ไม่พบข้อมูลอุณหภูมิ (ต้องรันในสิทธิ์ Administrator)",
+        "rollback.title": "ย้อนกลับการอัปเดตแล้ว",
+        "rollback.body": ("การอัปเดตไม่สามารถเริ่มทำงานได้ ระบบจึงกลับไปใช้เวอร์ชันเดิม"
+                          "และจะข้ามเวอร์ชันที่มีปัญหานี้ในการตรวจสอบครั้งถัดไป"),
+        "menu.restore": "คืนเวอร์ชันก่อนหน้า...",
+        "restore.confirm": ("ต้องการคืนเวอร์ชันสำรองก่อนหน้าและเริ่มโปรแกรมใหม่"
+                            "ทันทีหรือไม่?"),
+        "restore.none": ("ไม่พบไฟล์สำรองก่อนอัปเดตบนเครื่องนี้ ไฟล์สำรองจะเกิดขึ้น"
+                         "ก็ต่อเมื่อมีการติดตั้งอัปเดตแล้วเท่านั้น"),
+        "restore.failed": "เริ่มกระบวนการคืนเวอร์ชันไม่สำเร็จ",
         "graph.no_history": ("ยังไม่มีประวัติบันทึก\n"
                              "เปิด 'บันทึกประวัติ' จากเมนูที่ไอคอน tray"),
         "graph.span": "{minutes} นาทีล่าสุด",
@@ -615,6 +635,15 @@ STRINGS = {
                            "(タスクトレイを確認してください)。"),
         "mb.title": "SSD Temp Monitor",
         "details.no_data": "SSD 温度データがありません (管理者として実行)。",
+        "rollback.title": "アップデートをロールバックしました",
+        "rollback.body": ("アップデートを開始できませんでした。以前のバージョンを復元し、"
+                          "問題のあるリリースは今後スキップされます。"),
+        "menu.restore": "前のバージョンに戻す...",
+        "restore.confirm": ("バックアップされた以前のバージョンを戻して、"
+                            "今すぐアプリを再起動しますか？"),
+        "restore.none": ("このマシンにアップデート前のバックアップが見つかりません。"
+                         "バックアップはアップデート適用後に作成されます。"),
+        "restore.failed": "復元プロセスを開始できませんでした。",
         "graph.no_history": ("履歴がまだありません。\n"
                              "トレイメニューで「履歴を記録」を有効にしてください。"),
         "graph.span": "過去 {minutes} 分",
@@ -718,6 +747,14 @@ STRINGS = {
                            "(请查看系统托盘)。"),
         "mb.title": "SSD Temp Monitor",
         "details.no_data": "没有 SSD 温度数据 (请以管理员身份运行)。",
+        "rollback.title": "更新已回滚",
+        "rollback.body": ("无法启动更新。已恢复之前的版本，后续检查将跳过"
+                          "这个有问题的版本。"),
+        "menu.restore": "恢复上一个版本...",
+        "restore.confirm": ("恢复备份的上一版本并立即重新启动应用吗？"),
+        "restore.none": ("在这台电脑上找不到更新前的备份。备份只会在安装"
+                         "更新之后才会出现。"),
+        "restore.failed": "无法启动恢复过程。",
         "graph.no_history": ("尚无历史记录。\n"
                              "请在托盘菜单中启用“记录历史”。"),
         "graph.span": "最近 {minutes} 分钟",
@@ -965,8 +1002,8 @@ PS_TEMPS = (
     "$c=$x|Get-StorageReliabilityCounter;"
     "$r+=[pscustomobject]@{model=$x.Model;friendly=$x.FriendlyName;"
     "media=$x.MediaType;bus=$x.BusType;temp=$c.Temperature;"
-    "wear=$c.Wear;readErr=$c.ReadErrorsCorrectedByReadErrorRecovery|"
-    "ReadErrorsTotal;undef=$c.ReadErrorsUncorrected}};"
+    "wear=$c.Wear;readErr=$c.ReadErrorsTotal;"
+    "undef=$c.ReadErrorsUncorrected}};"
     "$r|ConvertTo-Json -Compress"
 )
 
@@ -1128,6 +1165,42 @@ def is_newer_version(remote, local=None):
         return False
 
 
+def remember_broken_version(version):
+    """Record a version that had to be rolled back so the updater skips it.
+
+    Without this the next auto-check would offer the same broken release
+    again, rolling back over and over. Stored one-per-line in
+    ROLLBACK_BROKEN_FILE next to the config (survives reinstalls of the
+    marker files, which are one-shot).
+    """
+    try:
+        path = _rollback_marker_path(ROLLBACK_BROKEN_FILE)
+        bad = str(version or "").strip()
+        if not bad:
+            return
+        lines = []
+        try:
+            with open(path) as f:
+                lines = [l.strip() for l in f if l.strip()]
+        except OSError:
+            pass
+        if bad not in lines:
+            lines.append(bad)
+            with open(path, "w") as f:
+                f.write("\n".join(lines[-10:]) + "\n")
+    except Exception:
+        pass
+
+
+def version_is_broken(version):
+    """True when remember_broken_version() recorded this tag before."""
+    try:
+        with open(_rollback_marker_path(ROLLBACK_BROKEN_FILE)) as f:
+            return str(version or "").strip() in {l.strip() for l in f if l.strip()}
+    except OSError:
+        return False
+
+
 def _is_prerelease(release):
     """True when the release/tag looks like a pre-release (v1.2.3-rc1...)."""
     tag = str(release.get("tag_name") or release.get("name") or "")
@@ -1275,6 +1348,9 @@ def build_update_shim(installer_path, app_exe_path=None, restart_path=None):
             # such parent window at all.
             + (f'if not errorlevel 1 start "" /B explorer.exe "{restart_path}"\r\n'
                if restart_path else "")
+            # rollback watchdog: if the updated exe never reports a healthy
+            # boot within the grace period, put the staged backup back
+            + "".join(build_rollback_watchdog_lines())
             + "exit /b %ERRORLEVEL%\r\n"
         )
     return path
@@ -1307,6 +1383,174 @@ def wait_and_install(shim_path, timeout=90):
         return proc.returncode
     except Exception:
         return None
+
+
+# ---- automatic rollback --------------------------------------------------
+#
+# Before an update installs, the running app copies its own exe to
+# ssd_temp_monitor.prev.exe and drops a pending marker. The update shim
+# waits ROLLBACK_GRACE_SECONDS after the installer finishes; if the new
+# app booted successfully it calls begin_healthy_session() which deletes
+# marker+backup. If the marker survives that long the shim assumes the
+# new exe cannot start, kills it, puts the old exe back and relaunches.
+# The relaunched OLD app also sees the marker and tells the user what
+# happened (the shim cannot show UI itself - it runs without a desktop
+# interaction context).
+
+ROLLBACK_BACKUP_NAME = "ssd_temp_monitor.prev.exe"
+ROLLBACK_PENDING = "update_pending.marker"
+ROLLBACK_REPORTED = "update_rollback_reported.marker"
+ROLLBACK_BROKEN_FILE = "update_broken_versions.txt"
+ROLLBACK_GRACE_SECONDS = 90
+
+
+def _rollback_backup_path():
+    return os.path.join(os.path.dirname(os.path.abspath(sys.executable))
+                        if getattr(sys, "frozen", False) else os.getcwd(),
+                        ROLLBACK_BACKUP_NAME)
+
+
+def _rollback_marker_path(name):
+    return os.path.join(DATA_DIR, name)
+
+
+def stage_backup_for_rollback(app_exe=None, data_dir=None,
+                              target_version=None):
+    """Copy the current exe + drop the pending marker before an update.
+
+    Best effort: any failure only disables rollback for this update, it
+    must never block the update itself. Returns True when the safety net
+    is in place. The pending marker records the version being installed
+    (target_version) so a later rollback can blacklist exactly that
+    release. (app_exe/data_dir are injectable for tests.)
+    """
+    try:
+        exe = app_exe or (sys.executable if getattr(sys, "frozen", False) else None)
+        if not exe or not os.path.isfile(exe):
+            return False
+        dest = (_rollback_backup_path() if data_dir is None
+                else os.path.join(os.path.dirname(exe), ROLLBACK_BACKUP_NAME))
+        shutil.copyfile(exe, dest)
+        marker_dir = data_dir or DATA_DIR
+        os.makedirs(marker_dir, exist_ok=True)
+        with open(os.path.join(marker_dir, ROLLBACK_PENDING), "w") as f:
+            f.write(str(target_version or ""))
+        log_event("rollback_backup_staged", version=effective_version(),
+                  target=target_version)
+        return True
+    except Exception:
+        return False
+
+
+def begin_healthy_session():
+    """Called once at startup: discard the update safety net.
+
+    Reaching this point proves the new exe boots, so the pending marker
+    and the backup copy are no longer needed. If the marker is here
+    because the shim already rolled us back, show the rollback notice
+    instead (and ask the updater to skip this broken release).
+    """
+    if os.path.isfile(_rollback_marker_path(ROLLBACK_REPORTED)):
+        _notify_rollback_reported()
+        return
+    if not os.path.isfile(_rollback_marker_path(ROLLBACK_PENDING)):
+        return
+    try:
+        os.remove(_rollback_marker_path(ROLLBACK_PENDING))
+    except OSError:
+        pass
+    try:
+        os.remove(_rollback_backup_path())
+    except OSError:
+        pass
+    log_event("update_session_healthy", version=effective_version())
+
+
+def _notify_rollback_reported():
+    """The shim rolled us back and left the report marker: blacklist the
+    version that failed, tell the user once, then clear both markers."""
+    broken = ""
+    try:
+        with open(_rollback_marker_path(ROLLBACK_PENDING)) as f:
+            broken = f.read().strip()
+    except OSError:
+        pass
+    if broken:
+        remember_broken_version(broken)
+    for name in (ROLLBACK_REPORTED, ROLLBACK_PENDING):
+        try:
+            os.remove(_rollback_marker_path(name))
+        except OSError:
+            pass
+    log_event("update_rolled_back", version=broken)
+    threading.Thread(
+        target=lambda: ctypes.windll.user32.MessageBoxW(
+            None,
+            tr("rollback.body"),
+            tr("rollback.title"),
+            0x30 | 0x40000 | 0x10000,  # warning | topmost | foreground
+        ), daemon=True).start()
+
+
+def build_rollback_watchdog_lines():
+    """The cmd fragment the update shim appends after the installer.
+
+    If ROLLBACK_PENDING still exists after the grace period the new exe
+    never reported a healthy boot: kill it, restore the backup, relaunch
+    and leave the report marker so the old app explains to the user.
+    Returns [] when rollback is impossible (no backup staged).
+    """
+    app = os.path.abspath(sys.executable) if getattr(sys, "frozen", False) else None
+    backup = _rollback_backup_path()
+    marker = _rollback_marker_path(ROLLBACK_PENDING)
+    reported = _rollback_marker_path(ROLLBACK_REPORTED)
+    if not app or not os.path.isfile(backup):
+        return []
+    sys32 = "%%SystemRoot%%\\System32"
+    crlf = "\r\n"
+    return [
+        "rem ---- rollback watchdog (added by the app) ----" + crlf,
+        f'if exist "{marker}" ({crlf}'
+        f"  {sys32}\\timeout.exe /T {ROLLBACK_GRACE_SECONDS} /NOBREAK >nul{crlf}"
+        f'  if exist "{marker}" ({crlf}'
+        f"    {sys32}\\taskkill.exe /F /IM {os.path.basename(app)} >nul 2>&1{crlf}"
+        f"    {sys32}\\ping.exe -n 2 127.0.0.1 >nul{crlf}"
+        f'    copy /Y "{backup}" "{app}" >nul{crlf}'
+        f'    del /Q "{backup}" >nul 2>&1{crlf}'
+        f'    type NUL > "{reported}"{crlf}'
+        f'    start "" /B explorer.exe "{app}"{crlf}'
+        f"  ){crlf}"
+        f"){crlf}",
+    ]
+
+
+def build_restore_shim(backup_path, app_exe):
+    """Tiny cmd for the menu-driven "restore previous version": wait for
+    this app to exit, copy the backup over the current exe and relaunch.
+    Same wait/clear-env/explorer-relaunch rules as the update shim."""
+    fd, path = tempfile.mkstemp(prefix="ssd_restore_", suffix=".cmd")
+    with os.fdopen(fd, "w") as f:
+        f.write(
+            "@echo off\r\n"
+            "rem SSD Temperature Monitor restore shim\r\n"
+            'set "_MEIPASS2="\r\n'
+            'set "_PYI_APPLICATION_HOME_DIR="\r\n'
+            'set "_PYI_ARCHIVE_FILE="\r\n'
+            'set "_PYI_PARENT_PROCESS_LEVEL="\r\n'
+            'set "_PYI_SPLASH_IPC="\r\n'
+            ":wait\r\n"
+            # tasklist's IMAGENAME filter matches the bare file name only
+            '%%SystemRoot%%\\System32\\tasklist.exe /FI "IMAGENAME eq %s" 2>nul '
+            '| %%SystemRoot%%\\System32\\find.exe /I "%s" >nul '
+            % (os.path.basename(app_exe), os.path.basename(app_exe))
+            + "&& (%SystemRoot%\\System32\\ping.exe -n 1 127.0.0.1 >nul "
+              "& goto wait)\r\n"
+            f'copy /Y "{backup_path}" "{app_exe}" >nul\r\n'
+            f'del /Q "{backup_path}" >nul 2>&1\r\n'
+            f'start "" /B explorer.exe "{app_exe}"\r\n'
+            "exit /b 0\r\n"
+        )
+    return path
 
 
 def cleanup_stale_mei(min_age_seconds=60):
@@ -1903,6 +2147,7 @@ class App:
             pystray.MenuItem(tr("menu.refresh"), self.refresh),
             pystray.MenuItem(tr("menu.updates"), self.check_updates_now),
             pystray.MenuItem(tr("menu.selftest"), self.run_update_selftest_ui),
+            pystray.MenuItem(tr("menu.restore"), self.restore_previous_version),
             pystray.MenuItem(tr("menu.settings"), self.show_settings),
             pystray.MenuItem(tr("menu.about"), self.show_about),
             pystray.Menu.SEPARATOR,
@@ -1944,6 +2189,33 @@ class App:
     def check_updates_now(self, *_):
         threading.Thread(target=self._check_updates, kwargs={"manual": True},
                          daemon=True).start()
+
+    def restore_previous_version(self, *_):
+        """Menu: put the pre-update exe back and restart (confirmation first)."""
+        backup = _rollback_backup_path()
+        app = os.path.abspath(sys.executable) if getattr(sys, "frozen", False) else None
+        if not app or not os.path.isfile(backup):
+            ctypes.windll.user32.MessageBoxW(
+                None, tr("restore.none"), tr("mb.title"),
+                0x40 | 0x40000 | 0x10000)
+            return
+        rc = ctypes.windll.user32.MessageBoxW(
+            None, tr("restore.confirm"), tr("menu.restore"),
+            0x24 | 0x40000 | 0x10000)  # MB_ICONQUESTION | MB_YESNO
+        if rc != 6:  # IDNO / closed
+            return
+        log_event("manual_restore", current=effective_version())
+        try:
+            # stage the CURRENT exe first so the restart is also rollback-safe
+            stage_backup_for_rollback(target_version=effective_version())
+            shim = build_restore_shim(backup, app)
+        except Exception:
+            ctypes.windll.user32.MessageBoxW(
+                None, tr("restore.failed"), tr("mb.title"), 0x10)
+            return
+        subprocess.Popen(["cmd", "/c", shim],
+                         creationflags=subprocess.CREATE_NO_WINDOW, close_fds=True)
+        self.quit()
 
     def run_update_selftest_ui(self, *_):
         """Run the update-pipeline self-test and show the result."""
@@ -2545,6 +2817,13 @@ class App:
                     tr("notify.latest", local=effective_version()),
                     tr("notify.title.update"))
             return
+        if version_is_broken(version):
+            log_event("update_skipped_broken", remote=version)
+            if manual:
+                self._notify(
+                    tr("notify.broken_skipped", version=version),
+                    tr("notify.title.update"))
+            return
         with self._lock:
             already = self._nagged_version == version
             self._pending_update = (url, version)
@@ -2595,6 +2874,7 @@ class App:
                                     f"ssd_temp_monitor_setup_{version}.exe")
                 with open(dest, "wb") as f:
                     f.write(data)
+                stage_backup_for_rollback(target_version=version)
                 shim = build_update_shim(dest, restart_path=_own_restart_path())
             except Exception:
                 self._notify(tr("notify.download_failed"),
@@ -2926,7 +3206,10 @@ def run_unattended_update():
         print("UPDATE-RESULT: no release information")
         sys.exit(1)
     url, version = select_release_asset(release, prefer_prerelease=prerelease)
-    if not url or not is_newer_version(version):
+    if not url or not is_newer_version(version) or version_is_broken(version):
+        if url and version_is_broken(version):
+            print(f"UPDATE-RESULT: {version} previously rolled back - skipped")
+            sys.exit(0)
         print(f"UPDATE-RESULT: no update available (latest={version or '?'})")
         sys.exit(0)
     print(f"UPDATE-RESULT: update available {version}")
@@ -2949,6 +3232,7 @@ def run_unattended_update():
         print(f"UPDATE-RESULT: download failed ({exc})")
         sys.exit(1)
     print("UPDATE-RESULT: checksum verified - handing over to installer")
+    stage_backup_for_rollback(target_version=version)
     shim = build_update_shim(dest, restart_path=_own_restart_path())
     subprocess.Popen(["cmd", "/c", shim],
                      creationflags=subprocess.CREATE_NO_WINDOW, close_fds=True)
@@ -2975,6 +3259,7 @@ def main():
         # download, verify and install it with no tray UI (CI/e2e friendly)
         run_unattended_update()
     cleanup_stale_mei()
+    begin_healthy_session()
     App().run()
 
 

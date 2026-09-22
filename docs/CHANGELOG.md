@@ -3,6 +3,29 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.14.1] — 2026-09-22
+
+### Fixed
+
+- 🌡️ **อ่านอุณหภูมิไม่ได้เลย (dialog "No SSD temperature data")** — บั๊กจาก
+  v1.14.0: query เขียน `$c.Prop|ReadErrorsTotal` ทำให้ PowerShell ตีความ
+  `ReadErrorsTotal` เป็น**คำสั่ง** (ไม่ใช่ property) แล้วพังทั้ง statement
+  ทุกรอบ loop → ไม่มีข้อมูลส่งกลับแม้รันแบบ Administrator
+  (พิสูจน์ด้วยการรับ stderr จริง: `The term 'ReadErrorsTotal' is not recognized`)
+  แก้เป็น property access ตรง ๆ `$c.ReadErrorsTotal`
+
+### Added
+
+- 🛟 **Rollback อัตโนมัติของระบบอัปเดต** — ก่อนติดตั้งทุกครั้ง แอปเก็บ exe ตัวเอง
+  ไว้เป็น `ssd_temp_monitor.prev.exe` + เขียน pending marker ถ้าเวอร์ชันใหม่
+  **ไม่บูตสำเร็จภายใน 90 วินาที** shim จะ kill, คืน exe เดิม, เปิดแอปใหม่
+  และแจ้งผู้ใช้ด้วย dialog (แอปเก่าเป็นผู้แจ้ง — shim รันแบบไม่มี UI)
+- 🚫 **จำเวอร์ชันที่พัง** — เวอร์ชันที่ถูก rollback ถูกบันทึกไว้และ updater จะ
+  **ข้าม** (กันวงจรอัปเดตซ้ำเวอร์ชันเดิมตลอดไป) บันทึกล่าสุด 10 รายการ
+- 🔁 **เมนู "คืนเวอร์ชันก่อนหน้า"** — ผู้ใช้ย้อนกลับเองได้จาก tray menu
+  (ยืนยันก่อน, รีสตาร์ตผ่าน explorer แบบ detached เหมือน updater)
+- 🧪 pytest **226 เคส** (+9)
+
 ## [1.14.0] — 2026-09-22
 
 ชุดฟีเจอร์ 10 ข้อ — พิสูจน์ผ่านช่องทาง pre-release ด้วย rc1/rc2 ก่อนปล่อย stable

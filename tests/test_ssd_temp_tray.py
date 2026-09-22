@@ -1845,3 +1845,107 @@ class TestSelftestRcOrder:
         ok, (checks, failed) = m.run_update_selftest()
         assert ok, [c for c in checks if not c[1]]
         assert any("semver" in name for name, _o, _d in checks)
+
+
+# ---------------------------------------------------------------------------
+# v1.14.1: automatic update rollback + PS_TEMPS fix
+# ---------------------------------------------------------------------------
+class TestRollback:
+    def _sandbox(self, tmp_path, monkeypatch):
+        """Freeze-like sandbox: fake exe dir + isolated DATA_DIR."""
+        exe_dir = tmp_path / "app"
+        exe_dir.mkdir()
+        exe = exe_dir / "ssd_temp_monitor.exe"
+        exe.write_bytes(b"MZ-fake")
+        data = tmp_path / "data"
+        data.mkdir()
+        monkeypatch.setattr(m, "DATA_DIR", str(data))
+        return str(exe), str(exe_dir), str(data)
+
+    def test_stage_backup_copies_exe_and_marker(self, tmp_path, monkeypatch):
+        exe, exe_dir, data = self._sandbox(tmp_path, monkeypatch)
+        assert m.stage_backup_for_rollback(app_exe=exe, data_dir=data,
+                                           target_version="v1.15.0") is True
+        assert os.path.isfile(os.path.join(exe_dir, m.ROLLBACK_BACKUP_NAME))
+        marker = os.path.join(data, m.ROLLBACK_PENDING)
+        assert open(marker).read() == "v1.15.0"
+
+    def test_stage_backup_missing_exe_is_noop(self, tmp_path, monkeypatch):
+        _, _, data = self._sandbox(tmp_path, monkeypatch)
+        assert m.stage_backup_for_rollback(
+            app_exe=str(tmp_path / "nope.exe"), data_dir=data) is False
+        assert not os.path.exists(os.path.join(data, m.ROLLBACK_PENDING))
+
+    def test_begin_healthy_clears_backup_and_marker(self, tmp_path, monkeypatch):
+        exe, exe_dir, data = self._sandbox(tmp_path, monkeypatch)
+        m.stage_backup_for_rollback(app_exe=exe, data_dir=data,
+                                    target_version="v1.15.0")
+        monkeypatch.setattr(m, "_rollback_backup_path",
+                            lambda: os.path.join(exe_dir, m.ROLLBACK_BACKUP_NAME))
+        monkeypatch.setattr(m, "_rollback_marker_path",
+                            lambda name: os.path.join(data, name))
+        m.begin_healthy_session()
+        assert not os.path.exists(os.path.join(data, m.ROLLBACK_PENDING))
+        assert not os.path.exists(os.path.join(exe_dir, m.ROLLBACK_BACKUP_NAME))
+
+    def test_rollback_reported_blacklists_version(self, tmp_path, monkeypatch):
+        exe, exe_dir, data = self._sandbox(tmp_path, monkeypatch)
+        monkeypatch.setattr(m, "_rollback_backup_path",
+                            lambda: os.path.join(exe_dir, m.ROLLBACK_BACKUP_NAME))
+        monkeypatch.setattr(m, "_rollback_marker_path",
+                            lambda name: os.path.join(data, name))
+        with open(os.path.join(data, m.ROLLBACK_PENDING), "w") as f:
+            f.write("v1.15.0")
+        with open(os.path.join(data, m.ROLLBACK_REPORTED), "w") as f:
+            f.write("")
+        m.begin_healthy_session()
+        assert m.version_is_broken("v1.15.0")
+        assert not os.path.exists(os.path.join(data, m.ROLLBACK_PENDING))
+        assert not os.path.exists(os.path.join(data, m.ROLLBACK_REPORTED))
+
+    def test_broken_version_skips_update_checks(self, tmp_path, monkeypatch):
+        m.remember_broken_version("v1.15.0")
+        m.remember_broken_version("v1.15.0")  # dedup
+        assert m.version_is_broken("v1.15.0")
+        assert not m.version_is_broken("v1.16.0")
+
+    def test_watchdog_lines_present_in_shim_when_backup_staged(
+            self, tmp_path, monkeypatch):
+        exe, exe_dir, data = self._sandbox(tmp_path, monkeypatch)
+        monkeypatch.setattr(m.sys, "frozen", True, raising=False)
+        monkeypatch.setattr(m.sys, "executable", exe)
+        monkeypatch.setattr(m, "DATA_DIR", data)
+        m.stage_backup_for_rollback(app_exe=exe, data_dir=data,
+                                    target_version="v1.15.0")
+        shim = m.build_update_shim(str(tmp_path / "setup.exe"),
+                                   restart_path=exe)
+        content = open(shim, encoding="utf-8").read()
+        assert "rollback watchdog" in content
+        assert "timeout.exe /T 90" in content
+        assert f"copy /Y" in content and m.ROLLBACK_BACKUP_NAME in content
+        assert "explorer.exe" in content
+
+    def test_watchdog_absent_without_backup(self, tmp_path, monkeypatch):
+        exe, exe_dir, data = self._sandbox(tmp_path, monkeypatch)
+        monkeypatch.setattr(m.sys, "frozen", True, raising=False)
+        monkeypatch.setattr(m.sys, "executable", exe)
+        monkeypatch.setattr(m, "DATA_DIR", data)
+        shim = m.build_update_shim(str(tmp_path / "setup.exe"),
+                                   restart_path=exe)
+        content = open(shim, encoding="utf-8").read()
+        assert "rollback watchdog" not in content
+
+    def test_restore_shim_waits_by_bare_name(self, tmp_path):
+        exe = str(tmp_path / "app" / "ssd_temp_monitor.exe")
+        shim = m.build_restore_shim(str(tmp_path / "prev.exe"), exe)
+        content = open(shim, encoding="utf-8").read()
+        assert 'IMAGENAME eq ssd_temp_monitor.exe' in content
+        assert "app" not in content.split("IMAGENAME eq")[1].split('"')[0]
+        assert "explorer.exe" in content
+
+    def test_pstemp_query_no_pipe_property(self):
+        """Regression v1.14.0: 'readErr' must be a plain property access -
+        the old `$c.Prop|ReadErrorsTotal` made PowerShell treat the
+        property name as a command, killing the whole query (empty data)."""
+        assert "|ReadErrorsTotal" not in m.PS_TEMPS
+        assert "readErr=$c.ReadErrorsTotal;" in m.PS_TEMPS
