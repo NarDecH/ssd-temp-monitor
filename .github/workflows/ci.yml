@@ -113,8 +113,17 @@ jobs:
         run: |
           Stop-Process -Name ssd_temp_monitor -Force -ErrorAction SilentlyContinue
           Start-Sleep -Seconds 2
+          # /FORCECLOSEAPPLICATIONS: do not let a straggling instance or a
+          # transient file lock fail the silent uninstall (seen once on CI)
           $p = Start-Process -FilePath "C:\Program Files\SSD Temp Monitor\unins000.exe" `
-            -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
-          Start-Sleep -Seconds 3
-          if (Test-Path "C:\Program Files\SSD Temp Monitor\ssd_temp_monitor.exe") { exit 1 }
+            -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/FORCECLOSEAPPLICATIONS" -Wait -PassThru
+          Write-Output "uninstall exit code: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { exit 1 }
+          # wait until the exe is really gone (up to 15 s)
+          $gone = $false
+          foreach ($i in 1..15) {
+            if (-not (Test-Path "C:\Program Files\SSD Temp Monitor\ssd_temp_monitor.exe")) { $gone = $true; break }
+            Start-Sleep -Seconds 1
+          }
+          if (-not $gone) { exit 1 }
           Write-Output "uninstall OK"

@@ -266,6 +266,11 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   ทำให้ "dark pixel" ที่เทสใช้หาไม่เจอ กฎ: เทสพิกเซลต้องตั้งค่าที่ต้องการ
   อย่าพึ่งค่า default ของ SETTINGS และเปลี่ยน default ทีไร ให้ grep เทส
   ที่ assert ค่า default เดิมด้วย
+- **silent uninstall ใน CI ต้อง /FORCECLOSEAPPLICATIONS + poll ไฟล์จริง** —
+  unins000 แบบ /VERYSILENT บางครั้งคืน 0 แต่ exe ยังอยู่ชั่วขณะ (lock/
+  instance หลงเหลือ) ทำให้ job พังแบบ flaky (เจอครั้งแรก v1.19.0) กฎ:
+  อย่าเช็คไฟล์ด้วย fixed sleep — วนรอจนไฟล์หายจริง และบังคับปิดแอปที่ค้าง
+  ด้วย /FORCECLOSEAPPLICATIONS ตั้งแต่คำสั่งเดียว
 
 ## สไตล์โค้ด
 
