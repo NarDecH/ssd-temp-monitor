@@ -2232,6 +2232,45 @@ class TestWeeklyReport:
         assert out and os.path.isfile(out)
         assert path_holder.get("opened") == out
 
+    def test_report_includes_wear_and_error_charts(self):
+        """The weekly report draws three SVG charts per disk: temperature,
+        wear and uncorrected read errors (aria-labels are English)."""
+        rows = self._rows()
+        rows[3]["uncorrected"] = "7"
+        html = m.build_weekly_report_html(rows)
+        assert html.count("<svg") == 3
+        assert "daily average temperature" in html
+        assert "wear percentage" in html
+        assert "uncorrected read errors" in html
+        # error value survives into the chart polyline, not the table only
+        assert "," in html.split("uncorrected read errors")[1]
+
+    def test_export_weekly_report_uses_chosen_path(self, tmp_path, monkeypatch):
+        """Save As export writes the HTML to the user-chosen file and
+        returns that path; cancel (empty path) returns None."""
+        target = tmp_path / "my_report.html"
+        monkeypatch.setattr(m, "DATA_DIR", str(tmp_path))
+        monkeypatch.setattr(m, "HEALTH_LOG_FILE", str(tmp_path / "h.csv"))
+        monkeypatch.setattr(m, "log_event", lambda *a, **k: None)
+        asked = {}
+
+        def fake_dialog(**kwargs):
+            asked.update(kwargs)
+            return str(target)
+
+        filedialog_stub = types.SimpleNamespace(asksaveasfilename=fake_dialog)
+        monkeypatch.setitem(sys.modules, "tkinter", types.SimpleNamespace(
+            filedialog=filedialog_stub))
+        t0 = time.time() - 86400
+        d = {"model": "M1", "bus": "NVMe", "temp": 40, "wear": 5,
+             "read_errors": 0, "unfixed_errors": 0}
+        for day in range(2):
+            m.append_daily_health([d], now=t0 + day * 86400)
+        out = m.save_weekly_report_as()
+        assert out == str(target)
+        assert target.is_file() and target.stat().st_size > 500
+        assert asked.get("initialfile", "").endswith(".html")
+
 
 class TestWearSlope:
     def _log(self, path, wears):

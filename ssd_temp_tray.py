@@ -43,7 +43,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.17.2"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.18.0"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -374,6 +374,7 @@ STRINGS = {
         "health.refresh": "Refresh",
         "health.trend": "30-day trend",
         "health.report": "Weekly report",
+        "health.export": "Export...",
         "health.trend_empty": ("No daily health history yet - the app "
                                "records one row per day automatically."),
         "health.status.ok": "All drives look healthy.",
@@ -510,6 +511,7 @@ STRINGS = {
         "health.refresh": "รีเฟรช",
         "health.trend": "แนวโน้ม 30 วัน",
         "health.report": "รายงานรายสัปดาห์",
+        "health.export": "ส่งออก...",
         "health.trend_empty": "ยังไม่มีประวัติสุขภาพรายวัน - แอปบันทึกวันละหนึ่งแถวโดยอัตโนมัติ",
         "health.status.ok": "ดิสก์ทุกตัวสภาพปกติ",
         "health.status.warn": "ควรตรวจสอบ - ดูรายละเอียดด้านล่าง",
@@ -640,6 +642,7 @@ STRINGS = {
         "health.refresh": "更新",
         "health.trend": "30日トレンド",
         "health.report": "週次レポート",
+        "health.export": "エクスポート...",
         "health.trend_empty": "日次の健康履歴はまだありません - アプリが毎日自動で1行記録します。",
         "health.status.ok": "すべてのドライブは正常です。",
         "health.status.warn": "要確認 - 下記の詳細をご覧ください。",
@@ -769,6 +772,7 @@ STRINGS = {
         "health.refresh": "刷新",
         "health.trend": "30 天趋势",
         "health.report": "每周报告",
+        "health.export": "导出...",
         "health.trend_empty": "尚无每日健康历史 - 应用会每天自动记录一行。",
         "health.status.ok": "所有磁盘状态正常。",
         "health.status.warn": "需要关注 - 请查看下方详情。",
@@ -1365,6 +1369,20 @@ def trend_series(rows, model, days=HEALTH_TREND_DAYS):
 WEEKLY_REPORT_DAYS = 7
 
 
+def _svg(points, color, label, y_lo, y_hi):
+    """One 404x170 SVG line chart from (index, value) pairs."""
+    span = max(y_hi - y_lo, 1)
+    pts = " ".join(
+        f"{12 + i * 380 / max(n - 1, 1):.1f},"
+        f"{150 - (v - y_lo) / span * 120:.1f}"
+        for i, (n, v) in enumerate(points))
+    return (f'<svg viewBox="0 0 404 170" width="404" height="170" role="img" '
+            f'aria-label="{label}">\n'
+            f'  <line x1="12" y1="150" x2="392" y2="150" stroke="#334155"/>\n'
+            f'  <polyline fill="none" stroke="{color}" stroke-width="2" '
+            f'points="{pts}"/>\n</svg>')
+
+
 def build_weekly_report_html(rows, now=None):
     """Render the last 7 days of health_daily.csv as a standalone HTML.
 
@@ -1373,11 +1391,10 @@ def build_weekly_report_html(rows, now=None):
     no data for the window. The output has no external dependencies, so
     it opens correctly from any folder or is attachable to an email.
     """
-    now = time.time() if now is None else now
-    start = now - WEEKLY_REPORT_DAYS * 86400
     import datetime as _dt
-    cutoff = (_dt.datetime.now() - _dt.timedelta(days=WEEKLY_REPORT_DAYS))
-    cutoff_str = cutoff.strftime("%Y-%m-%d")
+    cutoff_str = (_dt.datetime.now()
+                  - _dt.timedelta(days=WEEKLY_REPORT_DAYS)).strftime(
+                      "%Y-%m-%d")
     models = []
     for r in rows:
         if r.get("model") and r["model"] not in models:
@@ -1388,26 +1405,39 @@ def build_weekly_report_html(rows, now=None):
         series = [s for s in series if s[0] >= cutoff_str]
         if not series:
             continue
-        w_pts = [f"{12 + i * 380 / max(len(series) - 1, 1):.1f},"
-                 f"{150 - (avg - 25) / 50 * 120:.1f}"
-                 for i, (_d, avg, _lo, _hi, _w) in enumerate(series)]
+        errs = {}
+        for r in rows:
+            if r.get("model") != model:
+                continue
+            try:
+                n = int(r.get("uncorrected") or 0)
+            except (TypeError, ValueError):
+                n = 0
+            d = r.get("date", "")
+            if d >= cutoff_str:
+                errs[d] = errs.get(d, 0) + n
+        chart_temp = _svg([(i, avg) for i, (_d, avg, _lo, _hi, _w)
+                           in enumerate(series)],
+                          "#38bdf8", "daily average temperature", 25, 75)
+        chart_wear = _svg([(i, w) for i, (_d, _a, _l, _h, w) in enumerate(series)
+                           if w is not None] or [(0, 0)],
+                          "#f59e0b", "wear percentage", 0, 100)
+        chart_err = _svg([(i, min(errs.get(d, 0), 500))
+                          for i, (d, *_rest) in enumerate(series)],
+                         "#ef4444", "uncorrected read errors", 0, 500)
         wear_rows = "".join(
-            f"<tr><td>{d}</td><td>{avg:.1f}</td><td>{lo:.0f}</td>"
-            f"<td>{hi:.0f}</td><td>{'%' if w is not None else '-'}"
-            f"</td></tr>"
-            if False else
             f"<tr><td>{d}</td><td>{avg:.1f}</td><td>{lo:.0f}</td>"
             f"<td>{hi:.0f}</td><td>{w if w is not None else '-'}</td></tr>"
             for d, avg, lo, hi, w in series)
         sections.append(f"""
   <section>
     <h2>{model}</h2>
-    <svg viewBox="0 0 404 170" width="404" height="170" role="img"
-         aria-label="daily average temperature">
-      <line x1="12" y1="150" x2="392" y2="150" stroke="#334155"/>
-      <polyline fill="none" stroke="#38bdf8" stroke-width="2"
-                points="{' '.join(w_pts)}"/>
-    </svg>
+    <p class="muted">Temperature (°C)</p>
+    {chart_temp}
+    <p class="muted">Wear (%)</p>
+    {chart_wear}
+    <p class="muted">Uncorrected read errors (clipped at 500)</p>
+    {chart_err}
     <table>
       <tr><th>date</th><th>avg °C</th><th>min</th><th>max</th>
           <th>wear %</th></tr>
@@ -1460,6 +1490,30 @@ def open_weekly_report(parent=None):
         os.startfile(out)  # default browser
         log_event("weekly_report_opened", rows=len(rows))
         return out
+    except Exception:
+        return None
+
+
+def save_weekly_report_as(parent=None):
+    """Ask for a destination and write the weekly report there (no open).
+    Returns the chosen path or None when cancelled/empty."""
+    try:
+        from tkinter import filedialog
+        rows = load_daily_health()
+        html = build_weekly_report_html(rows)
+        if not html:
+            return None
+        name = time.strftime("ssd_health_weekly_%Y%m%d.html")
+        path = filedialog.asksaveasfilename(
+            parent=parent, defaultextension=".html",
+            filetypes=(("HTML", "*.html"), ("All files", "*.*")),
+            initialfile=name)
+        if not path:
+            return None
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(html)
+        log_event("weekly_report_exported", path=path)
+        return path
     except Exception:
         return None
 
@@ -3333,6 +3387,22 @@ class App:
                 report_btn.config(state="normal")
 
         report_btn.config(command=_open_report)
+
+        export_btn = tk.Button(tab_health, text=tr("health.export"),
+                               font=("Segoe UI", 10), width=12)
+        export_btn.grid(row=0, column=4, sticky="e", padx=(14, 0))
+
+        def _export_report():
+            export_btn.config(state="disabled")
+            try:
+                path = save_weekly_report_as(parent=root)
+                if path:
+                    self._notify(tr("notify.exported", path=path),
+                                 tr("app.title"))
+            finally:
+                export_btn.config(state="normal")
+
+        export_btn.config(command=_export_report)
 
         note = tk.Label(outer, text=tr("settings.note"),
                         font=("Segoe UI", 8), fg="#64748b")

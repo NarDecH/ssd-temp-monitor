@@ -160,6 +160,9 @@ jobs:
           # portable package: keep settings/history next to the exe
           New-Item -ItemType Directory -Force -Path "portable_tmp\portable_data" | Out-Null
           Copy-Item "ssd_temp_monitor_v${{ steps.ver.outputs.version }}.exe" "portable_tmp\"
+          # the marker NEXT TO the exe is what _is_portable() checks -
+          # without it the portable bundle silently used %APPDATA%
+          New-Item -ItemType File -Force -Path "portable_tmp\portable_data.portable" | Out-Null
           New-Item -ItemType File -Force -Path "portable_tmp\portable_data\.keep" | Out-Null
           Compress-Archive -Path "portable_tmp\*" -DestinationPath "ssd_temp_monitor_v${{ steps.ver.outputs.version }}_portable.zip" -Force
 
