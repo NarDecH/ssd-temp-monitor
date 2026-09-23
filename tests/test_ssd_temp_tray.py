@@ -1745,6 +1745,67 @@ class TestAutostart:
         assert m._validate_settings({"compact_tooltip": "yes"})["compact_tooltip"] is True
         assert m._validate_settings({})["compact_tooltip"] is True
 
+    def test_entry_point_prefers_installed_exe_when_source(self, monkeypatch):
+        """Source run + installed exe present -> register the exe, never
+        pythonw (the mutex-blocking bug that broke self-update)."""
+        monkeypatch.setattr(m.sys, "frozen", False, raising=False)
+        installed = os.path.join(r"C:\Program Files\SSD Temp Monitor",
+                                 "ssd_temp_monitor.exe")
+        def fake_isfile(p):
+            return os.path.normpath(p) == os.path.normpath(installed)
+        monkeypatch.setattr(m.os.path, "isfile", fake_isfile)
+        assert os.path.normpath(m._autostart_entry_point()) == \
+            os.path.normpath(installed)
+
+    def test_entry_point_frozen_is_self(self, monkeypatch):
+        monkeypatch.setattr(m.sys, "frozen", True, raising=False)
+        monkeypatch.setattr(m.sys, "executable", "X:/app/exe.exe",
+                            raising=False)
+        assert m._autostart_entry_point() == "X:/app/exe.exe"
+
+    def test_heal_autostart_fixes_wrong_value(self, monkeypatch):
+        """A Run key pointing at a foreign command is rewritten to the
+        proper entry point (and untouched when already correct)."""
+        store = {}
+
+        class FakeKey:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        class FakeReg:
+            HKEY_CURRENT_USER = "HKCU"
+            KEY_SET_VALUE = 0x0002
+            REG_SZ = 1
+
+            @staticmethod
+            def OpenKey(root, path, reserved=0, access=None):
+                return TestAutostart._FakeKey()
+
+            @staticmethod
+            def QueryValueEx(key, name):
+                if name not in store:
+                    raise OSError(2, "not found")
+                return store[name], 1
+
+            @staticmethod
+            def SetValueEx(key, name, _r, _t, value):
+                store[name] = value
+
+            @staticmethod
+            def DeleteValue(key, name):
+                store.pop(name, None)
+
+        monkeypatch.setattr(m.sys, "frozen", False, raising=False)
+        point = m._autostart_entry_point()
+        store[m.AUTOSTART_VALUE] = '"C:/somewhere/pythonw.exe"'
+        assert m.heal_autostart_value(FakeReg) is True
+        assert store[m.AUTOSTART_VALUE] == f'"{point}"'
+        # already correct -> no rewrite
+        assert m.heal_autostart_value(FakeReg) is False
+
 
 class TestCompactTooltip:
     def test_compact_single_disk(self):
@@ -2029,3 +2090,96 @@ class TestSettingsHealthTab:
         assert m.health_flags(healthy) == []
         worn = dict(healthy, wear=95)
         assert m.health_flags(worn)  # produces the warning string
+
+
+# ---------------------------------------------------------------------------
+# v1.16.0: proactive SMART alerts + daily health CSV + autostart guard
+# ---------------------------------------------------------------------------
+class TestSmartWatch:
+    def test_new_unfixed_errors_fire_once(self, monkeypatch):
+        """First sighting = baseline (no alert storm on fresh installs);
+        only a RISING counter afterwards fires, and only once per rise."""
+        monkeypatch.setitem(m.SETTINGS, "language", "en")
+        disk = {"model": "D1", "temp": 40, "wear": 0, "unfixed_errors": 5}
+        state, fired = m.smart_watch_changes([disk], {})
+        assert fired == []                        # baseline established
+        assert state["D1"]["unfixed"] == 5
+        # same counter again: nothing new
+        state2, fired2 = m.smart_watch_changes([disk], state)
+        assert fired2 == []
+        # counter rises: fires once
+        disk2 = dict(disk, unfixed_errors=7)
+        state3, fired3 = m.smart_watch_changes([disk2], state2)
+        assert len(fired3) == 1 and "D1" in fired3[0]
+        assert state3["D1"]["unfixed"] == 7
+
+    def test_wear_band_crossing(self, monkeypatch):
+        monkeypatch.setitem(m.SETTINGS, "language", "en")
+        d70 = {"model": "D1", "temp": 40, "wear": 70, "unfixed_errors": 0}
+        d80 = dict(d70, wear=80)
+        d95 = dict(d70, wear=95)
+        state, fired = m.smart_watch_changes([d70], {})
+        assert fired == []                       # 70% = ok band
+        state, fired = m.smart_watch_changes([d80], state)
+        assert len(fired) == 1                   # crossed into used band
+        state, fired = m.smart_watch_changes([d95], state)
+        assert len(fired) == 1                   # crossed into high band
+
+    def test_unknown_counters_stay_silent(self, monkeypatch):
+        monkeypatch.setitem(m.SETTINGS, "language", "en")
+        d = {"model": "D1", "temp": 40, "wear": None, "unfixed_errors": None}
+        state, fired = m.smart_watch_changes([d], {})
+        assert fired == [] and state == {}        # nothing recorded, nothing fired
+
+    def test_state_roundtrip(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(m, "DATA_DIR", str(tmp_path))
+        state = {"D1": {"wear": 80, "unfixed": 3}}
+        assert m.save_smart_state(state, str(tmp_path))
+        assert m.load_smart_state(str(tmp_path)) == state
+        assert m.load_smart_state(str(tmp_path / "nope")) == {}
+
+    def test_settings_flag_validated(self):
+        assert m._validate_settings({"smart_alerts": "yes"})["smart_alerts"] is True
+        assert m._validate_settings({"smart_alerts": 0})["smart_alerts"] is False
+        assert m._validate_settings({})["smart_alerts"] is True
+
+
+class TestDailyHealth:
+    def _rows(self, path):
+        with open(path, newline="", encoding="utf-8") as f:
+            return list(__import__("csv").DictReader(f))
+
+    def test_one_row_per_day(self, tmp_path):
+        path = str(tmp_path / "h.csv")
+        t0 = 1789000000.0  # any fixed instant
+        d = {"model": "M1", "bus": "NVMe", "temp": 40, "wear": 10,
+             "read_errors": 0, "unfixed_errors": 0}
+        assert m.append_daily_health([d], now=t0, path=path)
+        assert not m.append_daily_health([d], now=t0 + 60, path=path)
+        # next day: appends again
+        assert m.append_daily_health([d], now=t0 + 86400, path=path)
+        rows = self._rows(path)
+        assert len(rows) == 2 and rows[0]["model"] == "M1"
+        assert rows[0]["temp_c"] == "40"
+
+    def test_headless_call_never_raises(self, tmp_path):
+        # unwritable path -> returns False, no exception
+        bad = str(tmp_path / "no_dir_here" / "h.csv")
+        assert m.append_daily_health(
+            [{"model": "M", "bus": "?", "temp": 1, "wear": None,
+              "read_errors": None, "unfixed_errors": None}],
+            now=1789000000.0, path=bad) is False
+
+    def test_trend_series_aggregates_and_limits(self, tmp_path):
+        path = str(tmp_path / "h.csv")
+        t0 = 1789000000.0
+        for day in range(35):
+            d = {"model": "M1", "bus": "NVMe", "temp": 40 + day % 5,
+                 "wear": day, "read_errors": 0, "unfixed_errors": 0}
+            m.append_daily_health([d], now=t0 + day * 86400, path=path)
+        rows = m.load_daily_health(path)
+        series = m.trend_series(rows, "M1", days=30)
+        assert len(series) == 30                  # capped at 30 days
+        date, avg, lo, hi, wear = series[-1]
+        assert lo <= avg <= hi and wear == 34
+        assert m.trend_series(rows, "MISSING") == []

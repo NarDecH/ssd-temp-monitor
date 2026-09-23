@@ -43,7 +43,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.15.1"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.16.0"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -237,6 +237,7 @@ DEFAULT_SETTINGS = {
     "alert_cooldown_minutes": 5,
     "history_minutes": 30,                   # 5..1440 (up to 24 h)
     "record_history": False,
+    "smart_alerts": True,                     # proactive SMART notifications
     "multi_disk_icons": True,
     "check_updates": True,
     "github_repo": "NarDech/ssd-temp-monitor",
@@ -265,6 +266,7 @@ def _validate_settings(cfg):
     out["alert_cooldown_minutes"] = min(120, max(1, int(out["alert_cooldown_minutes"])))
     out["history_minutes"] = min(1440, max(5, int(out["history_minutes"])))
     out["record_history"] = bool(out["record_history"])
+    out["smart_alerts"] = bool(out["smart_alerts"])
     out["update_channel"] = ("pre-release" if out["update_channel"] == "pre-release"
                              else "stable")
     try:
@@ -369,6 +371,9 @@ STRINGS = {
         "win.settings": "SSD Temperature - Settings",
         "tab.health": "Health",
         "health.refresh": "Refresh",
+        "health.trend": "30-day trend",
+        "health.trend_empty": ("No daily health history yet - the app "
+                               "records one row per day automatically."),
         "health.status.ok": "All drives look healthy.",
         "health.status.warn": "Attention needed - see details below.",
         "health.no_data": "No disk data available.",
@@ -376,6 +381,11 @@ STRINGS = {
         "health.wear": "Wear",
         "health.read_errors": "Read errors",
         "health.unfixed": "uncorrected",
+        "settings.smart_alerts": "Alert on SMART problems (new errors, wear)",
+        "smart.title": "SSD health notice",
+        "smart.new_errors": ("{model}: {n} new uncorrected read error(s) - "
+                             "back up your data."),
+        "smart.wear_band": "{model}: drive wear reached {wear}%.",
         "tab.general": "General",
         "tab.icon": "Icon",
         "tab.updates": "Updates",
@@ -494,6 +504,8 @@ STRINGS = {
         "win.settings": "อุณหภูมิ SSD - ตั้งค่า",
         "tab.health": "สุขภาพ",
         "health.refresh": "รีเฟรช",
+        "health.trend": "แนวโน้ม 30 วัน",
+        "health.trend_empty": "ยังไม่มีประวัติสุขภาพรายวัน - แอปบันทึกวันละหนึ่งแถวโดยอัตโนมัติ",
         "health.status.ok": "ดิสก์ทุกตัวสภาพปกติ",
         "health.status.warn": "ควรตรวจสอบ - ดูรายละเอียดด้านล่าง",
         "health.no_data": "ไม่มีข้อมูลดิสก์",
@@ -501,6 +513,10 @@ STRINGS = {
         "health.wear": "การสึก",
         "health.read_errors": "ข้อผิดพลาดการอ่าน",
         "health.unfixed": "แก้ไขไม่สำเร็จ",
+        "settings.smart_alerts": "แจ้งเตือนเมื่อ SMART มีปัญหา (error ใหม่ / การสึก)",
+        "smart.title": "แจ้งเตือนสุขภาพ SSD",
+        "smart.new_errors": "{model}: พบข้อผิดพลาดการอ่านแก้ไม่สำเร็จใหม่ {n} รายการ - ควรสำรองข้อมูล",
+        "smart.wear_band": "{model}: การสึกถึง {wear}% แล้ว",
         "tab.general": "ทั่วไป",
         "tab.icon": "ไอคอน",
         "tab.updates": "อัปเดต",
@@ -616,6 +632,8 @@ STRINGS = {
         "win.settings": "SSD 温度 - 設定",
         "tab.health": "健全性",
         "health.refresh": "更新",
+        "health.trend": "30日トレンド",
+        "health.trend_empty": "日次の健康履歴はまだありません - アプリが毎日自動で1行記録します。",
         "health.status.ok": "すべてのドライブは正常です。",
         "health.status.warn": "要確認 - 下記の詳細をご覧ください。",
         "health.no_data": "ディスク情報がありません。",
@@ -623,6 +641,10 @@ STRINGS = {
         "health.wear": "劣化度",
         "health.read_errors": "読み取りエラー",
         "health.unfixed": "訂正不能",
+        "settings.smart_alerts": "SMART 異常を通知 (新規エラー / 劣化)",
+        "smart.title": "SSD 健康のお知らせ",
+        "smart.new_errors": "{model}: 新しい訂正不能読み取りエラーが {n} 件 - データをバックアップしてください。",
+        "smart.wear_band": "{model}: ドライブの劣化が {wear}% に到達しました。",
         "tab.general": "全般",
         "tab.icon": "アイコン",
         "tab.updates": "更新",
@@ -737,6 +759,8 @@ STRINGS = {
         "win.settings": "SSD 温度 - 设置",
         "tab.health": "健康",
         "health.refresh": "刷新",
+        "health.trend": "30 天趋势",
+        "health.trend_empty": "尚无每日健康历史 - 应用会每天自动记录一行。",
         "health.status.ok": "所有磁盘状态正常。",
         "health.status.warn": "需要关注 - 请查看下方详情。",
         "health.no_data": "没有磁盘数据。",
@@ -744,6 +768,10 @@ STRINGS = {
         "health.wear": "磨损",
         "health.read_errors": "读取错误",
         "health.unfixed": "无法纠正",
+        "settings.smart_alerts": "SMART 异常提醒 (新错误 / 磨损)",
+        "smart.title": "SSD 健康提醒",
+        "smart.new_errors": "{model}: 新增 {n} 个无法纠正的读取错误 - 请备份数据。",
+        "smart.wear_band": "{model}: 磨损已达 {wear}%。",
         "tab.general": "常规",
         "tab.icon": "图标",
         "tab.updates": "更新",
@@ -1117,6 +1145,174 @@ def health_flags(disk):
     elif total >= 100:
         flags.append(tr("health.read_errors_fixed", total=total))
     return flags
+
+
+def wear_band(wear):
+    """0 = ok, 1 = used (>=75%), 2 = high (>=90%) - mirrors health_flags."""
+    if wear is None:
+        return 0
+    if wear >= 90:
+        return 2
+    if wear >= 75:
+        return 1
+    return 0
+
+
+def wear_crossed(prev, cur):
+    """True when cur newly reaches a worse wear band than prev."""
+    return prev is not None and cur is not None and wear_band(cur) > wear_band(prev)
+
+
+def unfixed_new_errors(prev, cur):
+    """How many NEW uncorrected errors appeared (0 when unknown/none)."""
+    if prev is None or cur is None:
+        return 0
+    return max(0, cur - prev)
+
+
+def smart_watch_changes(temps, state):
+    """Pure core of the SMART watchdog (mirror of alert_state).
+
+    Compares the fresh reading against the persisted per-model state and
+    returns (new_state, fired_messages). The state updates for every
+    counter that is readable, but a message only fires for NEW damage:
+    a rising uncorrected-error counter or wear newly crossing into a
+    worse band (>=75%, >=90%).
+    """
+    state = dict(state)
+    fired = []
+    for t in temps:
+        model = t.get("model", "SSD")
+        prev = state.get(model, {})
+        unfixed = t.get("unfixed_errors")
+        wear = t.get("wear")
+        if unfixed is not None:
+            new_err = unfixed_new_errors(prev.get("unfixed"), unfixed)
+            if new_err:
+                fired.append(tr("smart.new_errors", n=new_err, model=model))
+            state[model] = dict(prev, unfixed=unfixed)
+        if wear is not None:
+            if wear_crossed(prev.get("wear"), wear):
+                fired.append(tr("smart.wear_band", wear=wear, model=model))
+            state[model] = dict(state.get(model, prev), wear=wear)
+    return state, fired
+
+
+SMART_ALERT_COOLDOWN_MINUTES = 30
+SMART_STATE_FILE = "smart_state.json"
+
+
+def _smart_state_path(data_dir=None):
+    return os.path.join(data_dir or DATA_DIR, SMART_STATE_FILE)
+
+
+def load_smart_state(data_dir=None):
+    """Last-seen SMART counters per model ({model: {wear, unfixed}}).
+
+    Persisted so an app restart does not re-alert on errors that were
+    already known. Corrupt/missing file -> empty dict.
+    """
+    try:
+        with open(_smart_state_path(data_dir), encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_smart_state(state, data_dir=None):
+    """Persist the last-seen SMART counters (best effort)."""
+    try:
+        with open(_smart_state_path(data_dir), "w", encoding="utf-8") as f:
+            json.dump(state, f)
+        return True
+    except OSError:
+        return False
+
+
+HEALTH_LOG_FILE = os.path.join(DATA_DIR, "health_daily.csv")
+HEALTH_TREND_DAYS = 30
+
+
+def append_daily_health(temps, now=None, path=None):
+    """Append one row per disk to health_daily.csv - at most once/day.
+
+    Returns True when a row was appended. The date check is based on the
+    last line already in the file, so repeated calls on the same day are
+    cheap no-ops and the collection survives restarts.
+    """
+    path = path or HEALTH_LOG_FILE
+    now = time.time() if now is None else now
+    stamp = time.strftime("%Y-%m-%d", time.localtime(now))
+    rows = []
+    try:
+        if os.path.isfile(path):
+            with open(path, newline="", encoding="utf-8") as f:
+                rows = list(csv.DictReader(f))
+    except OSError:
+        rows = []
+    if rows and rows[-1].get("date") == stamp:
+        return False
+    try:
+        with open(path, "a", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            if not rows:
+                w.writerow(["date", "time", "model", "bus",
+                            "temp_c", "wear_pct", "read_errors",
+                            "uncorrected"])
+            hhmm = time.strftime("%H:%M", time.localtime(now))
+            for t in temps:
+                def _v(key):
+                    val = t.get(key)
+                    return "" if val is None else val
+                w.writerow([stamp, hhmm, t.get("model", "SSD"),
+                            t.get("bus", "?"), _v("temp"), _v("wear"),
+                            _v("read_errors"), _v("unfixed_errors")])
+        return True
+    except OSError:
+        return False
+
+
+def load_daily_health(path=None):
+    """health_daily.csv -> list of dict rows (oldest first), or []."""
+    path = path or HEALTH_LOG_FILE
+    try:
+        with open(path, newline="", encoding="utf-8") as f:
+            return list(csv.DictReader(f))
+    except (OSError, UnicodeDecodeError):
+        return []
+
+
+def trend_series(rows, model, days=HEALTH_TREND_DAYS):
+    """Daily aggregates for one model: [(date, avg, min, max, max_wear)].
+
+    Only the most recent ``days`` entries are returned so the trend view
+    stays readable. Temperatures without data (""/None) are skipped.
+    """
+    per_day = {}
+    for r in rows:
+        if r.get("model") != model:
+            continue
+        try:
+            temp = float(r["temp_c"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        wear = None
+        try:
+            wear = int(r["wear_pct"])
+        except (KeyError, TypeError, ValueError):
+            pass
+        day = per_day.setdefault(r.get("date", ""),
+                                 {"t": [], "wear": None})
+        day["t"].append(temp)
+        if wear is not None:
+            day["wear"] = wear if day["wear"] is None else max(day["wear"], wear)
+    out = []
+    for date in sorted(per_day):
+        ts = per_day[date]["t"]
+        out.append((date, sum(ts) / len(ts), min(ts), max(ts),
+                    per_day[date]["wear"]))
+    return out[-days:]
 
 
 def list_all_disks():
@@ -1633,6 +1829,25 @@ def build_restore_shim(backup_path, app_exe):
     return path
 
 
+def heal_autostart_value(reg=None):
+    """Fix a Run key left pointing at a source interpreter (pythonw)."""
+    if getattr(sys, "frozen", False):
+        return False
+    try:
+        import winreg
+        reg = reg or winreg
+        with reg.OpenKey(reg.HKEY_CURRENT_USER, AUTOSTART_RUN_KEY) as key:
+            value, _ = reg.QueryValueEx(key, AUTOSTART_VALUE)
+        point = _autostart_entry_point()
+        if os.path.normpath(value.strip('"').strip()) != os.path.normpath(point):
+            set_autostart(True, reg)
+            log_event("autostart_healed", old=value, new=point)
+            return True
+    except OSError:
+        pass
+    return False
+
+
 def cleanup_stale_mei(min_age_seconds=60):
     """Delete leftover PyInstaller onefile temp dirs from dead processes.
 
@@ -1829,6 +2044,25 @@ def autostart_enabled(reg=None):
         return False
 
 
+def _autostart_entry_point():
+    """Command line the Run key should point at.
+
+    A frozen exe registers itself; a SOURCE run registers the installed
+    exe when it exists (registering pythonw here booted the machine into
+    a source interpreter that silently blocked the real app's
+    self-update by holding the single-instance mutex). When no installed
+    exe exists the source entry point is registered anyway so dev setups
+    keep working.
+    """
+    if getattr(sys, "frozen", False):
+        return sys.executable
+    installed = os.path.join(r"C:\Program Files\SSD Temp Monitor",
+                             "ssd_temp_monitor.exe")
+    if os.path.isfile(installed):
+        return installed
+    return os.path.abspath(__file__)
+
+
 def set_autostart(enable, reg=None):
     """Create/remove the HKCU Run value for the current user. Never raises.
 
@@ -1839,13 +2073,11 @@ def set_autostart(enable, reg=None):
     try:
         import winreg
         reg = reg or winreg
-        exe = sys.executable if getattr(sys, "frozen", False) \
-            else os.path.abspath(__file__)
         with reg.OpenKey(reg.HKEY_CURRENT_USER, AUTOSTART_RUN_KEY, 0,
                          reg.KEY_SET_VALUE) as key:
             if enable:
                 reg.SetValueEx(key, AUTOSTART_VALUE, 0, reg.REG_SZ,
-                               f'"{exe}"')
+                               f'"{_autostart_entry_point()}"')
             else:
                 try:
                     reg.DeleteValue(key, AUTOSTART_VALUE)
@@ -2179,6 +2411,8 @@ class App:
         self._extra_icons = {}   # key "i:model" -> pystray.Icon (one per extra SSD)
         self._alert_since = None
         self._last_alert = 0.0
+        self._last_smart_alert = 0.0
+        self._smart_state = load_smart_state()
         self._pending_update = None
         self._nagged_version = None      # nag once per (version, session)
         self._last_update_check = 0.0
@@ -2652,6 +2886,10 @@ class App:
         ttk.Checkbutton(tab_general, text=tr("settings.autostart"),
                         variable=autostart_var).grid(
             row=7, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        smart_var = tk.BooleanVar(value=current.get("smart_alerts", True))
+        ttk.Checkbutton(tab_general, text=tr("settings.smart_alerts"),
+                        variable=smart_var).grid(
+            row=8, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
         # ---- Icon tab: theme, size, font, color, offsets, preview -----
         tk.Label(tab_icon, text=tr("settings.theme"), font=("Segoe UI", 10),
@@ -2815,10 +3053,13 @@ class App:
         refresh_btn = tk.Button(tab_health, text=tr("health.refresh"),
                                 font=("Segoe UI", 10), width=10)
         refresh_btn.grid(row=0, column=1, sticky="e", padx=(14, 0))
+        trend_btn = tk.Button(tab_health, text=tr("health.trend"),
+                              font=("Segoe UI", 10), width=12)
+        trend_btn.grid(row=0, column=2, sticky="e", padx=(14, 0))
         health_box = tk.Text(tab_health, width=46, height=12, wrap="word",
                              font=("Segoe UI", 10), state="disabled",
                              relief="solid", bd=1, bg="#f8fafc")
-        health_box.grid(row=1, column=0, columnspan=2, sticky="we",
+        health_box.grid(row=1, column=0, columnspan=3, sticky="we",
                         pady=(6, 0))
         for _tag, _color in (("ok", GREEN), ("warn", ORANGE),
                              ("bad", RED), ("muted", UNKNOWN),
@@ -2889,6 +3130,45 @@ class App:
         refresh_btn.config(command=_refresh_health)
         root.after(300, _refresh_health)
 
+        def _show_trend():
+            """Daily health aggregates (health_daily.csv) in a child window."""
+            rows = load_daily_health()
+            if not rows:
+                messagebox.showinfo(tr("health.trend"),
+                                    tr("health.trend_empty"), parent=root)
+                return
+            models = []
+            for r in rows:
+                if r.get("model") and r["model"] not in models:
+                    models.append(r["model"])
+            win = tk.Toplevel(root)
+            win.title(tr("health.trend"))
+            win.attributes("-topmost", True)
+            box = tk.Text(win, width=58, height=18, wrap="none",
+                          font=("Consolas", 10), relief="solid", bd=1,
+                          bg="#f8fafc")
+            box.pack(padx=10, pady=10)
+            for model in models:
+                box.insert("end", model + "\n", ("head",))
+                box.insert("end",
+                           "  date         avg    min    max   wear\n",
+                           ("muted",))
+                for date, avg, lo, hi, wear in trend_series(rows, model):
+                    wear_txt = f"{wear}%" if wear is not None else "-"
+                    box.insert(
+                        "end",
+                        f"  {date}  {avg:5.1f}  {lo:4.0f}  {hi:4.0f}"
+                        f"  {wear_txt}\n")
+                box.insert("end", "\n")
+            for _tag, _color in (("head", "#0f172a"), ("muted", "#64748b")):
+                box.tag_configure(_tag, foreground=_color)
+            box.config(state="disabled")
+            tk.Button(win, text=tr("common.close"), command=win.destroy,
+                      font=("Segoe UI", 10)).pack(pady=(0, 10))
+            win.bind("<Escape>", lambda e: win.destroy())
+
+        trend_btn.config(command=_show_trend)
+
         note = tk.Label(outer, text=tr("settings.note"),
                         font=("Segoe UI", 8), fg="#64748b")
         note.pack(anchor="w", pady=(6, 0))
@@ -2907,6 +3187,7 @@ class App:
                 for key, var in vars_.items():
                     vals[key] = int(var.get())
                 vals["record_history"] = bool(record_var.get())
+                vals["smart_alerts"] = bool(smart_var.get())
                 vals["compact_tooltip"] = bool(compact_var.get())
                 vals["high_contrast_icon"] = bool(hc_var.get())
                 vals["icon_font"] = font_var.get()
@@ -3249,6 +3530,33 @@ class App:
         except Exception:
             pass
 
+    def _smart_watch(self, temps):
+        """Proactive SMART watchdog: fire once when something NEW degrades.
+
+        Two triggers per disk: uncorrected read errors increasing beyond
+        the last persisted snapshot, and wear newly crossing into a worse
+        band (75%/90%). State survives restarts so already-known damage
+        never re-alerts; the snapshot is written only when it changes.
+        """
+        if not SETTINGS.get("smart_alerts", True):
+            return
+        now = time.time()
+        if (now - self._last_smart_alert
+                < SMART_ALERT_COOLDOWN_MINUTES * 60):
+            return
+        state, fired = smart_watch_changes(temps, self._smart_state)
+        if state != self._smart_state:
+            self._smart_state = state
+            save_smart_state(state)   # rare: only when a counter changed
+        if not fired:
+            return
+        self._last_smart_alert = now
+        log_event("smart_alert", items=len(fired))
+        body = "\n".join(fired)
+        threading.Thread(
+            target=lambda: self._notify(body, title=tr("smart.title")),
+            daemon=True).start()
+
     def _alert_drive(self, hottest, now):
         """Advance the alert state machine; return True if an alert fired."""
         with self._lock:
@@ -3346,6 +3654,11 @@ class App:
         hottest = max(valid) if valid else None
         if hottest is not None:
             self._record(hottest)        # overheat alert: sustained >= threshold with a cooldown between alerts
+        self._smart_watch(temps)
+        try:
+            append_daily_health(temps)   # one row/day per disk, cheap no-op
+        except Exception:
+            pass
         self._alert_drive(hottest, time.time())
 
         text = str(hottest) if hottest is not None else "--"
@@ -3428,6 +3741,7 @@ def main():
         # download, verify and install it with no tray UI (CI/e2e friendly)
         run_unattended_update()
     cleanup_stale_mei()
+    heal_autostart_value()
     begin_healthy_session()
     App().run()
 

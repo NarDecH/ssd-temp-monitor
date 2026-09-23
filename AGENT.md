@@ -235,6 +235,10 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   (base64 utf-16-le, ไม่มีช่องว่าง) และระวัง `Set-Content -Append` ไม่มีใน
   PS 5.1 — สะสมผลใน array แล้วเขียนครั้งเดียว และแอปอาจต้องแยก admin
   probe เป็น script แยกที่ความยาวพอเหมาะ
+- **ฟีเจอร์ตรวจจับ "การเปลี่ยนแปลง" ต้องตั้ง baseline เงียบ ๆ ก่อน** —
+  watchdog SMART รอบแรกที่เห็นดิสก์ต้องจด state โดยไม่เตือน (ดิสก์ที่มี
+  error ค้างจากซื้อมาจะโดน alert storm ทันทีตอนติดตั้งแอปครั้งแรก)
+  และ state ต้อง persist — ไม่งั้นทุกครั้งที่รีสตาร์ทจะเตือนซ้ำสิ่งเดิม
 - **marker ของกลไก update ต้องมีอายุ ไม่ใช่แค่มีอยู่** — คืน release 1.15.0
   จริง: REPORTED marker ค้างจากรอบเก่า (เทส) ทำให้แอปใหม่ที่บูตสำเร็จ
   blacklist ตัวเอง + เด้ง dialog ผิด (`_notify_rollback_reported` กิน
