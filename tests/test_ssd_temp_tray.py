@@ -1311,8 +1311,8 @@ class TestI18n:
 class TestIconFontColorPosition:
     def test_font_setting_validated(self):
         assert m._validate_settings({"icon_font": "Tahoma"})["icon_font"] == "Tahoma"
-        assert m._validate_settings({"icon_font": "Comic Sans"})["icon_font"] == "Segoe UI"
-        assert m._validate_settings({})["icon_font"] == "Segoe UI"
+        assert m._validate_settings({"icon_font": "Comic Sans"})["icon_font"] == "Arial"
+        assert m._validate_settings({})["icon_font"] == "Arial"
         # v1.12.x config migration: the old "auto" value maps to Segoe UI bold
         assert m._validate_settings({"icon_font": "auto"})["icon_font"] == "Segoe UI"
 
@@ -1320,8 +1320,8 @@ class TestIconFontColorPosition:
         ok = m._validate_settings({"icon_digit_color": "#ffd166"})
         assert ok["icon_digit_color"] == "#ffd166"
         bad = m._validate_settings({"icon_digit_color": "orange"})
-        assert bad["icon_digit_color"] == "auto"
-        assert m._validate_settings({})["icon_digit_color"] == "auto"
+        assert bad["icon_digit_color"] == "#ffffff"   # default digit color
+        assert m._validate_settings({})["icon_digit_color"] == "#ffffff"
 
     def test_offsets_validated_and_clamped(self):
         s = m._validate_settings({"icon_text_dx": 999, "icon_text_dy": -999})
@@ -1346,6 +1346,9 @@ class TestIconFontColorPosition:
         pytest.importorskip("PIL")
         m._ICON_CACHE.clear()
         S = 128
+        saved = dict(m.SETTINGS)
+        # dark digits on the green pill (default is white -> invisible here)
+        m.SETTINGS["icon_digit_color"] = "#111111"
 
         def digit_box():
             img = m.make_icon("42", m.GREEN, size=S)
@@ -1358,7 +1361,6 @@ class TestIconFontColorPosition:
             ys = [y for _, y in dark]
             return min(xs), min(ys)
 
-        saved = (m.SETTINGS.get("icon_text_dx"), m.SETTINGS.get("icon_text_dy"))
         try:
             m.SETTINGS["icon_text_dy"] = -20
             m.SETTINGS["icon_text_dx"] = 0
@@ -1375,11 +1377,9 @@ class TestIconFontColorPosition:
             m._ICON_CACHE.clear()
             right, _ = digit_box()
         finally:
-            for key, val in zip(("icon_text_dx", "icon_text_dy"), saved):
-                if val is None:
-                    m.SETTINGS.pop(key, None)
-                else:
-                    m.SETTINGS[key] = val
+            m.SETTINGS.clear()
+            m.SETTINGS.update(saved)
+            m._ICON_CACHE.clear()
         assert bottom - top >= 10   # vertical shift really happened
         assert right - left >= 4    # horizontal nudge (clamped, still moves)
 
@@ -1546,6 +1546,7 @@ class TestFontFamiliesStyles:
         try:
             m.SETTINGS["icon_font"] = "Segoe UI"
             m.SETTINGS["icon_font_style"] = "bold"
+            m.SETTINGS["icon_digit_color"] = "#111111"
 
             def digit_height(scale):
                 m.SETTINGS["icon_digit_scale"] = scale
@@ -1573,8 +1574,8 @@ class TestFontFamiliesStyles:
 
     def test_style_validated(self):
         assert m._validate_settings({"icon_font_style": "italic"})["icon_font_style"] == "italic"
-        assert m._validate_settings({"icon_font_style": "heavy"})["icon_font_style"] == "bold"
-        assert m._validate_settings({})["icon_font_style"] == "bold"
+        assert m._validate_settings({"icon_font_style": "heavy"})["icon_font_style"] == "regular"
+        assert m._validate_settings({})["icon_font_style"] == "regular"
 
 
 class TestColorPresets:
@@ -2311,3 +2312,127 @@ class TestPortableDataLocations:
         """Regression: the temperature history used to go to %TEMP%,
         which a portable bundle would leave behind on other machines."""
         assert os.path.dirname(m.HISTORY_FILE) == m.DATA_DIR
+
+
+class TestDefaultsAndNewFeatures:
+    def test_icon_defaults_white_regular_arial(self):
+        """User-requested factory defaults for the tray digits."""
+        assert m.DEFAULT_SETTINGS["icon_font"] == "Arial"
+        assert m.DEFAULT_SETTINGS["icon_font_style"] == "regular"
+        assert m.DEFAULT_SETTINGS["icon_digit_color"] == "#ffffff"
+        cfg = m._validate_settings({})
+        assert (cfg["icon_font"], cfg["icon_font_style"],
+                cfg["icon_digit_color"]) == ("Arial", "regular", "#ffffff")
+
+    def test_record_history_defaults_on(self):
+        assert m.DEFAULT_SETTINGS["record_history"] is True
+        assert m._validate_settings({})["record_history"] is True
+
+    def test_write_weekly_report_uses_dest_dir(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(m, "HEALTH_LOG_FILE", str(tmp_path / "h.csv"))
+        monkeypatch.setattr(m, "log_event", lambda *a, **k: None)
+        t0 = time.time() - 86400
+        d = {"model": "M1", "bus": "NVMe", "temp": 40, "wear": 5,
+             "read_errors": 0, "unfixed_errors": 0}
+        for day in range(2):
+            m.append_daily_health([d], now=t0 + day * 86400)
+        out = m.write_weekly_report(str(tmp_path))
+        assert out and os.path.isfile(out)
+        assert os.path.dirname(out) == str(tmp_path)
+        assert os.path.basename(out) == m.WEEKLY_REPORT_FILE
+        assert m.write_weekly_report(str(tmp_path))  # data still there
+
+    def test_write_weekly_report_no_data_returns_none(self, tmp_path,
+                                                       monkeypatch):
+        monkeypatch.setattr(m, "HEALTH_LOG_FILE", str(tmp_path / "h.csv"))
+        monkeypatch.setattr(m, "log_event", lambda *a, **k: None)
+        assert m.write_weekly_report(str(tmp_path)) is None
+
+    def test_health_csv_excel_friendly(self, tmp_path, monkeypatch):
+        """Export carries a UTF-8 BOM, the Excel sep= hint and CRLF rows."""
+        monkeypatch.setattr(m, "HEALTH_LOG_FILE", str(tmp_path / "h.csv"))
+        monkeypatch.setattr(m, "log_event", lambda *a, **k: None)
+        t0 = time.time() - 86400
+        d = {"model": "M1", "bus": "NVMe", "temp": 40, "wear": 5,
+             "read_errors": 0, "unfixed_errors": 0}
+        for day in range(2):
+            m.append_daily_health([d], now=t0 + day * 86400)
+        dest = tmp_path / "daily.csv"
+        out = m.write_health_csv(str(dest))
+        raw = dest.read_bytes()
+        assert out == str(dest)
+        assert raw.startswith(b"\xef\xbb\xbfbfsep=,") or raw.startswith(
+            b"\xef\xbb\xbf")
+        assert b"sep=," in raw
+        assert b"\r\n" in raw
+        text = raw.decode("utf-8-sig")
+        assert "date,time,model,bus,temp_c,wear_pct,read_errors,uncorrected" \
+            in text
+        assert "M1" in text
+
+    def test_health_csv_empty_returns_none(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(m, "HEALTH_LOG_FILE", str(tmp_path / "h.csv"))
+        monkeypatch.setattr(m, "log_event", lambda *a, **k: None)
+        assert m.write_health_csv(str(tmp_path / "x.csv")) is None
+
+    def test_comparison_chart_skipped_for_single_disk(self, tmp_path,
+                                                      monkeypatch):
+        monkeypatch.setattr(m, "HEALTH_LOG_FILE", str(tmp_path / "h.csv"))
+        t0 = time.time() - 86400
+        d = {"model": "M1", "bus": "NVMe", "temp": 40, "wear": 5,
+             "read_errors": 0, "unfixed_errors": 0}
+        for day in range(2):
+            m.append_daily_health([d], now=t0 + day * 86400)
+        rows = m.load_daily_health()
+        assert m.multi_disk_comparison_html(rows) == ""
+
+    def test_comparison_chart_renders_for_two_disks(self, tmp_path,
+                                                    monkeypatch):
+        monkeypatch.setattr(m, "HEALTH_LOG_FILE", str(tmp_path / "h.csv"))
+        t0 = time.time() - 86400
+        for day in range(2):
+            m.append_daily_health(
+                [{"model": "A", "bus": "NVMe", "temp": 40, "wear": 5,
+                  "read_errors": 0, "unfixed_errors": 0},
+                 {"model": "B", "bus": "NVMe", "temp": 50, "wear": 1,
+                  "read_errors": 0, "unfixed_errors": 0}],
+                now=t0 + day * 86400)
+        rows = m.load_daily_health()
+        html = m.multi_disk_comparison_html(rows)
+        assert html.startswith("<svg")
+        assert html.count("<polyline") == 2
+        assert "A" in html and "B" in html
+        assert "aria-label=\"all disks" in html
+
+    def test_report_includes_comparison_when_multi_disk(self, tmp_path,
+                                                        monkeypatch):
+        monkeypatch.setattr(m, "HEALTH_LOG_FILE", str(tmp_path / "h.csv"))
+        t0 = time.time() - 86400
+        for day in range(3):
+            m.append_daily_health(
+                [{"model": "A", "bus": "NVMe", "temp": 40, "wear": 5,
+                  "read_errors": 0, "unfixed_errors": 0},
+                 {"model": "B", "bus": "NVMe", "temp": 50, "wear": 1,
+                  "read_errors": 0, "unfixed_errors": 0}],
+                now=t0 + day * 86400)
+        html = m.build_weekly_report_html(m.load_daily_health())
+        assert 'aria-label="all disks' in html
+
+    def test_weekly_report_settings_validated(self):
+        assert m.DEFAULT_SETTINGS["weekly_report_enabled"] is False
+        assert m.DEFAULT_SETTINGS["weekly_report_dir"] == ""
+        cfg = m._validate_settings({"weekly_report_enabled": 1,
+                                    "weekly_report_dir": " C:/x "})
+        assert cfg["weekly_report_enabled"] is True
+        assert cfg["weekly_report_dir"] == "C:/x"
+        assert m._validate_settings({"weekly_report_dir": None})\
+            ["weekly_report_dir"] == ""
+
+    def test_new_i18n_keys_parity(self):
+        keys = ("health.csv", "notify.weekly_saved",
+                "settings.weekly_report", "settings.weekly_dir",
+                "settings.weekly_browse")
+        for lang in m.UI_LANGUAGES:
+            for key in keys:
+                assert key in m.STRINGS[lang], (lang, key)
+                assert "{path}" in m.STRINGS[lang]["notify.weekly_saved"]

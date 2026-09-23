@@ -43,7 +43,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.18.0"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.19.0"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -236,22 +236,24 @@ DEFAULT_SETTINGS = {
     "alert_sustain_seconds": 30,
     "alert_cooldown_minutes": 5,
     "history_minutes": 30,                   # 5..1440 (up to 24 h)
-    "record_history": False,
+    "record_history": True,                  # auto record history
     "smart_alerts": True,                     # proactive SMART notifications
     "multi_disk_icons": True,
     "check_updates": True,
     "github_repo": "NarDech/ssd-temp-monitor",
     "update_channel": "stable",              # or "pre-release"
+    "weekly_report_enabled": False,          # auto-save the weekly report
+    "weekly_report_dir": "",                 # where; empty = app data dir
     "update_check_interval_minutes": 360,     # auto-check every N minutes
     "icon_size": 64,                          # tray icon edge in px
     "high_contrast_icon": False,              # black pill + white border
     "compact_tooltip": True,                  # short "65°C · 58°C (2 disks)"
     "language": "en",                         # UI language: "en" or "th"
     "icon_theme": "classic",                 # theme preset (THEMES keys)
-    "icon_font": "Segoe UI",                 # digit font family (FONT_FAMILIES)
-    "icon_font_style": "bold",               # regular|bold|italic|bold italic
+    "icon_font": "Arial",                    # digit font family (FONT_FAMILIES)
+    "icon_font_style": "regular",            # regular|bold|italic|bold italic
     "icon_digit_scale": 100,                 # digit size, % of the auto-fit size
-    "icon_digit_color": "auto",              # digit color (auto = by contrast)
+    "icon_digit_color": "#ffffff",           # digit color (auto = by contrast)
     "icon_text_dx": 0,                       # digit offset X in px (-50..50)
     "icon_text_dy": 0,                       # digit offset Y in px (-50..50)
 }
@@ -281,6 +283,8 @@ def _validate_settings(cfg):
         out["icon_size"] = DEFAULT_SETTINGS["icon_size"]
     out["high_contrast_icon"] = bool(out["high_contrast_icon"])
     out["compact_tooltip"] = bool(out["compact_tooltip"])
+    out["weekly_report_enabled"] = bool(out["weekly_report_enabled"])
+    out["weekly_report_dir"] = str(out["weekly_report_dir"] or "").strip()
     out["language"] = (out["language"] if out["language"] in UI_LANGUAGES
                        else "en")
     out["icon_theme"] = (out["icon_theme"] if out["icon_theme"] in THEMES
@@ -288,16 +292,17 @@ def _validate_settings(cfg):
     if out.get("icon_font") == "auto":      # v1.12.x name for Segoe UI bold
         out["icon_font"] = "Segoe UI"
     out["icon_font"] = (out["icon_font"] if out["icon_font"] in FONT_FAMILIES
-                        else "Segoe UI")
+                        else "Arial")
     out["icon_font_style"] = (out["icon_font_style"]
                               if out["icon_font_style"] in FONT_STYLES
-                              else "bold")
+                              else "regular")
     try:
         out["icon_digit_scale"] = min(150, max(50, int(out["icon_digit_scale"])))
     except (TypeError, ValueError):
         out["icon_digit_scale"] = 100
     dc = str(out["icon_digit_color"]).strip()
-    out["icon_digit_color"] = dc if dc == "auto" or _is_hex_color(dc) else "auto"
+    out["icon_digit_color"] = (dc if dc == "auto" or _is_hex_color(dc)
+                               else "#ffffff")
     for key in ("icon_text_dx", "icon_text_dy"):
         try:
             out[key] = min(50, max(-50, int(out[key])))
@@ -375,6 +380,7 @@ STRINGS = {
         "health.trend": "30-day trend",
         "health.report": "Weekly report",
         "health.export": "Export...",
+        "health.csv": "Export CSV",
         "health.trend_empty": ("No daily health history yet - the app "
                                "records one row per day automatically."),
         "health.status.ok": "All drives look healthy.",
@@ -464,6 +470,10 @@ STRINGS = {
         "settings.bad_color": ("Digit color must be 'auto' or a hex color\n"
                                "like #ffd166."),
         "settings.record": "Record history on startup",
+        "settings.weekly_report": ("Auto-save weekly health report "
+                                   "(every 7 days)"),
+        "settings.weekly_dir": "Report folder",
+        "settings.weekly_browse": "Browse...",
         "settings.channel": "Update channel",
         "settings.icon_size": "Icon size (px, 16-128)",
         "settings.high_contrast": "High-contrast icon (light taskbars)",
@@ -477,6 +487,7 @@ STRINGS = {
         "graph.export_csv": "Export CSV",
         "graph.export_png": "Export PNG",
         "notify.exported": "Saved: {path}",
+        "notify.weekly_saved": ("Weekly health report saved: {path}"),
         "health.wear_high": "SSD wear {wear}% — backup soon",
         "health.wear_used": "SSD wear used: {wear}%",
         "health.read_errors": "{unfixed} UNCORRECTED read errors!",
@@ -512,6 +523,7 @@ STRINGS = {
         "health.trend": "แนวโน้ม 30 วัน",
         "health.report": "รายงานรายสัปดาห์",
         "health.export": "ส่งออก...",
+        "health.csv": "ส่งออก CSV",
         "health.trend_empty": "ยังไม่มีประวัติสุขภาพรายวัน - แอปบันทึกวันละหนึ่งแถวโดยอัตโนมัติ",
         "health.status.ok": "ดิสก์ทุกตัวสภาพปกติ",
         "health.status.warn": "ควรตรวจสอบ - ดูรายละเอียดด้านล่าง",
@@ -595,6 +607,10 @@ STRINGS = {
         "settings.bad_color": ("สีตัวเลขต้องเป็น 'auto' หรือโค้ดสี\n"
                                "แบบ #ffd166"),
         "settings.record": "บันทึกประวัติตอนเปิดโปรแกรม",
+        "settings.weekly_report": ("บันทึกรายงานสุขภาพรายสัปดาห์อัตโนมัติ "
+                                   "(ทุก 7 วัน)"),
+        "settings.weekly_dir": "โฟลเดอร์เก็บรายงาน",
+        "settings.weekly_browse": "เลือก...",
         "settings.channel": "ช่องทางอัปเดต",
         "settings.icon_size": "ขนาดไอคอน (px, 16-128)",
         "settings.high_contrast": "ไอคอนคมชัดพิเศษ (taskbar สีอ่อน)",
@@ -608,6 +624,7 @@ STRINGS = {
         "graph.export_csv": "บันทึก CSV",
         "graph.export_png": "บันทึก PNG",
         "notify.exported": "บันทึกแล้ว: {path}",
+        "notify.weekly_saved": ("บันทึกรายงานสุขภาพรายสัปดาห์แล้ว: {path}"),
         "health.wear_high": "SSD สึกแล้ว {wear}% — ควรสำรองข้อมูลเร็ว ๆ นี้",
         "health.wear_used": "SSD ใช้ไปแล้ว: {wear}%",
         "health.read_errors": "Read error แก้ไม่ได้ {unfixed} ครั้ง!",
@@ -643,6 +660,7 @@ STRINGS = {
         "health.trend": "30日トレンド",
         "health.report": "週次レポート",
         "health.export": "エクスポート...",
+        "health.csv": "CSV書き出し",
         "health.trend_empty": "日次の健康履歴はまだありません - アプリが毎日自動で1行記録します。",
         "health.status.ok": "すべてのドライブは正常です。",
         "health.status.warn": "要確認 - 下記の詳細をご覧ください。",
@@ -726,6 +744,10 @@ STRINGS = {
         "settings.bad_color": ("数字の色は 'auto' または 16 進カラー\n"
                                "(例: #ffd166) で指定してください。"),
         "settings.record": "起動時に履歴を記録",
+        "settings.weekly_report": ("週次ヘルスレポートを自動保存 "
+                                   "（7日ごと）"),
+        "settings.weekly_dir": "レポート保存先",
+        "settings.weekly_browse": "参照...",
         "settings.channel": "更新チャンネル",
         "settings.icon_size": "アイコンサイズ (px, 16-128)",
         "settings.high_contrast": "ハイコントラストアイコン (明るいタスクバー用)",
@@ -739,6 +761,7 @@ STRINGS = {
         "graph.export_csv": "CSV を保存",
         "graph.export_png": "PNG を保存",
         "notify.exported": "保存しました: {path}",
+        "notify.weekly_saved": "週次レポートを保存しました: {path}",
         "health.wear_high": "SSD 劣化 {wear}% — 早めのバックアップを",
         "health.wear_used": "SSD 劣化使用率: {wear}%",
         "health.read_errors": "修復不能な読み取りエラー {unfixed} 件!",
@@ -773,6 +796,7 @@ STRINGS = {
         "health.trend": "30 天趋势",
         "health.report": "每周报告",
         "health.export": "导出...",
+        "health.csv": "导出 CSV",
         "health.trend_empty": "尚无每日健康历史 - 应用会每天自动记录一行。",
         "health.status.ok": "所有磁盘状态正常。",
         "health.status.warn": "需要关注 - 请查看下方详情。",
@@ -855,6 +879,10 @@ STRINGS = {
         "settings.bad_color": ("数字颜色必须是 'auto' 或十六进制颜色\n"
                                "(如 #ffd166)。"),
         "settings.record": "启动时记录历史",
+        "settings.weekly_report": ("自动保存每周健康报告 "
+                                   "（每 7 天）"),
+        "settings.weekly_dir": "报告文件夹",
+        "settings.weekly_browse": "浏览...",
         "settings.channel": "更新通道",
         "settings.icon_size": "图标大小 (px, 16-128)",
         "settings.high_contrast": "高对比度图标 (浅色任务栏)",
@@ -868,6 +896,7 @@ STRINGS = {
         "graph.export_csv": "导出 CSV",
         "graph.export_png": "导出 PNG",
         "notify.exported": "已保存: {path}",
+        "notify.weekly_saved": "每周报告已保存: {path}",
         "health.wear_high": "SSD 磨损 {wear}% — 请尽快备份",
         "health.wear_used": "SSD 磨损: {wear}%",
         "health.read_errors": "{unfixed} 个无法修复的读取错误!",
@@ -1446,6 +1475,7 @@ def build_weekly_report_html(rows, now=None):
   </section>""")
     if not sections:
         return ""
+    comparison = multi_disk_comparison_html(rows)
     stamp = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -1470,6 +1500,7 @@ def build_weekly_report_html(rows, now=None):
 <h1>SSD Health Weekly Report</h1>
 <p class="muted">Generated {stamp} · last {WEEKLY_REPORT_DAYS} days
 · SSD Temperature Monitor</p>
+{comparison}
 {''.join(sections)}
 </body>
 </html>
@@ -1484,7 +1515,7 @@ def open_weekly_report(parent=None):
         html = build_weekly_report_html(rows)
         if not html:
             return None
-        out = os.path.join(DATA_DIR, "ssd_health_weekly.html")
+        out = os.path.join(DATA_DIR, WEEKLY_REPORT_FILE)
         with open(out, "w", encoding="utf-8") as f:
             f.write(html)
         os.startfile(out)  # default browser
@@ -1492,6 +1523,92 @@ def open_weekly_report(parent=None):
         return out
     except Exception:
         return None
+
+
+WEEKLY_REPORT_FILE = "ssd_health_weekly.html"
+
+
+def write_weekly_report(dest_dir=None):
+    """Build + write the weekly HTML report into ``dest_dir`` (or DATA_DIR).
+
+    Used by both the open button and the weekly auto-report. Returns the
+    path or None when there is no data for the window.
+    """
+    html = build_weekly_report_html(load_daily_health())
+    if not html:
+        return None
+    out = os.path.join(dest_dir or DATA_DIR, WEEKLY_REPORT_FILE)
+    with open(out, "w", encoding="utf-8") as f:
+        f.write(html)
+    log_event("weekly_report_written", path=out)
+    return out
+
+
+def write_health_csv(dest_path):
+    """Write the whole health_daily.csv content as an Excel-friendly CSV
+
+    (UTF-8 BOM so Excel detects the encoding, CRLF line endings). Source
+    columns are kept as-is; returns the path or None with no data.
+    """
+    rows = load_daily_health()
+    if not rows:
+        return None
+    if str(dest_path).lower().endswith(".html"):
+        dest_path = str(dest_path)[:-5] + ".csv"
+    with open(dest_path, "w", encoding="utf-8-sig", newline="") as f:
+        f.write("\ufeff")
+        f.write("sep=,\r\n")
+        w = csv.writer(f, lineterminator="\r\n")
+        cols = ["date", "time", "model", "bus", "temp_c", "wear_pct",
+                "read_errors", "uncorrected"]
+        w.writerow(cols)
+        for r in rows:
+            w.writerow([r.get(c, "") for c in cols])
+    log_event("health_csv_exported", path=str(dest_path), rows=len(rows))
+    return str(dest_path)
+
+
+def multi_disk_comparison_html(rows, now=None):
+    """One combined SVG chart with every disk's daily average temperature.
+
+    Only shown when more than one disk has data. Uses the same 404x170
+    frame as the per-disk charts; one polyline per model with its color
+    from a fixed palette. Returns an empty string for <=1 disk.
+    """
+    import datetime as _dt
+    cutoff = (_dt.datetime.now()
+              - _dt.timedelta(days=WEEKLY_REPORT_DAYS)).strftime("%Y-%m-%d")
+    models = []
+    for r in rows:
+        m_ = r.get("model")
+        if m_ and m_ not in models:
+            models.append(m_)
+    if len(models) < 2:
+        return ""
+    palette = ("#38bdf8", "#f59e0b", "#ef4444", "#22c55e", "#a78bfa",
+               "#f472b6", "#2dd4bf", "#fbbf24")
+    lines = []
+    legend = []
+    for i, model in enumerate(models):
+        series = [s for s in trend_series(rows, model, days=WEEKLY_REPORT_DAYS)
+                  if s[0] >= cutoff]
+        if not series:
+            continue
+        pts = " ".join(
+            f"{12 + j * 380 / max(len(series) - 1, 1):.1f},"
+            f"{150 - max(0, min(100, (avg - 25) / 50 * 120)):.1f}"
+            for j, (_d, avg, _lo, _hi, _w) in enumerate(series))
+        color = palette[i % len(palette)]
+        lines.append(f'<polyline fill="none" stroke="{color}" '
+                     f'stroke-width="2" points="{pts}"/>')
+        legend.append(f'<span style="color:{color}">&#9632;</span> {model}')
+    if len(legend) < 2:
+        return ""
+    body = "".join(f'  {ln}\n' for ln in lines)
+    return ('<svg viewBox="0 0 404 170" width="404" height="170" '
+            'role="img" aria-label="all disks daily average temperature">\n'
+            '  <line x1="12" y1="150" x2="392" y2="150" stroke="#334155"/>\n'
+            f'{body}</svg>\n<p class="muted">{" &nbsp; ".join(legend)}</p>\n')
 
 
 def save_weekly_report_as(parent=None):
@@ -2619,6 +2736,7 @@ class App:
         self._pending_update = None
         self._nagged_version = None      # nag once per (version, session)
         self._last_update_check = 0.0
+        self._last_weekly_report = 0.0   # weekly auto-report timer
         self.icon = pystray.Icon(
             "ssd_temp",
             icon=make_icon("--", UNKNOWN),
@@ -3094,6 +3212,29 @@ class App:
                         variable=smart_var).grid(
             row=8, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
+        # weekly auto-report: checkbox + folder chooser
+        weekly_var = tk.BooleanVar(value=current.get("weekly_report_enabled",
+                                                     False))
+        ttk.Checkbutton(tab_general, text=tr("settings.weekly_report"),
+                        variable=weekly_var).grid(
+            row=9, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        weekly_dir_var = tk.StringVar(value=current.get("weekly_report_dir",
+                                                        ""))
+        tk.Label(tab_general, text=tr("settings.weekly_dir"),
+                 font=("Segoe UI", 9), fg="#64748b", anchor="w").grid(
+            row=10, column=0, sticky="w")
+
+        def _choose_weekly_dir():
+            from tkinter import filedialog
+            d = filedialog.askdirectory(parent=root,
+                                        title=tr("settings.weekly_dir"))
+            if d:
+                weekly_dir_var.set(d)
+
+        tk.Button(tab_general, text=tr("settings.weekly_browse"),
+                  font=("Segoe UI", 9), command=_choose_weekly_dir).grid(
+            row=10, column=1, sticky="w", padx=(14, 0))
+
         # ---- Icon tab: theme, size, font, color, offsets, preview -----
         tk.Label(tab_icon, text=tr("settings.theme"), font=("Segoe UI", 10),
                  anchor="w").grid(row=0, column=0, sticky="w", pady=3)
@@ -3404,6 +3545,33 @@ class App:
 
         export_btn.config(command=_export_report)
 
+        csv_btn = tk.Button(tab_health, text=tr("health.csv"),
+                            font=("Segoe UI", 10), width=12)
+        csv_btn.grid(row=0, column=5, sticky="e", padx=(14, 0))
+
+        def _export_csv():
+            csv_btn.config(state="disabled")
+            try:
+                from tkinter import filedialog
+                name = time.strftime("ssd_health_daily_%Y%m%d.csv")
+                path = filedialog.asksaveasfilename(
+                    parent=root, defaultextension=".csv",
+                    filetypes=(("CSV", "*.csv"), ("All files", "*.*")),
+                    initialfile=name)
+                if path:
+                    out = write_health_csv(path)
+                    if out:
+                        self._notify(tr("notify.exported", path=out),
+                                     tr("app.title"))
+                    else:
+                        messagebox.showinfo(tr("health.trend"),
+                                            tr("health.trend_empty"),
+                                            parent=root)
+            finally:
+                csv_btn.config(state="normal")
+
+        csv_btn.config(command=_export_csv)
+
         note = tk.Label(outer, text=tr("settings.note"),
                         font=("Segoe UI", 8), fg="#64748b")
         note.pack(anchor="w", pady=(6, 0))
@@ -3424,6 +3592,8 @@ class App:
                 vals["record_history"] = bool(record_var.get())
                 vals["smart_alerts"] = bool(smart_var.get())
                 vals["compact_tooltip"] = bool(compact_var.get())
+                vals["weekly_report_enabled"] = bool(weekly_var.get())
+                vals["weekly_report_dir"] = weekly_dir_var.get().strip()
                 vals["high_contrast_icon"] = bool(hc_var.get())
                 vals["icon_font"] = font_var.get()
                 vals["icon_font_style"] = style_var.get()
@@ -3869,6 +4039,18 @@ class App:
             save_history(list(self.history))
 
     # ---- background polling ----
+    def _auto_weekly_report(self):
+        """Write the weekly report into the configured folder (no open) and
+        toast once. Runs on a worker thread - never blocks the poll loop."""
+        try:
+            dest = SETTINGS.get("weekly_report_dir") or ""
+            path = write_weekly_report(dest or None)
+            if path:
+                self._notify(tr("notify.weekly_saved", path=path),
+                             tr("health.report"))
+        except Exception:
+            log_event("weekly_report_auto_failed")
+
     def poll_loop(self):
         while True:
             self.update()
@@ -3878,6 +4060,12 @@ class App:
                     and time.time() - self._last_update_check >= interval):
                 self._last_update_check = time.time()
                 threading.Thread(target=self._check_updates, daemon=True).start()
+            # weekly auto-report: at most once per 7 days (cheap check)
+            if SETTINGS.get("weekly_report_enabled"):
+                if time.time() - self._last_weekly_report >= 7 * 86400:
+                    self._last_weekly_report = time.time()
+                    threading.Thread(target=self._auto_weekly_report,
+                                     daemon=True).start()
             # sleep in small slices so a saved poll interval applies at once
             target = max(1, int(SETTINGS.get("poll_seconds", POLL_SECONDS)))
             for _ in range(target * 4):

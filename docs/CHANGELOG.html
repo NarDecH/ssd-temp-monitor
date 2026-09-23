@@ -68,7 +68,27 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
-  <h2><span class="ver-badge">v1.18.0</span> <span class="date">23 กันยายน 2026</span></h2>
+  <h2><span class="ver-badge">v1.19.0</span> <span class="date">23 กันยายน 2026</span></h2>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>⏰ <strong>รายงานสุขภาพรายสัปดาห์อัตโนมัติ</strong> — Settings → General: ทุก 7 วันสร้างรายงาน HTML ลงโฟลเดอร์ที่กำหนด (มีปุ่มเลือกโฟลเดอร์) พร้อม toast แจ้ง</li>
+    <li>🗂️ <strong>Export CSV เปิดใน Excel ได้ทันที</strong> — ปุ่มใหม่ในแท็บ Health: UTF-8 BOM + <code>sep=,</code> + CRLF — Excel เปิดแล้วคอลัมน์ตรง ไม่ต้อง import</li>
+    <li>🖥️ <strong>กราฟเปรียบเทียบทุกดิสก์ในภาพเดียว</strong> — เครื่องที่มี SSD ≥ 2 ตัว: กราฟรวมอุณหภูมิเฉลี่ยรายวันทุกดิสก์ สีต่างกัน + legend เห็นตัวร้อนกว่าเพื่อนทันที</li>
+  </ul>
+
+  <h3><span class="pill chg-pill">Changed</span></h3>
+  <ul>
+    <li>⚙️ <strong>ค่าเริ่มต้นตัวเลขบน tray ใหม่</strong>: สีขาว · regular · Arial (เดิม auto/bold/Segoe UI) — ค่าที่ผู้ใช้ตั้งไว้แล้วไม่ถูกแตะ</li>
+    <li>📝 <strong>Auto Record History เปิดเป็นค่าเริ่มต้น</strong> — บันทึกประวัติอุณหภูมิอัตโนมัติตั้งแต่ติดตั้ง (ปิดได้ใน Settings)</li>
+  </ul>
+
+  <h3><span class="pill ver-pill">Verified</span></h3>
+  <ul>
+    <li>🌡️ โพรบก่อน build: source ล่าสุดอ่าน SMART จริง (temp=37°C) แสดงผลครบ พร้อมทดสอบฟีเจอร์ใหม่กับข้อมูลจริง</li>
+  </ul>
+
+  <h2><span class="ver-badge old">v1.18.0</span> <span class="date">23 กันยายน 2026</span></h2>
 
   <h3><span class="pill add-pill">Added</span></h3>
   <ul>
