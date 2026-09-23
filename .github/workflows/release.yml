@@ -30,6 +30,18 @@ jobs:
       - name: Run unit tests
         run: python -m pytest tests/ -v
 
+      - name: Sync APP_VERSION and setup.iss with tag
+        shell: bash
+        run: |
+          # the tag is the single source of truth: a forgotten version bump
+          # in the source used to ship exes that report an older version and
+          # then see their own release as "an update"
+          VER="${GITHUB_REF_NAME#v}"
+          sed -i "s/^APP_VERSION = .*$/APP_VERSION = \"${VER}\"        # keep in sync with setup.iss #define MyAppVersion/" ssd_temp_tray.py
+          sed -i "s/^#define MyAppVersion .*$/#define MyAppVersion \"${VER}\"/" setup.iss
+          grep -q "APP_VERSION = \"${VER}\"" ssd_temp_tray.py
+          grep -q "MyAppVersion \"${VER}\"" setup.iss
+
       - name: Build exe
         run: |
           python make_icon.py
