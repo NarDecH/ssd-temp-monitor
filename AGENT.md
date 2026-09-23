@@ -271,6 +271,12 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   instance หลงเหลือ) ทำให้ job พังแบบ flaky (เจอครั้งแรก v1.19.0) กฎ:
   อย่าเช็คไฟล์ด้วย fixed sleep — วนรอจนไฟล์หายจริง และบังคับปิดแอปที่ค้าง
   ด้วย /FORCECLOSEAPPLICATIONS ตั้งแต่คำสั่งเดียว
+- **สี hex ใน tk ต้องผ่านพาเลตต์เท่านั้น** — ครั้งหนึ่งหน้าต่างแอปเป็นมืดตายตัว
+  เพราะ hardcode `#0f172a` กระจายหลายจุด (v1.20.0 รวมเป็น UI_DARK/
+  UI_LIGHT + `ui_palette()` ตามธีม Windows) เพิ่ม UI ใหม่ทีไร ให้ดึงสีจาก
+  `c = ui_palette()` ห้าม hardcode และแท็บ/หน้าต่างใหม่ต้องมีคีย์ i18n ครบ
+  4 ภาษา (เทส parity จับ) รวมถึง fixture `app` ของเทสต้องอัปเดต attribute
+  ใหม่ที่ `__init__` สร้าง เพื่อไม่ให้เทสเก่า AttributeError แบบเงียบ ๆ
 
 ## สไตล์โค้ด
 

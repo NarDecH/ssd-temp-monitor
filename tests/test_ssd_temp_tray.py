@@ -58,6 +58,8 @@ def app():
     a._pending_update = None
     a._nagged_version = None
     a._last_update_check = 0.0
+    a.history24 = []
+    a._h24_state = {"minute": 0.0, "bucket": None}
     a.icon = None
     return a
 
@@ -2436,3 +2438,126 @@ class TestDefaultsAndNewFeatures:
             for key in keys:
                 assert key in m.STRINGS[lang], (lang, key)
                 assert "{path}" in m.STRINGS[lang]["notify.weekly_saved"]
+
+
+class TestGraph24ThemeStats:
+    def test_history24_one_point_per_minute_and_trim(self, tmp_path,
+                                                     monkeypatch):
+        """Downsamples the 1 Hz history to one point/minute, keeps 24 h
+        worth of points at most, and is idempotent within the minute."""
+        monkeypatch.setattr(m, "HISTORY24_FILE", str(tmp_path / "h24.csv"))
+        monkeypatch.setattr(m, "HISTORY24_STATE",
+                            str(tmp_path / "h24.json"))
+        now = 1_800_000_000.0
+        fine = [(now - 30 + i, 40) for i in range(10)]
+        pts, st = m.update_history24([], now, {}, temps=[{"temp": 42}])
+        assert len(pts) == 1 and pts[0][1] == 42
+        # same minute again -> no duplicate
+        pts2, st2 = m.update_history24(pts, now + 5, st)
+        assert len(pts2) == 1
+        # next minute -> a second point
+        pts3, _ = m.update_history24(pts2, now + 65, st2,
+                                     temps=[{"temp": 44}])
+        assert len(pts3) == 2 and pts3[-1][1] == 44
+        # no reading -> carries over without a point
+        pts4, _ = m.update_history24(pts3, now + 125, _,
+                                     temps=[{"temp": None}])
+        assert pts4 == pts3
+        # trimming: points older than 24 h and beyond capacity are dropped
+        pts5, _ = m.update_history24([(now - 90000, 30)] + pts3,
+                                     now + 185, _, temps=[{"temp": 40}])
+        assert all(p[0] >= now + 185 - 86400 for p in pts5)
+
+    def test_history24_roundtrip_files(self, tmp_path, monkeypatch):
+        f = tmp_path / "h24.csv"
+        monkeypatch.setattr(m, "HISTORY24_FILE", str(f))
+        monkeypatch.setattr(m, "HISTORY24_STATE", str(tmp_path / "s.json"))
+        m._history24_save([(100.0, 40), (160.0, 41)])
+        assert m._history24_load() == [(100.0, 40), (160.0, 41)]
+        m._history24_save_state({"minute": 160.0, "bucket": 41})
+        assert m._history24_load_state() == {"minute": 160.0, "bucket": 41}
+
+    def test_ui_palette_modes(self, monkeypatch):
+        assert m.ui_palette("dark") is m.UI_DARK
+        assert m.ui_palette("light") is m.UI_LIGHT
+        # auto consults the (monkeypatched) Windows setting
+        monkeypatch.setattr(m, "windows_app_is_dark", lambda: True)
+        assert m.ui_palette("auto") is m.UI_DARK
+        monkeypatch.setattr(m, "windows_app_is_dark", lambda: False)
+        assert m.ui_palette("auto") is m.UI_LIGHT
+
+    def test_windows_theme_probe_never_raises(self, monkeypatch):
+        def boom(*a, **k):
+            raise OSError("no registry")
+        monkeypatch.setattr(m, "SETTINGS", dict(m.SETTINGS, ui_theme="auto"))
+        import winreg
+        real_open = winreg.OpenKey
+        monkeypatch.setattr(winreg, "OpenKey", boom, raising=False)
+        assert m.windows_app_is_dark() is True  # fallback = dark
+
+    def test_uitheme_setting_validated_and_default(self):
+        assert m.DEFAULT_SETTINGS["ui_theme"] == "auto"
+        assert m._validate_settings({"ui_theme": "pink"})["ui_theme"] == "auto"
+        assert m._validate_settings({"ui_theme": "light"})["ui_theme"] == "light"
+
+    def test_week_stats_from_daily_rows(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(m, "HEALTH_LOG_FILE", str(tmp_path / "h.csv"))
+        # 2 overheat + 1 smart alert in the (mocked) log within the week
+        monkeypatch.setattr(m, "count_log_events",
+                            lambda event, days=7, **k:
+                            {"overheat_alert": 2,
+                             "smart_alert": 1}.get(event, 0))
+        t0 = time.time() - 86400
+        for day in range(3):
+            m.append_daily_health(
+                [{"model": "A", "bus": "NVMe", "temp": 40 + day,
+                  "wear": 5 + day, "read_errors": 0, "unfixed_errors": 0}],
+                now=t0 + day * 86400)
+        s = m.week_stats(m.load_daily_health())
+        assert s["alerts"] == 2 and s["smart_alerts"] == 1
+        a = s["per_disk"]["A"]
+        assert a["min"] == 40 and a["max"] == 42
+        assert abs(a["avg"] - 41.0) < 0.01
+        assert a["wear"] == 7
+
+    def test_week_stats_ignores_old_rows(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(m, "HEALTH_LOG_FILE", str(tmp_path / "h.csv"))
+        monkeypatch.setattr(m, "count_log_events", lambda *a, **k: 0)
+        m.append_daily_health(
+            [{"model": "OLD", "bus": "NVMe", "temp": 90, "wear": 99,
+              "read_errors": 0, "unfixed_errors": 0}],
+            now=time.time() - 30 * 86400)
+        s = m.week_stats(m.load_daily_health())
+        assert s["per_disk"] == {}
+
+    def test_count_log_events_parses_timestamps(self, tmp_path):
+        import datetime as dt
+        logf = tmp_path / "app.log"
+        now = time.time()
+        fmt = "%Y-%m-%d %H:%M:%S,%f"
+
+        def stamp(offset_s):
+            return dt.datetime.fromtimestamp(now - offset_s).strftime(fmt)
+
+        lines = [
+            stamp(3600) + " INFO overheat_alert\n",
+            stamp(10 * 86400) + " INFO overheat_alert\n",  # outside 7 days
+            "garbage line without timestamp overheat_alert\n",
+        ]
+        logf.write_text("".join(lines), encoding="utf-8")
+        assert m.count_log_events("overheat_alert", days=7,
+                                  log_path=str(logf), now=now) == 1
+
+    def test_stats_and_graph24_i18n_parity(self):
+        keys = ("menu.graph24", "win.graph24", "tab.stats",
+                "settings.ui_theme", "stats.alerts", "stats.smart_alerts",
+                "stats.disk_line", "stats.refresh", "stats.window")
+        for lang in m.UI_LANGUAGES:
+            for key in keys:
+                assert key in m.STRINGS[lang], (lang, key)
+            assert "{n}" in m.STRINGS[lang]["stats.alerts"]
+
+    def test_new_uitheme_key_in_defaults_doc(self):
+        # guards the validate/default drift for all future color keys
+        cfg = m._validate_settings({})
+        assert cfg["ui_theme"] in ("auto", "dark", "light")

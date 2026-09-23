@@ -29,6 +29,7 @@ import json
 import logging
 import logging.handlers
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -43,7 +44,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.19.0"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.20.0"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -244,6 +245,7 @@ DEFAULT_SETTINGS = {
     "update_channel": "stable",              # or "pre-release"
     "weekly_report_enabled": False,          # auto-save the weekly report
     "weekly_report_dir": "",                 # where; empty = app data dir
+    "ui_theme": "auto",                      # auto|dark|light (windows/report)
     "update_check_interval_minutes": 360,     # auto-check every N minutes
     "icon_size": 64,                          # tray icon edge in px
     "high_contrast_icon": False,              # black pill + white border
@@ -285,6 +287,8 @@ def _validate_settings(cfg):
     out["compact_tooltip"] = bool(out["compact_tooltip"])
     out["weekly_report_enabled"] = bool(out["weekly_report_enabled"])
     out["weekly_report_dir"] = str(out["weekly_report_dir"] or "").strip()
+    out["ui_theme"] = (out["ui_theme"] if out["ui_theme"] in
+                       ("auto", "dark", "light") else "auto")
     out["language"] = (out["language"] if out["language"] in UI_LANGUAGES
                        else "en")
     out["icon_theme"] = (out["icon_theme"] if out["icon_theme"] in THEMES
@@ -354,6 +358,11 @@ HISTORY_MAX_POINTS = HISTORY_SECONDS  # hard cap (1 point/sec)
 # portable build keeps everything in its own folder - the old %TEMP% path
 # leaked per-machine state outside the bundle
 HISTORY_FILE = os.path.join(DATA_DIR, "ssd_temp_history.csv")
+# long-tail history for the 24-hour view: one point per minute, kept
+# separately from the fine-grained in-memory history
+HISTORY24_FILE = os.path.join(DATA_DIR, "ssd_temp_history_24h.csv")
+HISTORY24_CAPACITY = 1440            # 24 h x 60 min, then drop the oldest
+HISTORY24_STATE = os.path.join(DATA_DIR, "history24_state.json")
 _env_history = os.environ.get("SSD_TEMP_RECORD_HISTORY")
 KEEP_HISTORY = (SETTINGS["record_history"] if _env_history is None
                 else _env_history == "1")
@@ -363,6 +372,43 @@ POLL_SECONDS = SETTINGS["poll_seconds"]
 ALERT_THRESHOLD = SETTINGS["alert_threshold"]        # °C
 ALERT_SUSTAIN_SECONDS = SETTINGS["alert_sustain_seconds"]
 ALERT_COOLDOWN_SECONDS = SETTINGS["alert_cooldown_minutes"] * 60
+
+# ---- light/dark UI colors (follows Windows app theme by default) ----
+UI_DARK = {"bg": "#0f172a", "panel": "#1e293b", "grid": "#1e293b",
+           "axis": "#334155", "text": "#e2e8f0", "muted": "#94a3b8",
+           "dim": "#64748b", "entry_bg": "#f8fafc", "head": "#0f172a"}
+UI_LIGHT = {"bg": "#f1f5f9", "panel": "#ffffff", "grid": "#e2e8f0",
+            "axis": "#94a3b8", "text": "#0f172a", "muted": "#475569",
+            "dim": "#64748b", "entry_bg": "#ffffff", "head": "#0f172a"}
+
+
+def windows_app_is_dark():
+    """True when Windows apps are set to the dark theme.
+
+    Reads AppsUseLightTheme from the registry; any failure (other OS,
+    missing key, denied access) means "fall back to dark" - the app's
+    original look.
+    """
+    try:
+        import winreg
+        with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Themes"
+                r"\Personalize") as k:
+            val, _ = winreg.QueryValueEx(k, "AppsUseLightTheme")
+        return int(val) == 0
+    except Exception:
+        return True
+
+
+def ui_palette(mode=None):
+    """Color dict for "dark", "light" or "auto" (Windows theme)."""
+    mode = mode or SETTINGS.get("ui_theme", "auto")
+    if mode == "light":
+        return UI_LIGHT
+    if mode == "dark":
+        return UI_DARK
+    return UI_LIGHT if windows_app_is_dark() is False else UI_DARK
 
 # ---- live graph window ----
 GRAPH_W, GRAPH_H, GRAPH_PAD = 680, 320, 50
@@ -403,6 +449,15 @@ STRINGS = {
         "win.about": "About SSD Temperature Monitor",
         "menu.details": "Show details",
         "menu.graph": "Show temperature graph",
+        "menu.graph24": "24-hour history",
+        "win.graph24": "Temperature - 24 hours",
+        "tab.stats": "Stats",
+        "settings.ui_theme": "Window theme (dark/light)",
+        "stats.alerts": "Overheat alerts this week: {n}",
+        "stats.smart_alerts": "SMART alerts this week: {n}",
+        "stats.disk_line": "  min {mn} °C   avg {av} °C   max {mx} °C   wear {wear}",
+        "stats.refresh": "Refresh",
+        "stats.window": "Based on the daily health log, last 7 days",
         "menu.disks": "Show all disks (debug)",
         "menu.diagnostics": "Copy diagnostics to clipboard",
         "menu.refresh": "Refresh now",
@@ -543,6 +598,15 @@ STRINGS = {
         "win.about": "เกี่ยวกับ SSD Temperature Monitor",
         "menu.details": "ดูรายละเอียด",
         "menu.graph": "แสดงกราฟอุณหภูมิ",
+        "menu.graph24": "ประวัติย้อน 24 ชั่วโมง",
+        "win.graph24": "อุณหภูมิ - 24 ชั่วโมง",
+        "tab.stats": "สถิติ",
+        "settings.ui_theme": "ธีมหน้าต่าง (มืด/สว่าง)",
+        "stats.alerts": "แจ้งเตือนอุณหภูมิเกินสัปดาห์นี้: {n} ครั้ง",
+        "stats.smart_alerts": "แจ้งเตือน SMART สัปดาห์นี้: {n} ครั้ง",
+        "stats.disk_line": "  ต่ำสุด {mn} °C   เฉลี่ย {av} °C   สูงสุด {mx} °C   สึก {wear}",
+        "stats.refresh": "รีเฟรช",
+        "stats.window": "จากบันทึกสุขภาพรายวัน ย้อนหลัง 7 วัน",
         "menu.disks": "ดูดิสก์ทั้งหมด (debug)",
         "menu.diagnostics": "คัดลอกข้อมูลวินิจฉัย",
         "menu.refresh": "รีเฟรชเดี๋ยวนี้",
@@ -680,6 +744,15 @@ STRINGS = {
         "win.about": "SSD Temperature Monitor について",
         "menu.details": "詳細を表示",
         "menu.graph": "温度グラフを表示",
+        "menu.graph24": "24時間履歴",
+        "win.graph24": "温度 - 24時間",
+        "tab.stats": "統計",
+        "settings.ui_theme": "ウィンドウテーマ（ダーク/ライト）",
+        "stats.alerts": "今週の過熱警告: {n}回",
+        "stats.smart_alerts": "今週のSMART警告: {n}回",
+        "stats.disk_line": "  最小 {mn} °C   平均 {av} °C   最大 {mx} °C   摩耗 {wear}",
+        "stats.refresh": "更新",
+        "stats.window": "日次ヘルスログより過去7日間",
         "menu.disks": "全ディスクを表示 (デバッグ)",
         "menu.diagnostics": "診断情報をクリップボードへコピー",
         "menu.refresh": "今すぐ更新",
@@ -816,6 +889,15 @@ STRINGS = {
         "win.about": "关于 SSD Temperature Monitor",
         "menu.details": "显示详情",
         "menu.graph": "显示温度曲线",
+        "menu.graph24": "24 小时历史",
+        "win.graph24": "温度 - 24 小时",
+        "tab.stats": "统计",
+        "settings.ui_theme": "窗口主题（深色/浅色）",
+        "stats.alerts": "本周过热警报: {n} 次",
+        "stats.smart_alerts": "本周 SMART 警报: {n} 次",
+        "stats.disk_line": "  最低 {mn} °C   平均 {av} °C   最高 {mx} °C   磨损 {wear}",
+        "stats.refresh": "刷新",
+        "stats.window": "基于每日健康日志，过去 7 天",
         "menu.disks": "显示全部磁盘 (调试)",
         "menu.diagnostics": "复制诊断信息到剪贴板",
         "menu.refresh": "立即刷新",
@@ -950,6 +1032,9 @@ try:
     _event_log.addHandler(_handler)
 except OSError:
     _event_log.addHandler(logging.NullHandler())
+
+# "2026-09-23 14:12:03,841" prefix of every log line (for week_stats)
+LOG_LINE_TS = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})")
 
 
 def log_event(event, **fields):
@@ -1247,6 +1332,64 @@ SMART_ALERT_COOLDOWN_MINUTES = 30
 WEAR_SLOPE_WINDOW_DAYS = 7
 WEAR_SLOPE_PCT_PER_WEEK = 2.0        # percentage points per window
 WEAR_SLOPE_COOLDOWN_DAYS = 7         # re-alert at most weekly per disk
+
+
+def count_log_events(event, days=7, log_path=None, now=None):
+    """How many times ``event`` appears in the app log within ``days``.
+
+    Counts ``<ts> INFO <event>`` occurrences (any level actually) in the
+    rotating log file - best effort: unreadable/missing log counts as 0.
+    """
+    path = log_path or LOG_FILE
+    now = time.time() if now is None else now
+    cutoff = now - days * 86400
+    n = 0
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if event not in line:
+                    continue
+                m = LOG_LINE_TS.match(line)
+                if not m:
+                    continue
+                try:
+                    ts = time.mktime(time.strptime(m.group(1),
+                                                  "%Y-%m-%d %H:%M:%S,%f"))
+                except ValueError:
+                    continue
+                if ts >= cutoff:
+                    n += 1
+    except OSError:
+        pass
+    return n
+
+
+def week_stats(rows, state=None):
+    """Usage summary for the Stats view.
+
+    Per model and overall min/avg/max temperature over the last 7 days
+    (from the daily health log) plus ``alerts`` (overheat toasts) and
+    ``smart_alerts`` (SMART/wear toasts) counted from the event log.
+    """
+    import datetime as _dt
+    cutoff = (_dt.datetime.now()
+              - _dt.timedelta(days=7)).strftime("%Y-%m-%d")
+    recent = [r for r in rows if r.get("date", "") >= cutoff]
+    alerts = count_log_events("overheat_alert", days=7)
+    smart_alerts = count_log_events("smart_alert", days=7)
+    per = {}
+    for model in sorted({r.get("model") for r in recent if r.get("model")}):
+        temps = [float(r["temp_c"]) for r in recent
+                 if r.get("model") == model and r.get("temp_c")]
+        wear = [int(r["wear_pct"]) for r in recent
+                if r.get("model") == model
+                and r.get("wear_pct") not in (None, "", "None")]
+        if not temps:
+            continue
+        per[model] = {"min": min(temps), "avg": sum(temps) / len(temps),
+                      "max": max(temps),
+                      "wear": max(wear) if wear else None}
+    return {"per_disk": per, "alerts": alerts, "smart_alerts": smart_alerts}
 
 
 def wear_slope_alert(rows, now=None, state=None):
@@ -2667,6 +2810,85 @@ def save_history(points):
         pass
 
 
+# ---- 24-hour minute-resolution history -----------------------------------
+
+def _history24_load():
+    """[(ts, temp), ...] from the 24 h store (oldest first)."""
+    pts = []
+    try:
+        with open(HISTORY24_FILE, newline="") as f:
+            for row in csv.reader(f):
+                if len(row) != 2:
+                    continue
+                try:
+                    pts.append((float(row[0]), int(row[1])))
+                except ValueError:
+                    continue
+    except OSError:
+        pass
+    return pts
+
+
+def _history24_save(points):
+    try:
+        with open(HISTORY24_FILE, "w", newline="") as f:
+            csv.writer(f).writerows(points)
+    except OSError:
+        pass
+
+
+def _history24_load_state():
+    try:
+        with open(HISTORY24_STATE, encoding="utf-8") as f:
+            data = json.load(f)
+        return {"minute": float(data.get("minute", 0.0)),
+                "bucket": data.get("bucket")}
+    except (OSError, ValueError, TypeError):
+        return {"minute": 0.0, "bucket": None}
+
+
+def _history24_save_state(state):
+    try:
+        with open(HISTORY24_STATE, "w", encoding="utf-8") as f:
+            json.dump(state, f)
+    except OSError:
+        pass
+
+
+def update_history24(points, now, state, temps=None):
+    """Add one minute-bucket point to the 24 h history.
+
+    Keeps at most one point per minute (the FIRST second of that
+    wall-clock minute), downsampling the 1 Hz in-memory history to a
+    stable 24 h x 60 min series. ``temps`` overrides the sample source
+    (per-disk temps); when omitted the hottest point of ``points`` wins.
+    Returns (points, state) - the trimmed list and the new writer state.
+    """
+    state = dict(state or {"minute": 0.0, "bucket": None})
+    minute = int(now // 60) * 60
+    if state.get("minute") == minute:
+        return points, state          # already sampled this minute
+    if temps:
+        samples = [t["temp"] for t in temps if t.get("temp") is not None]
+        if not samples:
+            return points, state      # no reading -> carry the bucket
+        temp = max(samples)
+    else:
+        minute_pts = [p for p in points if now - 60 <= p[0] <= now]
+        if not minute_pts:
+            return points, state
+        temp = max(t for _, t in minute_pts)
+    pts = list(points)
+    pts.append((minute, temp))
+    cutoff = now - 86400
+    while pts and pts[0][0] < cutoff:
+        pts.pop(0)
+    while len(pts) > HISTORY24_CAPACITY:
+        pts.pop(0)
+    state = {"minute": float(minute), "bucket": temp}
+    return pts, state
+
+
 def write_history_csv(points, path):
     """Write history points as CSV; returns the path or None on failure."""
     try:
@@ -2737,6 +2959,8 @@ class App:
         self._nagged_version = None      # nag once per (version, session)
         self._last_update_check = 0.0
         self._last_weekly_report = 0.0   # weekly auto-report timer
+        self.history24 = _history24_load()
+        self._h24_state = _history24_load_state()
         self.icon = pystray.Icon(
             "ssd_temp",
             icon=make_icon("--", UNKNOWN),
@@ -2777,6 +3001,7 @@ class App:
         return pystray.Menu(
             pystray.MenuItem(tr("menu.details"), self.show_details, default=True),
             pystray.MenuItem(tr("menu.graph"), self.show_graph),
+            pystray.MenuItem(tr("menu.graph24"), self.show_graph24),
             pystray.MenuItem(tr("menu.disks"), self.show_disks),
             pystray.MenuItem(tr("menu.diagnostics"), self.copy_diagnostics),
             pystray.MenuItem(tr("menu.refresh"), self.refresh),
@@ -2900,6 +3125,107 @@ class App:
         # making it impossible to close; use a tkinter window in its own thread
         self._spawn_once("_detail_open", self._details_window)
 
+    def show_graph24(self, *_):
+        self._spawn_once("_graph24_open", self._graph24_window)
+
+    def _graph24_window(self):
+        """24-hour minute-resolution temperature view (own thread + tk).
+
+        Same frame styling as the fine graph but sourced from the 24 h
+        minute store, so it shows a full day even when the 1 Hz history
+        is short. Refreshes every 30 s.
+        """
+        import tkinter as tk
+        win = tk.Tk()
+        win.title(tr("win.graph24"))
+        win.attributes("-topmost", True)
+        win.resizable(False, False)
+        c = ui_palette()
+        W, H, PAD = GRAPH_W, GRAPH_H, GRAPH_PAD
+        canvas = tk.Canvas(win, width=W, height=H, bg=c["bg"],
+                           highlightthickness=0)
+        canvas.pack(padx=12, pady=(12, 4))
+        tk.Button(win, text=tr("common.close"), command=win.destroy,
+                  font=("Segoe UI", 10)).pack(pady=(2, 10))
+        win.protocol("WM_DELETE_WINDOW", win.destroy)
+        win.bind("<Return>", lambda e: win.destroy())
+        win.bind("<Escape>", lambda e: win.destroy())
+
+        def _draw():
+            cc = ui_palette()
+            canvas.delete("all")
+            pts = _history24_load()
+            now = time.time()
+            t0, t1 = now - 86400, now
+            span = max(t1 - t0, 60)
+            if not pts:
+                canvas.create_text(
+                    W / 2, H / 2, fill=cc["muted"], font=("Segoe UI", 12),
+                    text=tr("graph.no_history"), justify="center")
+                return
+
+            def x(t):
+                return PAD + (t - t0) / span * (W - 2 * PAD)
+
+            def y(temp):
+                return H - PAD - max(0.0, min(1.0, (temp - GRAPH_Y_LO)
+                                             / (GRAPH_Y_HI - GRAPH_Y_LO))) \
+                    * (H - 2 * PAD)
+
+            for gt in range(20, GRAPH_Y_HI, 20):
+                yy = y(gt)
+                canvas.create_line(PAD, yy, W - PAD, yy, fill=cc["grid"])
+                canvas.create_text(PAD - 8, yy, anchor="e", fill=cc["dim"],
+                                   font=("Segoe UI", 9), text=f"{gt}°")
+            canvas.create_line(PAD, H - PAD, W - PAD, H - PAD,
+                               fill=cc["axis"])
+            # one hour tick per 3 h
+            for hh in range(1, 8):
+                xx = PAD + (hh * 3 * 3600) / span * (W - 2 * PAD)
+                canvas.create_text(xx, H - PAD + 14, fill=cc["dim"],
+                                   font=("Segoe UI", 9),
+                                   text=f"-{24 - hh * 3}h")
+            coords = []
+            for t, temp in pts:
+                if t < t0:
+                    continue
+                coords.extend((x(t), y(temp)))
+            if len(coords) >= 4:
+                canvas.create_line(*coords, fill=ACCENT, width=2,
+                                   joinstyle="round")
+            temps = [temp for t, temp in pts if t >= t0]
+            if temps:
+                lo, hi = min(temps), max(temps)
+                avg = sum(temps) / len(temps)
+                canvas.create_text(
+                    PAD, 12, anchor="nw", font=("Segoe UI", 11, "bold"),
+                    fill=cc["text"],
+                    text=f"min {lo}°C   max {hi}°C   avg {avg:.1f}°C "
+                         f"({len(temps)} min)")
+
+        _draw()
+
+        def _tick():
+            with self._lock:
+                stop = self._shutdown_requested
+            if stop or not win.winfo_exists():
+                try:
+                    win.destroy()
+                except tk.TclError:
+                    pass
+                return
+            try:
+                _draw()
+            except tk.TclError:
+                return
+            win.after(30000, _tick)
+
+        win.after(30000, _tick)
+        win.mainloop()
+        geo = geometry_of(win)
+        if geo:
+            save_geometry({"graph24": geo})
+
     def show_graph(self, *_):
         # MUST go through _spawn_once like the other windows: running the tk
         # event loop inside pystray's menu-callback thread blocks the tray
@@ -2984,7 +3310,8 @@ class App:
         win.resizable(False, False)
         apply_geometry(win, "graph")
         W, H, PAD = GRAPH_W, GRAPH_H, GRAPH_PAD
-        canvas = tk.Canvas(win, width=W, height=H, bg="#0f172a",
+        c = ui_palette()
+        canvas = tk.Canvas(win, width=W, height=H, bg=c["bg"],
                            highlightthickness=0)
         canvas.pack(padx=12, pady=(12, 4))
         btns = tk.Frame(win)
@@ -3051,11 +3378,12 @@ class App:
     def _draw_graph(self, canvas, W, H, PAD):
         import tkinter as tk
         Y_LO, Y_HI = GRAPH_Y_LO, GRAPH_Y_HI
+        c = ui_palette()
         canvas.delete("all")
         data = self._snapshot("history")
         if not data:
             canvas.create_text(
-                W / 2, H / 2, fill="#94a3b8", font=("Segoe UI", 12),
+                W / 2, H / 2, fill=c["muted"], font=("Segoe UI", 12),
                 text=tr("graph.no_history"), justify="center")
             return
 
@@ -3079,11 +3407,11 @@ class App:
         # grid + y-axis labels
         for gt in range(20, Y_HI, 20):
             yy = y(gt)
-            canvas.create_line(PAD, yy, W - PAD, yy, fill="#1e293b")
-            canvas.create_text(PAD - 8, yy, anchor="e", fill="#64748b",
+            canvas.create_line(PAD, yy, W - PAD, yy, fill=c["grid"])
+            canvas.create_text(PAD - 8, yy, anchor="e", fill=c["dim"],
                                font=("Segoe UI", 9), text=f"{gt}°")
-        canvas.create_line(PAD, H - PAD, W - PAD, H - PAD, fill="#334155")
-        canvas.create_text(W - PAD, H - PAD + 14, anchor="ne", fill="#64748b",
+        canvas.create_line(PAD, H - PAD, W - PAD, H - PAD, fill=c["axis"])
+        canvas.create_text(W - PAD, H - PAD + 14, anchor="ne", fill=c["dim"],
                            font=("Segoe UI", 9),
                            text=tr("graph.span", minutes=f"{span / 60:.0f}"))
 
@@ -3096,7 +3424,7 @@ class App:
         lo, hi = min(temps), max(temps)
         avg = sum(temps) / len(temps)
         canvas.create_text(
-            PAD, 12, anchor="nw", font=("Segoe UI", 11, "bold"), fill="#e2e8f0",
+            PAD, 12, anchor="nw", font=("Segoe UI", 11, "bold"), fill=c["text"],
             text=f"min {lo}°C   max {hi}°C   avg {avg:.1f}°C   ({len(pts)} samples)")
 
     def _disks_window(self):
@@ -3161,10 +3489,12 @@ class App:
         tab_icon = tk.Frame(notebook, padx=14, pady=8)
         tab_updates = tk.Frame(notebook, padx=14, pady=8)
         tab_health = tk.Frame(notebook, padx=14, pady=8)
+        tab_stats = tk.Frame(notebook, padx=14, pady=8)
         notebook.add(tab_general, text=tr("tab.general"))
         notebook.add(tab_icon, text=tr("tab.icon"))
         notebook.add(tab_updates, text=tr("tab.updates"))
         notebook.add(tab_health, text=tr("tab.health"))
+        notebook.add(tab_stats, text=tr("tab.stats"))
 
         def add_spin(tab, label, key, lo, hi, row):
             tk.Label(tab, text=label, font=("Segoe UI", 10),
@@ -3211,6 +3541,16 @@ class App:
         ttk.Checkbutton(tab_general, text=tr("settings.smart_alerts"),
                         variable=smart_var).grid(
             row=8, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
+        # UI theme (dark/light) for windows and reports
+        tk.Label(tab_general, text=tr("settings.ui_theme"),
+                 font=("Segoe UI", 10), anchor="w").grid(
+            row=11, column=0, sticky="w", pady=(10, 0))
+        uitheme_var = tk.StringVar(value=current.get("ui_theme", "auto"))
+        ttk.Combobox(tab_general, textvariable=uitheme_var, width=14,
+                     values=("auto", "dark", "light"),
+                     state="readonly").grid(
+            row=11, column=1, padx=(14, 0), pady=(10, 0))
 
         # weekly auto-report: checkbox + folder chooser
         weekly_var = tk.BooleanVar(value=current.get("weekly_report_enabled",
@@ -3312,7 +3652,7 @@ class App:
             tk.Label(preview_row, text=tr("settings.preview"),
                      font=("Segoe UI", 10)).pack(side="left", padx=(0, 8))
             for _ in range(2):
-                lbl = tk.Label(preview_row, bg="#0f172a", bd=1,
+                lbl = tk.Label(preview_row, bg=ui_palette()["bg"], bd=1,
                                relief="solid", padx=4)
                 lbl.pack(side="left", padx=(0, 10))
                 preview_lbls.append(lbl)
@@ -3394,6 +3734,43 @@ class App:
         status_lbl = tk.Label(tab_health, font=("Segoe UI", 10, "bold"),
                               anchor="w", text="...")
         status_lbl.grid(row=0, column=0, sticky="w")
+
+        # ---- Stats tab: 7-day usage summary ---------------------------
+        stats_box = tk.Text(tab_stats, width=46, height=12, wrap="word",
+                            font=("Segoe UI", 10), state="disabled",
+                            relief="solid", bd=1, bg=ui_palette()["entry_bg"])
+        stats_box.grid(row=0, column=0, columnspan=2, sticky="we",
+                       pady=(0, 8))
+
+        def _render_stats():
+            s = week_stats(load_daily_health())
+            stats_box.config(state="normal")
+            stats_box.delete("1.0", "end")
+            stats_box.insert("end", tr("stats.alerts",
+                                       n=s["alerts"]) + "\n")
+            stats_box.insert("end", tr("stats.smart_alerts",
+                                       n=s["smart_alerts"]) + "\n\n")
+            for model, d in s["per_disk"].items():
+                stats_box.insert("end", model + "\n", ("head",))
+                stats_box.insert(
+                    "end",
+                    tr("stats.disk_line", mn=f"{d['min']:.0f}",
+                       av=f"{d['avg']:.1f}", mx=f"{d['max']:.0f}",
+                       wear=(f"{d['wear']}%" if d["wear"] is not None
+                             else "-")) + "\n")
+            stats_box.insert("end", "\n" + tr("stats.window"), ("muted",))
+            stats_box.tag_configure("head",
+                                    font=("Segoe UI", 10, "bold"))
+            stats_box.tag_configure("muted",
+                                    font=("Segoe UI", 8),
+                                    foreground="#64748b")
+            stats_box.config(state="disabled")
+
+        _render_stats()
+        stats_refresh = tk.Button(tab_stats, text=tr("stats.refresh"),
+                                  font=("Segoe UI", 10),
+                                  command=_render_stats)
+        stats_refresh.grid(row=1, column=0, sticky="w")
         refresh_btn = tk.Button(tab_health, text=tr("health.refresh"),
                                 font=("Segoe UI", 10), width=10)
         refresh_btn.grid(row=0, column=1, sticky="e", padx=(14, 0))
@@ -3594,6 +3971,7 @@ class App:
                 vals["compact_tooltip"] = bool(compact_var.get())
                 vals["weekly_report_enabled"] = bool(weekly_var.get())
                 vals["weekly_report_dir"] = weekly_dir_var.get().strip()
+                vals["ui_theme"] = uitheme_var.get()
                 vals["high_contrast_icon"] = bool(hc_var.get())
                 vals["icon_font"] = font_var.get()
                 vals["icon_font_style"] = style_var.get()
@@ -4014,6 +4392,8 @@ class App:
             with self._lock:
                 points = list(self.history)
             save_history(points)
+        _history24_save(self.history24)
+        _history24_save_state(self._h24_state)
         try:
             self.icon.remove_notification()
         except Exception:
@@ -4087,6 +4467,11 @@ class App:
         self._smart_watch(temps)
         try:
             append_daily_health(temps)   # one row/day per disk, cheap no-op
+            # minute-resolution long-tail history for the 24 h view
+            pts, st = update_history24(self.history24, time.time(),
+                                       self._h24_state, temps=temps)
+            self.history24 = pts
+            self._h24_state = st
         except Exception:
             pass
         self._alert_drive(hottest, time.time())
