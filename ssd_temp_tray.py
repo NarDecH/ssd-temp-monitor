@@ -43,7 +43,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.16.0"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.17.0"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -345,9 +345,10 @@ SETTINGS = load_settings()
 HISTORY_SECONDS = SETTINGS["history_minutes"] * 60
 HISTORY_SAVE_INTERVAL = 60          # flush to disk at most every 60 s
 HISTORY_MAX_POINTS = HISTORY_SECONDS  # hard cap (1 point/sec)
-HISTORY_FILE = os.path.join(
-    os.environ.get("TEMP", os.path.expanduser("~")), "ssd_temp_history.csv"
-)
+# temperature history lives with the other app data (DATA_DIR) so the
+# portable build keeps everything in its own folder - the old %TEMP% path
+# leaked per-machine state outside the bundle
+HISTORY_FILE = os.path.join(DATA_DIR, "ssd_temp_history.csv")
 _env_history = os.environ.get("SSD_TEMP_RECORD_HISTORY")
 KEEP_HISTORY = (SETTINGS["record_history"] if _env_history is None
                 else _env_history == "1")
@@ -372,6 +373,7 @@ STRINGS = {
         "tab.health": "Health",
         "health.refresh": "Refresh",
         "health.trend": "30-day trend",
+        "health.report": "Weekly report",
         "health.trend_empty": ("No daily health history yet - the app "
                                "records one row per day automatically."),
         "health.status.ok": "All drives look healthy.",
@@ -386,6 +388,8 @@ STRINGS = {
         "smart.new_errors": ("{model}: {n} new uncorrected read error(s) - "
                              "back up your data."),
         "smart.wear_band": "{model}: drive wear reached {wear}%.",
+        "smart.wear_slope": ("{model}: wear is rising fast (+{gain}% in "
+                             "7 days) - consider a backup plan."),
         "tab.general": "General",
         "tab.icon": "Icon",
         "tab.updates": "Updates",
@@ -505,6 +509,7 @@ STRINGS = {
         "tab.health": "สุขภาพ",
         "health.refresh": "รีเฟรช",
         "health.trend": "แนวโน้ม 30 วัน",
+        "health.report": "รายงานรายสัปดาห์",
         "health.trend_empty": "ยังไม่มีประวัติสุขภาพรายวัน - แอปบันทึกวันละหนึ่งแถวโดยอัตโนมัติ",
         "health.status.ok": "ดิสก์ทุกตัวสภาพปกติ",
         "health.status.warn": "ควรตรวจสอบ - ดูรายละเอียดด้านล่าง",
@@ -517,6 +522,7 @@ STRINGS = {
         "smart.title": "แจ้งเตือนสุขภาพ SSD",
         "smart.new_errors": "{model}: พบข้อผิดพลาดการอ่านแก้ไม่สำเร็จใหม่ {n} รายการ - ควรสำรองข้อมูล",
         "smart.wear_band": "{model}: การสึกถึง {wear}% แล้ว",
+        "smart.wear_slope": "{model}: การสึกเพิ่มเร็วผิดปกติ (+{gain}% ใน 7 วัน) - ควรสำรองข้อมูล",
         "tab.general": "ทั่วไป",
         "tab.icon": "ไอคอน",
         "tab.updates": "อัปเดต",
@@ -633,6 +639,7 @@ STRINGS = {
         "tab.health": "健全性",
         "health.refresh": "更新",
         "health.trend": "30日トレンド",
+        "health.report": "週次レポート",
         "health.trend_empty": "日次の健康履歴はまだありません - アプリが毎日自動で1行記録します。",
         "health.status.ok": "すべてのドライブは正常です。",
         "health.status.warn": "要確認 - 下記の詳細をご覧ください。",
@@ -645,6 +652,7 @@ STRINGS = {
         "smart.title": "SSD 健康のお知らせ",
         "smart.new_errors": "{model}: 新しい訂正不能読み取りエラーが {n} 件 - データをバックアップしてください。",
         "smart.wear_band": "{model}: ドライブの劣化が {wear}% に到達しました。",
+        "smart.wear_slope": "{model}: 劣化が急上昇しています (7日で +{gain}%) - バックアップをご検討ください。",
         "tab.general": "全般",
         "tab.icon": "アイコン",
         "tab.updates": "更新",
@@ -760,6 +768,7 @@ STRINGS = {
         "tab.health": "健康",
         "health.refresh": "刷新",
         "health.trend": "30 天趋势",
+        "health.report": "每周报告",
         "health.trend_empty": "尚无每日健康历史 - 应用会每天自动记录一行。",
         "health.status.ok": "所有磁盘状态正常。",
         "health.status.warn": "需要关注 - 请查看下方详情。",
@@ -772,6 +781,7 @@ STRINGS = {
         "smart.title": "SSD 健康提醒",
         "smart.new_errors": "{model}: 新增 {n} 个无法纠正的读取错误 - 请备份数据。",
         "smart.wear_band": "{model}: 磨损已达 {wear}%。",
+        "smart.wear_slope": "{model}: 磨损上升过快 (7 天 +{gain}%) - 建议备份数据。",
         "tab.general": "常规",
         "tab.icon": "图标",
         "tab.updates": "更新",
@@ -1199,6 +1209,43 @@ def smart_watch_changes(temps, state):
 
 
 SMART_ALERT_COOLDOWN_MINUTES = 30
+
+# pre-emptive "wear rising fast" watch (from the daily health log)
+WEAR_SLOPE_WINDOW_DAYS = 7
+WEAR_SLOPE_PCT_PER_WEEK = 2.0        # percentage points per window
+WEAR_SLOPE_COOLDOWN_DAYS = 7         # re-alert at most weekly per disk
+
+
+def wear_slope_alert(rows, now=None, state=None):
+    """Pure pre-emptive wear-slope watch over the daily health log.
+
+    Compares the max wear between the first and last day of the sliding
+    window (default 7 days): a gain of WEAR_SLOPE_PCT_PER_WEEK or more
+    warns BEFORE the 75/90 bands are reached. Deduplicated per disk for
+    WEAR_SLOPE_COOLDOWN_DAYS via marks stored in the smart state file.
+    Returns (message_or_None, new_state).
+    """
+    now = time.time() if now is None else now
+    state = dict(state or {})
+    marks = dict(state.get("_wear_slope", {}))
+    alerts = []
+    for model in sorted({r.get("model") for r in rows if r.get("model")}):
+        series = [w for _d, _a, _l, _h, w
+                  in trend_series(rows, model, days=WEAR_SLOPE_WINDOW_DAYS)]
+        series = [w for w in series if w is not None]
+        if len(series) < 3:
+            continue
+        gain = series[-1] - series[0]
+        if gain < WEAR_SLOPE_PCT_PER_WEEK:
+            continue
+        if now - float(marks.get(model, 0)) < WEAR_SLOPE_COOLDOWN_DAYS * 86400:
+            continue
+        marks[model] = now
+        alerts.append(tr("smart.wear_slope", model=model, gain=f"{gain:.0f}"))
+    if not alerts:
+        return None, state
+    state["_wear_slope"] = marks
+    return "\n".join(alerts), state
 SMART_STATE_FILE = "smart_state.json"
 
 
@@ -1313,6 +1360,108 @@ def trend_series(rows, model, days=HEALTH_TREND_DAYS):
         out.append((date, sum(ts) / len(ts), min(ts), max(ts),
                     per_day[date]["wear"]))
     return out[-days:]
+
+
+WEEKLY_REPORT_DAYS = 7
+
+
+def build_weekly_report_html(rows, now=None):
+    """Render the last 7 days of health_daily.csv as a standalone HTML.
+
+    One section per disk model: an SVG line chart (daily avg temperature)
+    and a compact wear/error table. Returns an empty string when there is
+    no data for the window. The output has no external dependencies, so
+    it opens correctly from any folder or is attachable to an email.
+    """
+    now = time.time() if now is None else now
+    start = now - WEEKLY_REPORT_DAYS * 86400
+    import datetime as _dt
+    cutoff = (_dt.datetime.now() - _dt.timedelta(days=WEEKLY_REPORT_DAYS))
+    cutoff_str = cutoff.strftime("%Y-%m-%d")
+    models = []
+    for r in rows:
+        if r.get("model") and r["model"] not in models:
+            models.append(r["model"])
+    sections = []
+    for model in models:
+        series = trend_series(rows, model, days=WEEKLY_REPORT_DAYS)
+        series = [s for s in series if s[0] >= cutoff_str]
+        if not series:
+            continue
+        w_pts = [f"{12 + i * 380 / max(len(series) - 1, 1):.1f},"
+                 f"{150 - (avg - 25) / 50 * 120:.1f}"
+                 for i, (_d, avg, _lo, _hi, _w) in enumerate(series)]
+        wear_rows = "".join(
+            f"<tr><td>{d}</td><td>{avg:.1f}</td><td>{lo:.0f}</td>"
+            f"<td>{hi:.0f}</td><td>{'%' if w is not None else '-'}"
+            f"</td></tr>"
+            if False else
+            f"<tr><td>{d}</td><td>{avg:.1f}</td><td>{lo:.0f}</td>"
+            f"<td>{hi:.0f}</td><td>{w if w is not None else '-'}</td></tr>"
+            for d, avg, lo, hi, w in series)
+        sections.append(f"""
+  <section>
+    <h2>{model}</h2>
+    <svg viewBox="0 0 404 170" width="404" height="170" role="img"
+         aria-label="daily average temperature">
+      <line x1="12" y1="150" x2="392" y2="150" stroke="#334155"/>
+      <polyline fill="none" stroke="#38bdf8" stroke-width="2"
+                points="{' '.join(w_pts)}"/>
+    </svg>
+    <table>
+      <tr><th>date</th><th>avg °C</th><th>min</th><th>max</th>
+          <th>wear %</th></tr>
+      {wear_rows}
+    </table>
+  </section>""")
+    if not sections:
+        return ""
+    stamp = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SSD Health Weekly Report - {stamp}</title>
+<style>
+  body {{ font-family: 'Segoe UI', sans-serif; margin: 24px auto;
+         max-width: 560px; color: #0f172a; }}
+  h1 {{ font-size: 1.3rem; }}
+  section {{ border: 1px solid #e2e8f0; border-radius: 10px;
+            padding: 12px 16px; margin: 18px 0; }}
+  h2 {{ font-size: 1.05rem; margin: 4px 0; }}
+  table {{ border-collapse: collapse; width: 100%; font-size: .9rem; }}
+  th, td {{ border-bottom: 1px solid #e2e8f0; padding: 4px 6px;
+           text-align: left; }}
+  th {{ color: #64748b; font-weight: 600; }}
+  .muted {{ color: #64748b; font-size: .85rem; }}
+</style>
+</head>
+<body>
+<h1>SSD Health Weekly Report</h1>
+<p class="muted">Generated {stamp} · last {WEEKLY_REPORT_DAYS} days
+· SSD Temperature Monitor</p>
+{''.join(sections)}
+</body>
+</html>
+"""
+
+
+def open_weekly_report(parent=None):
+    """Build the weekly HTML report, save it next to the other exports
+    and open it in the default browser. Returns the path or None."""
+    try:
+        rows = load_daily_health()
+        html = build_weekly_report_html(rows)
+        if not html:
+            return None
+        out = os.path.join(DATA_DIR, "ssd_health_weekly.html")
+        with open(out, "w", encoding="utf-8") as f:
+            f.write(html)
+        os.startfile(out)  # default browser
+        log_event("weekly_report_opened", rows=len(rows))
+        return out
+    except Exception:
+        return None
 
 
 def list_all_disks():
@@ -3169,6 +3318,22 @@ class App:
 
         trend_btn.config(command=_show_trend)
 
+        report_btn = tk.Button(tab_health, text=tr("health.report"),
+                               font=("Segoe UI", 10), width=14)
+        report_btn.grid(row=0, column=3, sticky="e", padx=(14, 0))
+
+        def _open_report():
+            report_btn.config(state="disabled")
+            try:
+                path = open_weekly_report(parent=root)
+                if not path:
+                    messagebox.showinfo(tr("health.report"),
+                                        tr("health.trend_empty"), parent=root)
+            finally:
+                report_btn.config(state="normal")
+
+        report_btn.config(command=_open_report)
+
         note = tk.Label(outer, text=tr("settings.note"),
                         font=("Segoe UI", 8), fg="#64748b")
         note.pack(anchor="w", pady=(6, 0))
@@ -3545,6 +3710,13 @@ class App:
                 < SMART_ALERT_COOLDOWN_MINUTES * 60):
             return
         state, fired = smart_watch_changes(temps, self._smart_state)
+        try:
+            slope_msg, state = wear_slope_alert(
+                load_daily_health(), now=now, state=state)
+        except Exception:
+            slope_msg = None
+        if slope_msg:
+            fired.append(slope_msg)
         if state != self._smart_state:
             self._smart_state = state
             save_smart_state(state)   # rare: only when a counter changed

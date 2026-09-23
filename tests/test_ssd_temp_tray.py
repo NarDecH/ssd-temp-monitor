@@ -2183,3 +2183,86 @@ class TestDailyHealth:
         date, avg, lo, hi, wear = series[-1]
         assert lo <= avg <= hi and wear == 34
         assert m.trend_series(rows, "MISSING") == []
+
+
+# ---------------------------------------------------------------------------
+# v1.17.0: weekly HTML report + wear-slope watch + portable data locations
+# ---------------------------------------------------------------------------
+class TestWeeklyReport:
+    def _rows(self):
+        rows = []
+        for day in range(7):
+            rows.append({"date": f"2026-09-{17 + day}", "time": "12:00",
+                         "model": "M1", "bus": "NVMe",
+                         "temp_c": str(35 + day), "wear_pct": str(day),
+                         "read_errors": "0", "uncorrected": "0"})
+        return rows
+
+    def test_html_contains_data_and_is_standalone(self):
+        html = m.build_weekly_report_html(self._rows())
+        assert html.startswith("<!DOCTYPE html>")
+        assert "M1" in html
+        assert "http" not in html.lower().split("<body")[1]  # no external deps
+
+    def test_empty_log_produces_empty_report(self):
+        assert m.build_weekly_report_html([]) == ""
+        old = [{"date": "2020-01-01", "model": "M1", "temp_c": "40",
+                "wear_pct": "1"}]
+        assert m.build_weekly_report_html(old) == ""   # outside 7-day window
+
+    def test_open_weekly_report_writes_file(self, tmp_path, monkeypatch):
+        path_holder = {}
+        monkeypatch.setattr(m, "DATA_DIR", str(tmp_path))
+        monkeypatch.setattr(m.os, "startfile",
+                            lambda p: path_holder.setdefault("opened", p),
+                            raising=False)
+        # seed 3 days of data
+        t0 = 1789000000.0
+        d = {"model": "M1", "bus": "NVMe", "temp": 40, "wear": 5,
+             "read_errors": 0, "unfixed_errors": 0}
+        for day in range(3):
+            m.append_daily_health([d], now=t0 + day * 86400)
+        out = m.open_weekly_report()
+        assert out and os.path.isfile(out)
+        assert path_holder.get("opened") == out
+
+
+class TestWearSlope:
+    def _log(self, path, wears):
+        t0 = 1789000000.0
+        for i, w in enumerate(wears):
+            d = {"model": "D1", "bus": "NVMe", "temp": 40, "wear": w,
+                 "read_errors": 0, "unfixed_errors": 0}
+            m.append_daily_health([d], now=t0 + i * 86400, path=path)
+        return m.load_daily_health(path)
+
+    def test_fast_rise_warns_and_dedupes(self, tmp_path, monkeypatch):
+        monkeypatch.setitem(m.SETTINGS, "language", "en")
+        path = str(tmp_path / "h.csv")
+        rows = self._log(path, [10, 10, 11, 12, 13, 14, 15])   # +5/7d
+        state = {}
+        msg, state = m.wear_slope_alert(rows, state=state)
+        assert msg and "D1" in msg
+        # immediately after: suppressed by the weekly cooldown
+        msg2, _ = m.wear_slope_alert(rows, state=state)
+        assert msg2 is None
+
+    def test_slow_rise_stays_silent(self, tmp_path, monkeypatch):
+        monkeypatch.setitem(m.SETTINGS, "language", "en")
+        path = str(tmp_path / "h.csv")
+        rows = self._log(path, [10, 10, 10, 10, 10, 10, 11])   # +1/7d
+        msg, _ = m.wear_slope_alert(rows, state={})
+        assert msg is None
+
+    def test_short_history_stays_silent(self):
+        rows = [{"date": "2026-09-20", "model": "D1", "temp_c": "40",
+                 "wear_pct": "10"}]
+        msg, _ = m.wear_slope_alert(rows, state={})
+        assert msg is None
+
+
+class TestPortableDataLocations:
+    def test_history_file_lives_in_data_dir(self):
+        """Regression: the temperature history used to go to %TEMP%,
+        which a portable bundle would leave behind on other machines."""
+        assert os.path.dirname(m.HISTORY_FILE) == m.DATA_DIR

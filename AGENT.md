@@ -235,6 +235,10 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   (base64 utf-16-le, ไม่มีช่องว่าง) และระวัง `Set-Content -Append` ไม่มีใน
   PS 5.1 — สะสมผลใน array แล้วเขียนครั้งเดียว และแอปอาจต้องแยก admin
   probe เป็น script แยกที่ความยาวพอเหมาะ
+- **ไฟล์ข้อมูลต้องอยู่ใต้ DATA_DIR ทั้งหมด (portable ต้องยกไปได้ทั้งโฟลเดอร์)** —
+  HISTORY_FILE เคยอยู่ที่ %TEMP% จน v1.17.0 กว่าจะเจอ เพิ่มไฟล์ state ใหม่ทีไร
+  ให้เช็คเสมอว่าอ้าง DATA_DIR ไม่ใช่ TEMP/cwd และเขียนเทส assert
+  `dirname == DATA_DIR` กันย้อน
 - **ฟีเจอร์ตรวจจับ "การเปลี่ยนแปลง" ต้องตั้ง baseline เงียบ ๆ ก่อน** —
   watchdog SMART รอบแรกที่เห็นดิสก์ต้องจด state โดยไม่เตือน (ดิสก์ที่มี
   error ค้างจากซื้อมาจะโดน alert storm ทันทีตอนติดตั้งแอปครั้งแรก)
