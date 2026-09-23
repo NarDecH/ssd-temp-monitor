@@ -235,6 +235,18 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   (base64 utf-16-le, ไม่มีช่องว่าง) และระวัง `Set-Content -Append` ไม่มีใน
   PS 5.1 — สะสมผลใน array แล้วเขียนครั้งเดียว และแอปอาจต้องแยก admin
   probe เป็น script แยกที่ความยาวพอเหมาะ
+- **marker ของกลไก update ต้องมีอายุ ไม่ใช่แค่มีอยู่** — คืน release 1.15.0
+  จริง: REPORTED marker ค้างจากรอบเก่า (เทส) ทำให้แอปใหม่ที่บูตสำเร็จ
+  blacklist ตัวเอง + เด้ง dialog ผิด (`_notify_rollback_reported` กิน
+  PENDING ของการอัปเดตปัจจุบันไปด้วย) กฎ: marker ที่ใช้ตัดสิน "เกิดขึ้นเมื่อ
+  ไม่นานนี้" ต้องเทียบ mtime กับขอบเขตเวลาเสมอ และเทสต้องครอบทั้ง marker
+  สดและ marker เก่า (ผ่าน `os.utime`)
+- **autostart จากซอร์สจะจด pythonw ลง Run key** — รันแอปจากซอร์สแล้วเปิด
+  checkbox autostart ทำให้เครื่องบูตมาเปิดแอปผ่าน `pythonw` ตลอด
+  (exe ตัวจริงจะโดน mutex บล็อกตอน self-update → exit 2 แบบเงียบ ๆ)
+  วินิจฉัยได้ด้วย `Get-Process pythonw*` + โพรบ mutex ตรง ๆ และแก้ Run key
+  ให้ชี้ exe ที่ติดตั้งก่อนอัปเดต (ต้องคิดถึงกรณี `sys.frozen=False`
+  ใน `set_autostart`)
 
 ## สไตล์โค้ด
 

@@ -1889,6 +1889,8 @@ class TestRollback:
         assert not os.path.exists(os.path.join(exe_dir, m.ROLLBACK_BACKUP_NAME))
 
     def test_rollback_reported_blacklists_version(self, tmp_path, monkeypatch):
+        """A FRESH REPORTED marker (the shim just rolled us back) must
+        blacklist the broken version and clear the markers."""
         exe, exe_dir, data = self._sandbox(tmp_path, monkeypatch)
         monkeypatch.setattr(m, "_rollback_backup_path",
                             lambda: os.path.join(exe_dir, m.ROLLBACK_BACKUP_NAME))
@@ -1896,12 +1898,42 @@ class TestRollback:
                             lambda name: os.path.join(data, name))
         with open(os.path.join(data, m.ROLLBACK_PENDING), "w") as f:
             f.write("v1.15.0")
-        with open(os.path.join(data, m.ROLLBACK_REPORTED), "w") as f:
+        reported = os.path.join(data, m.ROLLBACK_REPORTED)
+        with open(reported, "w") as f:
             f.write("")
+        os.utime(reported, None)  # mtime = now -> fresh
         m.begin_healthy_session()
         assert m.version_is_broken("v1.15.0")
         assert not os.path.exists(os.path.join(data, m.ROLLBACK_PENDING))
-        assert not os.path.exists(os.path.join(data, m.ROLLBACK_REPORTED))
+        assert not os.path.exists(reported)
+
+    def test_stale_rollback_report_does_not_blacklist(self, tmp_path,
+                                                      monkeypatch):
+        """Regression (v1.15.0 release night): a stale REPORTED marker from
+        an earlier session made the freshly installed, healthy version
+        blacklist ITSELF and pop a bogus rollback dialog. A stale marker
+        must be cleaned up and the healthy path must continue."""
+        exe, exe_dir, data = self._sandbox(tmp_path, monkeypatch)
+        monkeypatch.setattr(m, "_rollback_backup_path",
+                            lambda: os.path.join(exe_dir, m.ROLLBACK_BACKUP_NAME))
+        monkeypatch.setattr(m, "_rollback_marker_path",
+                            lambda name: os.path.join(data, name))
+        with open(os.path.join(data, m.ROLLBACK_PENDING), "w") as f:
+            f.write("v1.15.0")
+        backup = os.path.join(exe_dir, m.ROLLBACK_BACKUP_NAME)
+        with open(backup, "w") as f:
+            f.write("old exe")
+        reported = os.path.join(data, m.ROLLBACK_REPORTED)
+        with open(reported, "w") as f:
+            f.write("")
+        old = time.time() - m.ROLLBACK_REPORT_STALE_SECONDS - 60
+        os.utime(reported, (old, old))  # mtime far in the past
+        m.begin_healthy_session()
+        # healthy path ran: markers+backup cleaned, version NOT blacklisted
+        assert not m.version_is_broken("v1.15.0")
+        assert not os.path.exists(reported)
+        assert not os.path.exists(os.path.join(data, m.ROLLBACK_PENDING))
+        assert not os.path.exists(backup)
 
     def test_broken_version_skips_update_checks(self, tmp_path, monkeypatch):
         # isolate: without this the test would append to the REAL

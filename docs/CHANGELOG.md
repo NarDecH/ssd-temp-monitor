@@ -3,6 +3,17 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.15.1] — 2026-09-23
+
+### Fixed
+
+- 🩹 **เวอร์ชันใหม่ที่บูตสำเร็จจดตัวเองลง blacklist** — พบคืนวัน release ของ
+  1.15.0: marker `update_rollback_reported` ค้างจากรอบเก่า (เช่น เทส/อัปเดตที่
+  relaunch ถูกขัด) ทำให้ `begin_healthy_session` เข้าสู่สาขา rollback ผิด ๆ
+  → เวอร์ชันที่เพิ่งติดตั้งสำเร็จถูกจดลง `update_broken_versions.txt` และเด้ง
+  dialog เตือนผิด แก้โดยเช็ค**อายุ marker**: เก่ากว่า 180 วิ = เศษจากรอบเก่า
+  ให้ล้างทิ้งแล้วเดิน healthy path ปกติ (marker สด = rollback จริง ยังทำงานเหมือนเดิม)
+
 ## [1.15.0] — 2026-09-23
 
 ### Added

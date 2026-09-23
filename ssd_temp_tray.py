@@ -43,7 +43,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.15.0"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.15.1"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -1445,6 +1445,10 @@ ROLLBACK_REPORTED = "update_rollback_reported.marker"
 ROLLBACK_BROKEN_FILE = "update_broken_versions.txt"
 ROLLBACK_WATCHDOG_NAME = "ssd_rollback_watchdog.cmd"
 ROLLBACK_GRACE_SECONDS = 90
+# A REPORTED marker older than this is a leftover from an earlier session
+# (e.g. a test or an update whose relaunch was interrupted) - it must NOT
+# make a freshly installed, healthy version blacklist itself.
+ROLLBACK_REPORT_STALE_SECONDS = 180
 
 
 def _rollback_backup_path():
@@ -1490,12 +1494,28 @@ def begin_healthy_session():
 
     Reaching this point proves the new exe boots, so the pending marker
     and the backup copy are no longer needed. If the marker is here
-    because the shim already rolled us back, show the rollback notice
-    instead (and ask the updater to skip this broken release).
+    because the shim already rolled us back (fresh REPORTED marker),
+    show the rollback notice instead and ask the updater to skip this
+    broken release. A STALE REPORTED marker (older than
+    ROLLBACK_REPORT_STALE_SECONDS) is a leftover from an earlier session:
+    it is cleaned up and the normal healthy path continues - otherwise a
+    healthy boot after an update would blacklist the version it just
+    installed and pop a bogus rollback warning.
     """
-    if os.path.isfile(_rollback_marker_path(ROLLBACK_REPORTED)):
-        _notify_rollback_reported()
-        return
+    reported = _rollback_marker_path(ROLLBACK_REPORTED)
+    if os.path.isfile(reported):
+        try:
+            age = time.time() - os.path.getmtime(reported)
+        except OSError:
+            age = 0  # unreadable mtime: treat as fresh (safe default)
+        if age <= ROLLBACK_REPORT_STALE_SECONDS:
+            _notify_rollback_reported()
+            return
+        log_event("rollback_report_stale", age_seconds=int(age))
+        try:
+            os.remove(reported)
+        except OSError:
+            pass
     if not os.path.isfile(_rollback_marker_path(ROLLBACK_PENDING)):
         return
     try:
