@@ -2561,3 +2561,39 @@ class TestGraph24ThemeStats:
         # guards the validate/default drift for all future color keys
         cfg = m._validate_settings({})
         assert cfg["ui_theme"] in ("auto", "dark", "light")
+
+    def test_temp_zone_bands_match_temp_color(self):
+        """The graph zones use the same thresholds as the tray colors:
+        green <51, orange 51-64, red >=65, clipped to the graph range."""
+        bands = m.temp_zone_bands()
+        assert [b[2] for b in bands] == [m.GREEN, m.ORANGE, m.RED]
+        assert bands[0][0] == m.GRAPH_Y_LO and bands[0][1] == 51
+        assert bands[1] == (51, 65, m.ORANGE)
+        assert bands[2][0] == 65 and bands[2][1] == m.GRAPH_Y_HI
+        # consistency with temp_color at the boundaries
+        for lo, hi, color in bands:
+            mid = (lo + hi) / 2
+            assert m.temp_color(mid) == color
+        # a narrower window clips instead of drawing out of range
+        clipped = m.temp_zone_bands(55, 70)
+        assert clipped == [(55, 65, m.ORANGE), (65, 70, m.RED)]
+
+    def test_format_week_stats_lines(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(m, "HEALTH_LOG_FILE", str(tmp_path / "h.csv"))
+        monkeypatch.setattr(m, "count_log_events", lambda *a, **k: 3)
+        t0 = time.time() - 86400
+        for day in range(2):
+            m.append_daily_health(
+                [{"model": "A", "bus": "NVMe", "temp": 40 + day,
+                  "wear": 5, "read_errors": 0, "unfixed_errors": 0}],
+                now=t0 + day * 86400)
+        lines = m.format_week_stats(m.week_stats(m.load_daily_health()))
+        assert any("3" in ln for ln in lines[:2])   # alert counters
+        assert "A" in lines                          # disk header
+        assert any("40" in ln and "40.5" in ln for ln in lines)
+        assert lines[-1]                             # window footer
+
+    def test_stats_menu_i18n_parity(self):
+        for lang in m.UI_LANGUAGES:
+            assert "menu.stats" in m.STRINGS[lang]
+            assert "win.stats" in m.STRINGS[lang]

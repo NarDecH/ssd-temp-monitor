@@ -44,7 +44,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.20.0"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.21.0"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -450,6 +450,8 @@ STRINGS = {
         "menu.details": "Show details",
         "menu.graph": "Show temperature graph",
         "menu.graph24": "24-hour history",
+        "menu.stats": "Usage stats",
+        "win.stats": "Usage stats - last 7 days",
         "win.graph24": "Temperature - 24 hours",
         "tab.stats": "Stats",
         "settings.ui_theme": "Window theme (dark/light)",
@@ -599,6 +601,8 @@ STRINGS = {
         "menu.details": "ดูรายละเอียด",
         "menu.graph": "แสดงกราฟอุณหภูมิ",
         "menu.graph24": "ประวัติย้อน 24 ชั่วโมง",
+        "menu.stats": "สถิติการใช้งาน",
+        "win.stats": "สถิติการใช้งาน - 7 วันล่าสุด",
         "win.graph24": "อุณหภูมิ - 24 ชั่วโมง",
         "tab.stats": "สถิติ",
         "settings.ui_theme": "ธีมหน้าต่าง (มืด/สว่าง)",
@@ -745,6 +749,8 @@ STRINGS = {
         "menu.details": "詳細を表示",
         "menu.graph": "温度グラフを表示",
         "menu.graph24": "24時間履歴",
+        "menu.stats": "使用統計",
+        "win.stats": "使用統計 - 過去7日間",
         "win.graph24": "温度 - 24時間",
         "tab.stats": "統計",
         "settings.ui_theme": "ウィンドウテーマ（ダーク/ライト）",
@@ -890,6 +896,8 @@ STRINGS = {
         "menu.details": "显示详情",
         "menu.graph": "显示温度曲线",
         "menu.graph24": "24 小时历史",
+        "menu.stats": "使用统计",
+        "win.stats": "使用统计 - 过去 7 天",
         "win.graph24": "温度 - 24 小时",
         "tab.stats": "统计",
         "settings.ui_theme": "窗口主题（深色/浅色）",
@@ -1364,6 +1372,22 @@ def count_log_events(event, days=7, log_path=None, now=None):
     return n
 
 
+def format_week_stats(stats):
+    """Render a week_stats() dict into display lines (shared by the
+    Settings Stats tab and the tray Stats window)."""
+    lines = [tr("stats.alerts", n=stats["alerts"]),
+             tr("stats.smart_alerts", n=stats["smart_alerts"]), ""]
+    for model, d in stats["per_disk"].items():
+        lines.append(model)
+        lines.append(tr("stats.disk_line", mn=f"{d['min']:.0f}",
+                        av=f"{d['avg']:.1f}", mx=f"{d['max']:.0f}",
+                        wear=(f"{d['wear']}%" if d["wear"] is not None
+                              else "-")))
+    lines.append("")
+    lines.append(tr("stats.window"))
+    return lines
+
+
 def week_stats(rows, state=None):
     """Usage summary for the Stats view.
 
@@ -1825,6 +1849,22 @@ def temp_color(temp):
     if temp >= 51:
         return ORANGE
     return GREEN
+
+
+def temp_zone_bands(y_lo=GRAPH_Y_LO, y_hi=GRAPH_Y_HI):
+    """Temperature zones as [(zlo, zhi, hexcolor), ...] clipped to a range.
+
+    Same thresholds as temp_color(): green below 51, orange 51-64,
+    red from 65. Used to paint the background zone bands of the graph
+    windows (drawn faintly, under the data line).
+    """
+    zones = ((0, 51, GREEN), (51, 65, ORANGE), (65, 10_000, RED))
+    out = []
+    for zlo, zhi, color in zones:
+        lo, hi = max(zlo, y_lo), min(zhi, y_hi)
+        if lo < hi:
+            out.append((lo, hi, color))
+    return out
 
 
 def _parse_version(v):
@@ -3002,6 +3042,7 @@ class App:
             pystray.MenuItem(tr("menu.details"), self.show_details, default=True),
             pystray.MenuItem(tr("menu.graph"), self.show_graph),
             pystray.MenuItem(tr("menu.graph24"), self.show_graph24),
+            pystray.MenuItem(tr("menu.stats"), self.show_stats),
             pystray.MenuItem(tr("menu.disks"), self.show_disks),
             pystray.MenuItem(tr("menu.diagnostics"), self.copy_diagnostics),
             pystray.MenuItem(tr("menu.refresh"), self.refresh),
@@ -3128,6 +3169,51 @@ class App:
     def show_graph24(self, *_):
         self._spawn_once("_graph24_open", self._graph24_window)
 
+    def show_stats(self, *_):
+        self._spawn_once("_stats_open", self._stats_window)
+
+    def _stats_window(self):
+        """Standalone 7-day usage summary (same data as the Settings
+        Stats tab, no dialog needed). Own thread + tk per project rules."""
+        import tkinter as tk
+        root = tk.Tk()
+        root.title(tr("win.stats"))
+        root.attributes("-topmost", True)
+        root.resizable(False, False)
+        c = ui_palette()
+        box = tk.Text(root, width=52, height=13, wrap="word",
+                      font=("Segoe UI", 10), relief="solid", bd=1,
+                      bg=c["entry_bg"], fg=c["text"])
+        box.pack(padx=14, pady=(14, 6))
+
+        def _render():
+            lines = format_week_stats(week_stats(load_daily_health()))
+            box.config(state="normal")
+            box.delete("1.0", "end")
+            for i, ln in enumerate(lines):
+                tag = ("head",) if ln and i > 1 and not ln.startswith(" ") \
+                    else (("muted",) if i == len(lines) - 1 else ())
+                box.insert("end", ln + "\n", tag)
+            box.tag_configure("head", font=("Segoe UI", 10, "bold"))
+            box.tag_configure("muted", font=("Segoe UI", 8),
+                              foreground=c["dim"])
+            box.config(state="disabled")
+
+        _render()
+        tk.Button(root, text=tr("stats.refresh"), font=("Segoe UI", 10),
+                  command=_render).pack(side="left",
+                                        padx=(14, 4), pady=(0, 12))
+        tk.Button(root, text=tr("common.close"), font=("Segoe UI", 10),
+                  command=root.destroy).pack(side="left", padx=4,
+                                             pady=(0, 12))
+        root.protocol("WM_DELETE_WINDOW", root.destroy)
+        root.bind("<Return>", lambda e: root.destroy())
+        root.bind("<Escape>", lambda e: root.destroy())
+        root.mainloop()
+        geo = geometry_of(root)
+        if geo:
+            save_geometry({"stats": geo})
+
     def _graph24_window(self):
         """24-hour minute-resolution temperature view (own thread + tk).
 
@@ -3145,8 +3231,19 @@ class App:
         canvas = tk.Canvas(win, width=W, height=H, bg=c["bg"],
                            highlightthickness=0)
         canvas.pack(padx=12, pady=(12, 4))
-        tk.Button(win, text=tr("common.close"), command=win.destroy,
-                  font=("Segoe UI", 10)).pack(pady=(2, 10))
+        btns = tk.Frame(win)
+        btns.pack(pady=(2, 10))
+
+        def _export_png():
+            path = export_canvas_png(canvas, parent=win)
+            if path:
+                self._notify(tr("notify.exported", path=path), tr("app.title"))
+
+        tk.Button(btns, text=tr("graph.export_png"), width=14,
+                  command=_export_png,
+                  font=("Segoe UI", 10)).pack(side="left", padx=4)
+        tk.Button(btns, text=tr("common.close"), command=win.destroy,
+                  font=("Segoe UI", 10)).pack(side="left", padx=4)
         win.protocol("WM_DELETE_WINDOW", win.destroy)
         win.bind("<Return>", lambda e: win.destroy())
         win.bind("<Escape>", lambda e: win.destroy())
@@ -3171,6 +3268,11 @@ class App:
                 return H - PAD - max(0.0, min(1.0, (temp - GRAPH_Y_LO)
                                              / (GRAPH_Y_HI - GRAPH_Y_LO))) \
                     * (H - 2 * PAD)
+
+            # temperature zone bands (green/orange/red), under everything
+            for zlo, zhi, zc in temp_zone_bands():
+                canvas.create_rectangle(PAD, y(zhi), W - PAD, y(zlo),
+                                        fill=zc, outline="", stipple="gray50")
 
             for gt in range(20, GRAPH_Y_HI, 20):
                 yy = y(gt)
@@ -3403,6 +3505,11 @@ class App:
 
         def y(temp):
             return H - PAD - (temp - Y_LO) / (Y_HI - Y_LO) * (H - 2 * PAD)
+
+        # temperature zone bands (green/orange/red), under everything
+        for zlo, zhi, zc in temp_zone_bands(Y_LO, Y_HI):
+            canvas.create_rectangle(PAD, y(zhi), W - PAD, y(zlo),
+                                    fill=zc, outline="", stipple="gray50")
 
         # grid + y-axis labels
         for gt in range(20, Y_HI, 20):
@@ -3743,22 +3850,13 @@ class App:
                        pady=(0, 8))
 
         def _render_stats():
-            s = week_stats(load_daily_health())
+            lines = format_week_stats(week_stats(load_daily_health()))
             stats_box.config(state="normal")
             stats_box.delete("1.0", "end")
-            stats_box.insert("end", tr("stats.alerts",
-                                       n=s["alerts"]) + "\n")
-            stats_box.insert("end", tr("stats.smart_alerts",
-                                       n=s["smart_alerts"]) + "\n\n")
-            for model, d in s["per_disk"].items():
-                stats_box.insert("end", model + "\n", ("head",))
-                stats_box.insert(
-                    "end",
-                    tr("stats.disk_line", mn=f"{d['min']:.0f}",
-                       av=f"{d['avg']:.1f}", mx=f"{d['max']:.0f}",
-                       wear=(f"{d['wear']}%" if d["wear"] is not None
-                             else "-")) + "\n")
-            stats_box.insert("end", "\n" + tr("stats.window"), ("muted",))
+            for i, ln in enumerate(lines):
+                tag = ("head",) if ln and i > 1 and not ln.startswith(" ") \
+                    else (("muted",) if i == len(lines) - 1 else ())
+                stats_box.insert("end", ln + "\n", tag)
             stats_box.tag_configure("head",
                                     font=("Segoe UI", 10, "bold"))
             stats_box.tag_configure("muted",
