@@ -2211,13 +2211,19 @@ class TestWeeklyReport:
         assert m.build_weekly_report_html(old) == ""   # outside 7-day window
 
     def test_open_weekly_report_writes_file(self, tmp_path, monkeypatch):
+        """Sandbox BOTH the data dir and the health log: the report must
+        be built from the sandbox log only - a missing real log on a CI
+        runner used to make this test fail (and a real one leak in)."""
         path_holder = {}
         monkeypatch.setattr(m, "DATA_DIR", str(tmp_path))
+        monkeypatch.setattr(m, "HEALTH_LOG_FILE", str(tmp_path / "h.csv"))
         monkeypatch.setattr(m.os, "startfile",
                             lambda p: path_holder.setdefault("opened", p),
                             raising=False)
-        # seed 3 days of data
-        t0 = 1789000000.0
+        # seed 3 days of data (goes to the sandboxed HEALTH_LOG_FILE);
+        # use now-relative timestamps so the days fall inside the report's
+        # 7-day window regardless of when the test runs
+        t0 = time.time() - 2 * 86400
         d = {"model": "M1", "bus": "NVMe", "temp": 40, "wear": 5,
              "read_errors": 0, "unfixed_errors": 0}
         for day in range(3):
