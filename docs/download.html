@@ -3,6 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="img/favicon.svg">
+<meta property="og:type" content="website">
+<meta property="og:title" content="SSD Temperature Monitor">
+<meta property="og:description" content="Show your SSD temperature live on the Windows tray - color-coded, multi-SSD, SMART health alerts, weekly reports, auto-update.">
+<meta property="og:image" content="img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+
 <title>ดาวน์โหลด — SSD Temperature Monitor</title>
 <style>
   :root {
@@ -72,6 +79,20 @@
     background: #7f1d1d33; border: 1px solid var(--red);
     border-radius: 12px; padding: 16px 18px; margin: 18px 0;
   }
+  #hash-input {
+    width: 100%; background: #0b1222; border: 1px solid var(--border);
+    color: var(--text); border-radius: 8px; padding: 9px 12px;
+    font-family: Consolas, monospace; font-size: .85rem;
+  }
+  #hash-input:focus { outline: none; border-color: var(--accent); }
+  #hash-result {
+    margin-top: 10px; border-radius: 8px; padding: 9px 12px;
+    font-size: .9rem; font-weight: 600;
+  }
+  #hash-result.ok { background: #14532d66; color: #86efac;
+                    border: 1px solid var(--green); }
+  #hash-result.bad { background: #7f1d1d66; color: #fca5a5;
+                     border: 1px solid var(--red); }
   .hidden { display: none; }
   ul.links { padding-left: 20px; }
   ul.links a { color: var(--accent); text-decoration: none; }
@@ -116,13 +137,23 @@
       <table id="hash-table">
         <tr><th>ไฟล์</th><th>SHA-256</th><th></th></tr>
       </table>
+      <div id="verify-box" class="hidden">
+        <h2 style="margin-top:14px">ตรวจไฟล์ที่คุณดาวน์โหลด</h2>
+        <p class="desc">รัน <code>certutil -hashfile ชื่อไฟล์ SHA256</code>
+          แล้ววางค่าที่ได้ในช่องนี้ — หน้าเว็บจะเทียบให้ทันที</p>
+        <input id="hash-input" type="text" spellcheck="false"
+               placeholder="วางค่า SHA-256 ของไฟล์ที่นี่…"
+               autocomplete="off">
+        <div id="hash-result" class="hidden"></div>
+      </div>
     </div>
 
     <div class="card">
       <h2>มีอะไรใหม่ในเวอร์ชันนี้</h2>
       <div class="notes" id="notes"></div>
       <p class="meta" id="released"></p>
-      <p><a id="all-releases" href="#" style="color:var(--accent)">ดู release ทั้งหมด →</a></p>
+      <p><a id="all-releases" href="#" style="color:var(--accent)">ดู release ทั้งหมด →</a>
+         · <a href="faq.html" style="color:var(--accent)">คำถามที่พบบ่อย (FAQ) →</a></p>
     </div>
   </div>
 </div>
@@ -138,17 +169,19 @@ function setAsset(id, sizeId, asset) {
   return asset;
 }
 
+let HASHES = new Map();   // name -> sha256, filled by renderHashes()
+
 function renderHashes(sumAsset, assets) {
   return fetch(sumAsset.browser_download_url)
     .then(r => r.text())
     .then(text => {
       const table = document.getElementById("hash-table");
-      const map = new Map(text.trim().split("\n").map(l => {
+      HASHES = new Map(text.trim().split("\n").map(l => {
         const [h, name] = l.trim().split(/\s+/, 2);
         return [name, h];
       }));
       for (const a of assets) {
-        const h = map.get(a.name);
+        const h = HASHES.get(a.name);
         if (!h) continue;
         const tr = document.createElement("tr");
         const td1 = document.createElement("td");
@@ -173,7 +206,31 @@ function renderHashes(sumAsset, assets) {
         tr.append(td1, td2, td3);
         table.appendChild(tr);
       }
+      document.getElementById("verify-box").classList.remove("hidden");
     });
+}
+
+function normalizeHash(s) {
+  return s.toLowerCase().replace(/[^0-9a-f]/g, "");
+}
+
+function checkPastedHash() {
+  const input = normalizeHash(document.getElementById("hash-input").value);
+  const out = document.getElementById("hash-result");
+  out.classList.remove("hidden", "ok", "bad");
+  if (input.length < 16) {
+    out.classList.add("hidden");
+    return;
+  }
+  for (const [name, h] of HASHES) {
+    if (h === input) {
+      out.classList.add("ok");
+      out.textContent = "✓ ถูกต้อง — ตรงกับ " + name;
+      return;
+    }
+  }
+  out.classList.add("bad");
+  out.textContent = "✗ ไม่ตรงกับไฟล์ใดใน release นี้ — อย่าใช้ไฟล์นี้ ดาวน์โหลดใหม่จากหน้านี้";
 }
 
 function renderNotes(body) {
@@ -208,6 +265,10 @@ function show(rel) {
   if (setup) setAsset("dl-setup", "size-setup", setup);
   if (portable) setAsset("dl-portable", "size-portable", portable);
   if (sums) renderHashes(sums, assets.filter(a => a !== sums))
+    .then(() => {
+      document.getElementById("hash-input")
+        .addEventListener("input", checkPastedHash);
+    })
     .catch(() => {});
   renderNotes(rel.body || "");
   document.getElementById("released").textContent =

@@ -169,6 +169,7 @@ SMART (อ่านจาก event log จริง) + ต่อดิสก์:
 | เอกสาร | เนื้อหา |
 |---|---|
 | [download.html](download.html) | **หน้าดาวน์โหลด** — ดึง release ล่าสุดอัตโนมัติ พร้อม checksum |
+| [faq.html](faq.html) | คำถามที่พบบ่อย (ไอคอน --, USB reader, auto-update, portable) |
 | [RESEARCH.md](RESEARCH.md) | วิเคราะห์ปัญหา USB reader + วิธีแก้ |
 | [CHANGELOG.md](CHANGELOG.md) | ประวัติการเปลี่ยนแปลง |
 | [USER_GUIDE_EN.md](USER_GUIDE_EN.md) | คู่มือภาษาอังกฤษ (มีฉบับ [HTML](USER_GUIDE_EN.html) ด้วย) |
