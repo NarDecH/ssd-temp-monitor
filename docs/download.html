@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ดาวน์โหลด — SSD Temperature Monitor</title>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8;
+    --green: #22c55e; --orange: #f59e0b; --red: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.6;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 32px 20px 60px; }
+  .crumb { font-size: .9rem; margin-bottom: 16px; }
+  .crumb a { color: var(--accent); text-decoration: none; }
+  h1 { margin: 8px 0 4px; font-size: 1.7rem; }
+  .verline { color: var(--muted); font-size: .95rem; }
+  .verline b { color: var(--green); font-size: 1.05rem; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 18px 20px; margin: 18px 0;
+  }
+  .card.recommended { border-color: var(--green); }
+  .pill {
+    display: inline-block; font-size: .72rem; font-weight: 700;
+    padding: 2px 10px; border-radius: 999px; margin-left: 8px;
+    vertical-align: middle;
+  }
+  .pill.rec { background: #14532d; color: #86efac; }
+  .pill.zip { background: #164e63; color: #67e8f9; }
+  h2 { font-size: 1.05rem; margin: 2px 0 2px; }
+  .desc { color: var(--muted); font-size: .92rem; margin: 4px 0 12px; }
+  .meta { color: var(--muted); font-size: .85rem; }
+  .btn {
+    display: inline-block; background: var(--green); color: #052e16;
+    font-weight: 700; text-decoration: none; border-radius: 10px;
+    padding: 10px 22px; font-size: 1rem;
+  }
+  .btn:hover { filter: brightness(1.1); }
+  .btn.alt { background: var(--surface); color: var(--text);
+             border: 1px solid var(--border); font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  th, td { text-align: left; padding: 6px 8px;
+           border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  code, .hash {
+    font-family: Consolas, monospace; font-size: .78rem;
+    background: #0b1222; border-radius: 6px; padding: 2px 6px;
+    word-break: break-all;
+  }
+  .copy {
+    background: none; border: 1px solid var(--border); color: var(--accent);
+    border-radius: 6px; font-size: .72rem; cursor: pointer; padding: 2px 8px;
+  }
+  .copy:hover { border-color: var(--accent); }
+  .notes { font-size: .92rem; color: var(--text); }
+  .notes h3 { font-size: 1rem; margin: 12px 0 4px; }
+  .notes ul { margin: 6px 0; padding-left: 22px; }
+  .muted { color: var(--muted); }
+  .spin {
+    width: 28px; height: 28px; margin: 30px auto; border-radius: 50%;
+    border: 3px solid var(--border); border-top-color: var(--accent);
+    animation: sp 1s linear infinite;
+  }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .error-box {
+    background: #7f1d1d33; border: 1px solid var(--red);
+    border-radius: 12px; padding: 16px 18px; margin: 18px 0;
+  }
+  .hidden { display: none; }
+  ul.links { padding-left: 20px; }
+  ul.links a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="crumb"><a href="./">← คู่มือผู้ใช้</a> · ดาวน์โหลด</div>
+  <h1>ดาวน์โหลด SSD Temperature Monitor</h1>
+  <p class="verline" id="verline">กำลังดึงเวอร์ชันล่าสุดจาก GitHub…</p>
+
+  <div id="loading"><div class="spin"></div></div>
+
+  <div id="error" class="error-box hidden">
+    <b>ดึงข้อมูลอัตโนมัติไม่สำเร็จ</b> (API อาจถูกจำกัดชั่วคราว)
+    <p class="desc">ลองรีเฟรชอีกครั้ง หรือเปิดหน้า releases ของ GitHub โดยตรง:</p>
+    <a class="btn alt" id="fallback_link" href="#">เปิดหน้า Releases บน GitHub</a>
+  </div>
+
+  <div id="content" class="hidden">
+    <div class="card recommended" id="card-setup">
+      <h2>ตัวติดตั้ง (Installer)<span class="pill rec">แนะนำ</span></h2>
+      <p class="desc">ติดตั้งลับเครื่องพร้อม auto-update, เปิดเองตอนบูต
+        และถอนการติดตั้งได้จาก Windows</p>
+      <a class="btn" id="dl-setup" href="#">⬇ ดาวน์โหลด Installer</a>
+      <span class="meta" id="size-setup"></span>
+    </div>
+
+    <div class="card">
+      <h2>เวอร์ชันพกพา (Portable exe)<span class="pill zip">ไม่ต้องติดตั้ง</span></h2>
+      <p class="desc">ไฟล์เดียวจบ รันได้เลย เก็บข้อมูลทั้งหมดในโฟลเดอร์ตัวเอง
+        (zip รวมโฟลเดอร์ portable_data ให้แล้ว)</p>
+      <a class="btn alt" id="dl-portable" href="#">⬇ ดาวน์โหลด Portable zip</a>
+      <span class="meta" id="size-portable"></span>
+    </div>
+
+    <div class="card">
+      <h2>เช็คความถูกต้องของไฟล์ (SHA-256)</h2>
+      <p class="desc">เทียบกับ <code>SHA256SUMS.txt</code> ที่เซ็นพร้อม release —
+        ตัวอัปเดตอัตโนมัติของแอปก็ตรวจด้วยค่าชุดนี้เช่นกัน
+        (ตรวจเองด้วย <code>certutil -hashfile ไฟล์ SHA256</code>)</p>
+      <table id="hash-table">
+        <tr><th>ไฟล์</th><th>SHA-256</th><th></th></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>มีอะไรใหม่ในเวอร์ชันนี้</h2>
+      <div class="notes" id="notes"></div>
+      <p class="meta" id="released"></p>
+      <p><a id="all-releases" href="#" style="color:var(--accent)">ดู release ทั้งหมด →</a></p>
+    </div>
+  </div>
+</div>
+
+<script>
+const REPO = "NarDecH/ssd-temp-monitor";
+const MB = (n) => (n / 1e6).toFixed(1) + " MB";
+
+function setAsset(id, sizeId, asset) {
+  const a = document.getElementById(id);
+  a.href = asset.browser_download_url;
+  document.getElementById(sizeId).textContent = " · " + MB(asset.size);
+  return asset;
+}
+
+function renderHashes(sumAsset, assets) {
+  return fetch(sumAsset.browser_download_url)
+    .then(r => r.text())
+    .then(text => {
+      const table = document.getElementById("hash-table");
+      const map = new Map(text.trim().split("\n").map(l => {
+        const [h, name] = l.trim().split(/\s+/, 2);
+        return [name, h];
+      }));
+      for (const a of assets) {
+        const h = map.get(a.name);
+        if (!h) continue;
+        const tr = document.createElement("tr");
+        const td1 = document.createElement("td");
+        td1.textContent = a.name;
+        const td2 = document.createElement("td");
+        const code = document.createElement("code");
+        code.className = "hash";
+        code.textContent = h.slice(0, 16) + "…";
+        code.title = h;
+        td2.appendChild(code);
+        const td3 = document.createElement("td");
+        const btn = document.createElement("button");
+        btn.className = "copy";
+        btn.textContent = "คัดลอก";
+        btn.onclick = () => {
+          navigator.clipboard.writeText(h).then(() => {
+            btn.textContent = "✓ แล้ว";
+            setTimeout(() => (btn.textContent = "คัดลอก"), 1500);
+          });
+        };
+        td3.appendChild(btn);
+        tr.append(td1, td2, td3);
+        table.appendChild(tr);
+      }
+    });
+}
+
+function renderNotes(body) {
+  const el = document.getElementById("notes");
+  let html = "";
+  let inList = false;
+  for (const raw of body.split("\n")) {
+    const line = raw.trim();
+    if (line.startsWith("### ")) {
+      if (inList) { html += "</ul>"; inList = false; }
+      html += "<h3>" + line.slice(4) + "</h3>";
+    } else if (line.startsWith("- ")) {
+      if (!inList) { html += "<ul>"; inList = true; }
+      html += "<li>" + line.slice(2) + "</li>";
+    } else if (inList) { html += "</ul>"; inList = false; }
+  }
+  if (inList) html += "</ul>";
+  el.innerHTML = html || "<p class='muted'>(ไม่มีบันทึก)</p>";
+}
+
+function show(rel) {
+  document.getElementById("loading").classList.add("hidden");
+  document.getElementById("content").classList.remove("hidden");
+  const ver = rel.tag_name;
+  document.getElementById("verline").innerHTML =
+    "เวอร์ชันล่าสุด: <b>" + ver + "</b>";
+  const assets = rel.assets.filter(a => a.state === "uploaded");
+  const byName = (frag) => assets.find(a => a.name.includes(frag));
+  const setup = byName("setup");
+  const portable = byName("portable.zip");
+  const sums = assets.find(a => a.name === "SHA256SUMS.txt");
+  if (setup) setAsset("dl-setup", "size-setup", setup);
+  if (portable) setAsset("dl-portable", "size-portable", portable);
+  if (sums) renderHashes(sums, assets.filter(a => a !== sums))
+    .catch(() => {});
+  renderNotes(rel.body || "");
+  document.getElementById("released").textContent =
+    "ปล่อยเมื่อ " + new Date(rel.published_at).toLocaleString("th-TH");
+  document.getElementById("all-releases").href =
+    "https://github.com/" + REPO + "/releases";
+}
+
+function showFallback() {
+  document.getElementById("loading").classList.add("hidden");
+  document.getElementById("error").classList.remove("hidden");
+  document.getElementById("verline").textContent =
+    "ไม่สามารถเชื่อมต่อ GitHub API ได้ในขณะนี้";
+  document.getElementById("fallback_link").href =
+    "https://github.com/" + REPO + "/releases/latest";
+}
+
+fetch("https://api.github.com/repos/" + REPO + "/releases/latest")
+  .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+  .then(rel => { if (!rel || !rel.tag_name) throw new Error("empty"); show(rel); })
+  .catch(showFallback);
+</script>
+</body>
+</html>

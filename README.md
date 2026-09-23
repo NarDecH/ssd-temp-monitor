@@ -100,6 +100,7 @@ prompt at each login (admin is required for SMART temperature data).
 
 ## Documentation
 
+- **[Download page](https://nardech.github.io/ssd-temp-monitor/download.html)** — live download page (fetches the latest release + SHA-256 checksums automatically)
 - [docs/README.md](docs/README.md) — Thai user guide (มีฉบับ HTML ด้วย)
 - [docs/USER_GUIDE_EN.md](docs/USER_GUIDE_EN.md) — English user guide
 - [docs/RESEARCH.md](docs/RESEARCH.md) — why USB readers are excluded
