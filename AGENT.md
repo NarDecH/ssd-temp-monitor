@@ -218,6 +218,23 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   กฎ: ทุกฟังก์ชันที่เขียน state ถาวรของแอป ต้องมีเทส monkeypatch path และ
   ตรวจด้วย `stat` ขนาดไฟล์จริงก่อน/หลังรันเทส อย่าเชื่อว่า conftest จับครบ
   (โพรบ standalone ที่รัน `python -c` นอก pytest ไม่ผ่าน conftest เสมอ)
+- **E2E ของกลไก update/rollback ต้องแยก 3 ชั้น** — (1) เปลี่ยนชื่อ exe
+  sandbox ให้ต่างจากแอปจริงเพื่อไม่ให้ `IMAGENAME eq` ใน shim ไป match แอป
+  ที่รันอยู่จริง (2) รัน shim แบบ redirect ลงไฟล์ **ห้าม**
+  `capture_output=True` — shim spawn `explorer.exe` ที่ไม่มีวันตายและรับ
+  stdio ไปด้วย → pipe write-end ไม่ปิด → `communicate()` บล็อกตลอดกาล
+  (production ไม่มีปัญหาเพราะใช้ close_fds ไม่ capture) (3) ห้ามใช้
+  `timeout.exe` เป็น sleep ในสคริปต์ที่ stdin ไม่ใช่ console (มันปฏิเสธ
+  ทำงาน) — ใช้ `ping -n N` และ E2E ต้อง measure log delta = 0 ทุกรอบ
+- **Smart counters อ่านได้ null ครั้งแรกหลังเปิด session ไม่ใช่บั๊ก** —
+  Storage cache ยังไม่เติม (`Update-HostStorageCache` ช่วยได้) การ poll
+  ทุกวินาทีของแอปครอบคลุมอยู่แล้ว อย่ารีบ "แก้" query เมื่อโพรบครั้งแรก
+  ว่างเปล่า — รันซ้ำก่อนสรุป
+- **คำสั่งยกระดับสิทธิ์ผ่าน wrapper อีกชั้นจะกิน `$`, `\` และแตกบรรทัดยาว** —
+  เมื่อต้องรัน PowerShell ที่ซับซ้อนแบบ admin ให้ส่ง `-EncodedCommand`
+  (base64 utf-16-le, ไม่มีช่องว่าง) และระวัง `Set-Content -Append` ไม่มีใน
+  PS 5.1 — สะสมผลใน array แล้วเขียนครั้งเดียว และแอปอาจต้องแยก admin
+  probe เป็น script แยกที่ความยาวพอเหมาะ
 
 ## สไตล์โค้ด
 

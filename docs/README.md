@@ -83,7 +83,7 @@
 
 ## ปรับแต่งตัวเลขบน tray
 
-หน้า Settings (แบบแท็บ General / Icon / Updates) ปรับหน้าตาตัวเลขอุณหภูมิได้
+หน้า Settings (แบบแท็บ General / Icon / Updates / Health) ปรับหน้าตาตัวเลขอุณหภูมิได้
 ละเอียด พร้อม **live preview 2 ขนาด** (ขนาดจริงบน tray + 96 px) และ
 **ธีมสำเร็จรูป** — Classic / Minimal / Mono / Neon คลิกเดียวตั้งฟอนต์+สี+contrast ครบ:
 

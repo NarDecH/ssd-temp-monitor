@@ -1914,7 +1914,7 @@ class TestRollback:
         assert m.version_is_broken("v1.15.0")
         assert not m.version_is_broken("v1.16.0")
 
-    def test_watchdog_lines_present_in_shim_when_backup_staged(
+    def test_watchdog_staged_in_shim_when_backup_present(
             self, tmp_path, monkeypatch):
         exe, exe_dir, data = self._sandbox(tmp_path, monkeypatch)
         monkeypatch.setattr(m.sys, "frozen", True, raising=False)
@@ -1925,10 +1925,24 @@ class TestRollback:
         shim = m.build_update_shim(str(tmp_path / "setup.exe"),
                                    restart_path=exe)
         content = open(shim, encoding="utf-8").read()
-        assert "rollback watchdog" in content
-        assert "timeout.exe /T 90" in content
-        assert f"copy /Y" in content and m.ROLLBACK_BACKUP_NAME in content
-        assert "explorer.exe" in content
+        # the shim STARTS the detached watchdog and exits; the grace sleep
+        # lives in the watchdog file, not in the shim
+        assert m.ROLLBACK_WATCHDOG_NAME in content
+        assert 'start "" /B' in content
+        assert "timeout.exe" not in content
+        watchdog = tmp_path / "app" / m.ROLLBACK_WATCHDOG_NAME
+        assert watchdog.is_file()
+        w = watchdog.read_text(encoding="ascii")
+        # grace sleep must be ping-based: timeout.exe aborts when stdin
+        # is not a console ("Input redirection is not supported") and
+        # would skip the delay entirely, rolling back healthy updates
+        assert "timeout.exe" not in w
+        assert "ping.exe" in w
+        assert "-n 91 " in w
+        assert m.ROLLBACK_PENDING in w
+        assert m.ROLLBACK_BACKUP_NAME in w
+        assert "explorer.exe" in w
+        assert "del /Q \"%~f0\"" in w   # self-deleting
 
     def test_watchdog_absent_without_backup(self, tmp_path, monkeypatch):
         exe, exe_dir, data = self._sandbox(tmp_path, monkeypatch)
@@ -1938,7 +1952,8 @@ class TestRollback:
         shim = m.build_update_shim(str(tmp_path / "setup.exe"),
                                    restart_path=exe)
         content = open(shim, encoding="utf-8").read()
-        assert "rollback watchdog" not in content
+        assert m.ROLLBACK_WATCHDOG_NAME not in content
+        assert not (tmp_path / "app" / m.ROLLBACK_WATCHDOG_NAME).exists()
 
     def test_restore_shim_waits_by_bare_name(self, tmp_path):
         exe = str(tmp_path / "app" / "ssd_temp_monitor.exe")
@@ -1954,3 +1969,31 @@ class TestRollback:
         property name as a command, killing the whole query (empty data)."""
         assert "|ReadErrorsTotal" not in m.PS_TEMPS
         assert "readErr=$c.ReadErrorsTotal;" in m.PS_TEMPS
+
+
+# ---------------------------------------------------------------------------
+# Settings: Health tab (v1.15.0)
+# ---------------------------------------------------------------------------
+class TestSettingsHealthTab:
+    def test_health_tab_exists_in_all_languages(self):
+        """The tab must be translatable in every supported language."""
+        for lang in m.UI_LANGUAGES:
+            assert m.STRINGS[lang]["tab.health"].strip()
+
+    def test_health_keys_parity(self):
+        """Every health.* key in English must exist in all languages."""
+        keys = {k for k in m.STRINGS["en"] if k.startswith("health.")}
+        assert keys, "health strings missing"
+        for lang in m.UI_LANGUAGES:
+            assert keys <= set(m.STRINGS[lang]), (
+                f"language {lang} missing health keys: "
+                f"{sorted(keys - set(m.STRINGS[lang]))}")
+
+    def test_health_flags_drive_status_text(self, monkeypatch):
+        """Status text chosen by the same health_flags the details use."""
+        monkeypatch.setitem(m.SETTINGS, "language", "en")
+        healthy = {"model": "X", "temp": 40, "wear": 0,
+                   "read_errors": 0, "unfixed_errors": 0}
+        assert m.health_flags(healthy) == []
+        worn = dict(healthy, wear=95)
+        assert m.health_flags(worn)  # produces the warning string

@@ -43,7 +43,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.14.1"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.15.0"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -367,6 +367,15 @@ STRINGS = {
         "win.graph": "SSD Temperature - History",
         "win.disks": "SSD Temperature - All Disks (debug)",
         "win.settings": "SSD Temperature - Settings",
+        "tab.health": "Health",
+        "health.refresh": "Refresh",
+        "health.status.ok": "All drives look healthy.",
+        "health.status.warn": "Attention needed - see details below.",
+        "health.no_data": "No disk data available.",
+        "health.temp": "Temperature",
+        "health.wear": "Wear",
+        "health.read_errors": "Read errors",
+        "health.unfixed": "uncorrected",
         "tab.general": "General",
         "tab.icon": "Icon",
         "tab.updates": "Updates",
@@ -483,6 +492,15 @@ STRINGS = {
         "win.graph": "อุณหภูมิ SSD - ประวัติย้อนหลัง",
         "win.disks": "อุณหภูมิ SSD - ดิสก์ทั้งหมด (debug)",
         "win.settings": "อุณหภูมิ SSD - ตั้งค่า",
+        "tab.health": "สุขภาพ",
+        "health.refresh": "รีเฟรช",
+        "health.status.ok": "ดิสก์ทุกตัวสภาพปกติ",
+        "health.status.warn": "ควรตรวจสอบ - ดูรายละเอียดด้านล่าง",
+        "health.no_data": "ไม่มีข้อมูลดิสก์",
+        "health.temp": "อุณหภูมิ",
+        "health.wear": "การสึก",
+        "health.read_errors": "ข้อผิดพลาดการอ่าน",
+        "health.unfixed": "แก้ไขไม่สำเร็จ",
         "tab.general": "ทั่วไป",
         "tab.icon": "ไอคอน",
         "tab.updates": "อัปเดต",
@@ -596,6 +614,15 @@ STRINGS = {
         "win.graph": "SSD 温度 - 履歴",
         "win.disks": "SSD 温度 - 全ディスク (デバッグ)",
         "win.settings": "SSD 温度 - 設定",
+        "tab.health": "健全性",
+        "health.refresh": "更新",
+        "health.status.ok": "すべてのドライブは正常です。",
+        "health.status.warn": "要確認 - 下記の詳細をご覧ください。",
+        "health.no_data": "ディスク情報がありません。",
+        "health.temp": "温度",
+        "health.wear": "劣化度",
+        "health.read_errors": "読み取りエラー",
+        "health.unfixed": "訂正不能",
         "tab.general": "全般",
         "tab.icon": "アイコン",
         "tab.updates": "更新",
@@ -708,6 +735,15 @@ STRINGS = {
         "win.graph": "SSD 温度 - 历史记录",
         "win.disks": "SSD 温度 - 全部磁盘 (调试)",
         "win.settings": "SSD 温度 - 设置",
+        "tab.health": "健康",
+        "health.refresh": "刷新",
+        "health.status.ok": "所有磁盘状态正常。",
+        "health.status.warn": "需要关注 - 请查看下方详情。",
+        "health.no_data": "没有磁盘数据。",
+        "health.temp": "温度",
+        "health.wear": "磨损",
+        "health.read_errors": "读取错误",
+        "health.unfixed": "无法纠正",
         "tab.general": "常规",
         "tab.icon": "图标",
         "tab.updates": "更新",
@@ -1311,6 +1347,7 @@ def build_update_shim(installer_path, app_exe_path=None, restart_path=None):
     The shim exits with the installer's exit code.
     """
     app = app_exe_path or _own_exe_path()
+    watchdog_path, watchdog_line = build_rollback_watchdog_lines()
     fd, path = tempfile.mkstemp(prefix="ssd_update_", suffix=".cmd")
     with os.fdopen(fd, "w") as f:
         f.write(
@@ -1326,12 +1363,16 @@ def build_update_shim(installer_path, app_exe_path=None, restart_path=None):
             'set "_PYI_ARCHIVE_FILE="\r\n'
             'set "_PYI_PARENT_PROCESS_LEVEL="\r\n'
             'set "_PYI_SPLASH_IPC="\r\n'
-            ":wait\r\n"
+            "            :wait\r\n"
             # absolute paths: never resolve `find` to GNU find from a
             # Git-bash PATH, which would silently break the pipeline
-            # (%% -> literal % for the cmd %SystemRoot% variable)
+            # (%% -> literal % for the cmd %SystemRoot% variable).
+            # tasklist's IMAGENAME filter matches the BARE file name only -
+            # a full path filter matches nothing and the wait loop would
+            # spin forever (found by the E2E rollback test)
             '%%SystemRoot%%\\System32\\tasklist.exe /FI "IMAGENAME eq %s" 2>nul '
-            '| %%SystemRoot%%\\System32\\find.exe /I "%s" >nul ' % (app, app)
+            '| %%SystemRoot%%\\System32\\find.exe /I "%s" >nul '
+            % (os.path.basename(app), os.path.basename(app))
             + "&& (%SystemRoot%\\System32\\ping.exe -n 1 127.0.0.1 >nul "
               "& goto wait)\r\n"
             "rem hand over to the installer; /CLOSEAPPLICATIONS makes it\r\n"
@@ -1348,9 +1389,10 @@ def build_update_shim(installer_path, app_exe_path=None, restart_path=None):
             # such parent window at all.
             + (f'if not errorlevel 1 start "" /B explorer.exe "{restart_path}"\r\n'
                if restart_path else "")
-            # rollback watchdog: if the updated exe never reports a healthy
-            # boot within the grace period, put the staged backup back
-            + "".join(build_rollback_watchdog_lines())
+            # rollback: launch the detached watchdog (it lingers in the
+            # background after this shim exits; a successful update does
+            # NOT wait for it - the watchdog deletes itself later)
+            + watchdog_line
             + "exit /b %ERRORLEVEL%\r\n"
         )
     return path
@@ -1401,6 +1443,7 @@ ROLLBACK_BACKUP_NAME = "ssd_temp_monitor.prev.exe"
 ROLLBACK_PENDING = "update_pending.marker"
 ROLLBACK_REPORTED = "update_rollback_reported.marker"
 ROLLBACK_BROKEN_FILE = "update_broken_versions.txt"
+ROLLBACK_WATCHDOG_NAME = "ssd_rollback_watchdog.cmd"
 ROLLBACK_GRACE_SECONDS = 90
 
 
@@ -1493,35 +1536,52 @@ def _notify_rollback_reported():
 
 
 def build_rollback_watchdog_lines():
-    """The cmd fragment the update shim appends after the installer.
+    """A detached watchdog cmd, written next to the installed exe.
 
-    If ROLLBACK_PENDING still exists after the grace period the new exe
-    never reported a healthy boot: kill it, restore the backup, relaunch
-    and leave the report marker so the old app explains to the user.
-    Returns [] when rollback is impossible (no backup staged).
+    The update shim merely STARTS it (start "" /B) and exits right after
+    the installer - so a successful update returns immediately, while the
+    watchdog lingers in the background. It sleeps ROLLBACK_GRACE_SECONDS,
+    then: if ROLLBACK_PENDING still exists the new exe never reported a
+    healthy boot -> kill it, restore the backup, relaunch and drop the
+    report marker so the old app explains to the user. Either way the
+    watchdog deletes its own file at the end. Returns (path, shim_line)
+    or (None, "") when rollback is impossible (no backup staged).
     """
     app = os.path.abspath(sys.executable) if getattr(sys, "frozen", False) else None
     backup = _rollback_backup_path()
     marker = _rollback_marker_path(ROLLBACK_PENDING)
     reported = _rollback_marker_path(ROLLBACK_REPORTED)
     if not app or not os.path.isfile(backup):
-        return []
-    sys32 = "%%SystemRoot%%\\System32"
+        return None, ""
+    app_dir = os.path.dirname(app)
+    watchdog = os.path.join(app_dir, ROLLBACK_WATCHDOG_NAME)
+    base = os.path.basename(app)
+    sys32 = "%SystemRoot%\\System32"
     crlf = "\r\n"
-    return [
-        "rem ---- rollback watchdog (added by the app) ----" + crlf,
-        f'if exist "{marker}" ({crlf}'
-        f"  {sys32}\\timeout.exe /T {ROLLBACK_GRACE_SECONDS} /NOBREAK >nul{crlf}"
-        f'  if exist "{marker}" ({crlf}'
-        f"    {sys32}\\taskkill.exe /F /IM {os.path.basename(app)} >nul 2>&1{crlf}"
-        f"    {sys32}\\ping.exe -n 2 127.0.0.1 >nul{crlf}"
-        f'    copy /Y "{backup}" "{app}" >nul{crlf}'
-        f'    del /Q "{backup}" >nul 2>&1{crlf}'
-        f'    type NUL > "{reported}"{crlf}'
-        f'    start "" /B explorer.exe "{app}"{crlf}'
-        f"  ){crlf}"
-        f"){crlf}",
-    ]
+    script = (
+        "@echo off" + crlf
+        + "rem SSD Temperature Monitor rollback watchdog (self-deleting)" + crlf
+        # ping-based sleep: timeout.exe aborts with "Input redirection is
+        # not supported" when stdin is not a console (piped/redirected
+        # launches), which would skip the grace delay entirely and roll
+        # back a healthy update - ping works with any stdin
+        + f'"{sys32}\\ping.exe" -n {ROLLBACK_GRACE_SECONDS + 1} 127.0.0.1 >nul' + crlf
+        + f'if not exist "{marker}" goto done' + crlf
+        + f'"{sys32}\\taskkill.exe" /F /IM {base} >nul 2>&1' + crlf
+        + f'"{sys32}\\ping.exe" -n 2 127.0.0.1 >nul' + crlf
+        + f'copy /Y "{backup}" "{app}" >nul' + crlf
+        + f'del /Q "{backup}" >nul 2>&1' + crlf
+        + f'type NUL > "{reported}"' + crlf
+        + 'start "" /B explorer.exe "' + app + '"' + crlf
+        + ":done" + crlf
+        + '(goto) 2>nul & del /Q "%~f0"' + crlf
+    )
+    try:
+        with open(watchdog, "w", encoding="ascii") as f:
+            f.write(script)
+    except OSError:
+        return None, ""
+    return watchdog, f'start "" /B "{watchdog}"{crlf}'
 
 
 def build_restore_shim(backup_path, app_exe):
@@ -2499,7 +2559,7 @@ class App:
             save_geometry({"disks": geo})
 
     def _settings_window(self):
-        """Settings dialog with tabs (General / Icon / Updates).
+        """Settings dialog with tabs (General / Icon / Updates / Health).
 
         The Icon tab has a live preview (two sizes) that re-renders as
         values change; everything applies immediately on save (icons
@@ -2525,9 +2585,11 @@ class App:
         tab_general = tk.Frame(notebook, padx=14, pady=8)
         tab_icon = tk.Frame(notebook, padx=14, pady=8)
         tab_updates = tk.Frame(notebook, padx=14, pady=8)
+        tab_health = tk.Frame(notebook, padx=14, pady=8)
         notebook.add(tab_general, text=tr("tab.general"))
         notebook.add(tab_icon, text=tr("tab.icon"))
         notebook.add(tab_updates, text=tr("tab.updates"))
+        notebook.add(tab_health, text=tr("tab.health"))
 
         def add_spin(tab, label, key, lo, hi, row):
             tk.Label(tab, text=label, font=("Segoe UI", 10),
@@ -2726,9 +2788,92 @@ class App:
         add_spin(tab_updates, tr("settings.check_interval"),
                  "update_check_interval_minutes", 5, 1440, 1)
 
+        # ---- Health tab: per-disk SMART summary (live probe on refresh) --
+        status_lbl = tk.Label(tab_health, font=("Segoe UI", 10, "bold"),
+                              anchor="w", text="...")
+        status_lbl.grid(row=0, column=0, sticky="w")
+        refresh_btn = tk.Button(tab_health, text=tr("health.refresh"),
+                                font=("Segoe UI", 10), width=10)
+        refresh_btn.grid(row=0, column=1, sticky="e", padx=(14, 0))
+        health_box = tk.Text(tab_health, width=46, height=12, wrap="word",
+                             font=("Segoe UI", 10), state="disabled",
+                             relief="solid", bd=1, bg="#f8fafc")
+        health_box.grid(row=1, column=0, columnspan=2, sticky="we",
+                        pady=(6, 0))
+        for _tag, _color in (("ok", GREEN), ("warn", ORANGE),
+                             ("bad", RED), ("muted", UNKNOWN),
+                             ("head", "#0f172a")):
+            health_box.tag_configure(_tag, foreground=_color)
+
+        def _fill_health(temps):
+            """Render the probe results into the read-only text box."""
+            health_box.config(state="normal")
+            health_box.delete("1.0", "end")
+            any_flags = False
+            for t in temps:
+                health_box.insert("end", str(t["model"]) + "\n", ("head",))
+                temp = t["temp"]
+                if temp is not None:
+                    ttag = "ok" if temp < 51 else "warn" if temp < 65 else "bad"
+                    health_box.insert(
+                        "end", f"  {tr('health.temp')}: {temp} °C\n", (ttag,))
+                else:
+                    health_box.insert(
+                        "end", f"  {tr('health.temp')}: n/a\n", ("muted",))
+                wear = t.get("wear")
+                wtxt = f"{wear}%" if wear is not None else "n/a"
+                health_box.insert("end", f"  {tr('health.wear')}: {wtxt}\n")
+                rerr, uerr = t.get("read_errors"), t.get("unfixed_errors")
+                health_box.insert(
+                    "end",
+                    f"  {tr('health.read_errors')}: "
+                    f"{rerr if rerr is not None else 'n/a'}"
+                    f"  ({tr('health.unfixed')}: "
+                    f"{uerr if uerr is not None else 'n/a'})\n",
+                    ("muted",))
+                for flag in health_flags(t):
+                    any_flags = True
+                    health_box.insert("end", f"  ⚠ {flag}\n", ("warn",))
+                health_box.insert("end", "\n")
+            health_box.config(state="disabled")
+            if not temps:
+                status_lbl.config(text=tr("health.no_data"), fg=RED)
+            elif any_flags:
+                status_lbl.config(text=tr("health.status.warn"), fg=ORANGE)
+            else:
+                status_lbl.config(text=tr("health.status.ok"), fg=GREEN)
+
+        def _refresh_health():
+            """Probe SMART in a worker thread, then fill the box on the tk
+            thread (subprocess can take a couple of seconds)."""
+            refresh_btn.config(state="disabled")
+            status_lbl.config(text="...", fg=UNKNOWN)
+
+            def work():
+                try:
+                    found = read_temps()
+                except Exception:
+                    found = []
+
+                def done():
+                    try:
+                        _fill_health(found)
+                    except tk.TclError:
+                        return  # window closed while probing
+                    refresh_btn.config(state="normal")
+
+                root.after(0, done)
+
+            threading.Thread(target=work, daemon=True).start()
+
+        refresh_btn.config(command=_refresh_health)
+        root.after(300, _refresh_health)
+
         note = tk.Label(outer, text=tr("settings.note"),
                         font=("Segoe UI", 8), fg="#64748b")
         note.pack(anchor="w", pady=(6, 0))
+
+        apply_geometry(root, "settings")
 
         def collect_validated():
             """Dialog values -> validated settings dict (None on error)."""
@@ -2794,6 +2939,10 @@ class App:
                   font=("Segoe UI", 10)).pack(side="left", padx=4)
         root.bind("<Escape>", lambda e: root.destroy())
         root.mainloop()
+
+        geo = geometry_of(root)
+        if geo:
+            save_geometry({"settings": geo})
 
     # ---- auto-update ----
     def _check_updates(self, manual=False):
