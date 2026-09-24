@@ -24,6 +24,7 @@ Extras:
 import base64
 import csv
 import ctypes
+import faulthandler
 import hashlib
 import json
 import logging
@@ -45,7 +46,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.24.1"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.24.2"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -5300,6 +5301,17 @@ def _watch_icon_loop(app):
 
 
 def main():
+    # Crash forensics: when the process dies hard (Tcl panic 0x80000003 and
+    # friends leave no Python traceback), faulthandler dumps EVERY thread's
+    # stack to %APPDATA%\SSDTempMonitor\crash.log - the only way to learn
+    # WHICH thread touched Tcl off-thread (v1.24.1 crash at 14:06).
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        _crash_log = open(os.path.join(DATA_DIR, "crash.log"), "a",
+                          encoding="utf-8")
+        faulthandler.enable(file=_crash_log, all_threads=True)
+    except Exception:
+        pass  # diagnostics must never break the app
     if not acquire_single_instance():
         # Duplicate start: exit code 2. A message box is shown for human
         # users; the --duplicate-silent flag (or SSD_TEMP_SILENT_DUPLICATE=1)

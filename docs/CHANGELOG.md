@@ -3,6 +3,28 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.24.2] — 2026-09-24
+
+### Fixed
+
+- 🧩 **SSD Temp Lite ตายเอง/ไม่แสดงอุณหภูมิ** — จากการทดสอบ exe จริงบนเครื่อง:
+  เมนูแบบ dynamic-text ของ pystray เป็นจุดแตกทำให้ `icon.run()` จบและโปรเซสหาย
+  (ตรวจพบ: สตาร์ทแล้วหายใน ~25 วิ), ฟอนต์ 96 pt บนไอคอน 64 px ทำตัวเลขล้น
+  ไม่อ่าน — เขียนใหม่: เมนู static text, ฟอนต์ปรับตามจำนวนหลัก (40/28),
+  เขียน crash log ที่ `%TEMP%\ssd_temp_lite.log` เสมอ
+- 🩺 **อุณหภูมิ = "--" บน Lite ที่ไม่ได้รัน admin** — ลักษณะของ Windows:
+  ยังเห็นดิสก์แต่ reliability counter เป็น null — ตอนนี้ Details
+  บอกชัดว่าต้อง Run as administrator
+
+### Added
+
+- 🩺 **faulthandler ในแอปหลัก** — เขียน stack ของทุก thread ลง
+  `%APPDATA%\SSDTempMonitor\crash.log` เมื่อโปรเซสตายแบบ native (Tcl panic
+  ไม่มี Python traceback ให้อ่าน) เพื่อระบุ thread ต้นเหตุได้ในครั้งถัดไป
+- 🛟 **Watchdog ภายนอก** — `tools/watchdog.ps1` + สคริปต์ติดตั้ง scheduled
+  task รอบ 1 นาที (SYSTEM): ถ้าไม่พบโปรเซสแอปและไม่อยู่ระหว่าง update
+  จะเปิดแอปกลับมาเอง (ไม่แตะถ้าแอปยังรัน)
+
 ## [1.24.1] — 2026-09-24
 
 ### Changed

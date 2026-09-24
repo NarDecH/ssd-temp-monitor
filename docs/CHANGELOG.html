@@ -75,7 +75,20 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
-  <h2><span class="ver-badge">v1.24.1</span> <span class="date">24 กันยายน 2026</span></h2>
+  <h2><span class="ver-badge">v1.24.2</span> <span class="date">24 กันยายน 2026</span></h2>
+
+  <h3><span class="pill fix-pill">Fixed</span></h3>
+  <ul>
+    <li>🧩 <strong>Lite ตายเอง/ตัวเลขล้นไอคอน</strong> — เมนู dynamic-text ของ pystray เป็นจุดแตก (พิสูจน์จาก exe จริง: หายใน ~25 วิ) — เมนู static + ฟอนต์ 40/28 pt + crash log ที่ <code>%TEMP%\ssd_temp_lite.log</code></li>
+  </ul>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>🩺 <strong>faulthandler ในแอปหลัก</strong> — dump stack ทุก thread ลง <code>crash.log</code> เมื่อตายแบบ native เพื่อระบุ thread ต้นเหตุ Tcl panic</li>
+    <li>🛟 <strong>Watchdog ภายนอก</strong> — <code>tools/install_watchdog.ps1</code> ติดตั้ง scheduled task รอบ 1 นาที: แอปตาย = เปิดกลับมาเอง</li>
+  </ul>
+
+  <h2><span class="ver-badge old">v1.24.1</span> <span class="date">24 กันยายน 2026</span></h2>
 
   <h3><span class="pill fix-pill">Fixed</span></h3>
   <ul>

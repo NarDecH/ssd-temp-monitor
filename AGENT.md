@@ -308,6 +308,13 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   marker line หลังลบ — กฎ: ก่อนลบไฟล์ที่ตัวเองเปิดค้าง ต้อง close/detach
   handler ก่อน (`_reopen_log_handler`) และเทสต้อง assert "ตัวนับ = 0"
   ไม่ใช่ "ไฟล์หาย" เพราะไฟล์อาจถูกสร้างใหม่ทันที
+- **pystray menu ต้อง static text เท่านั้น + แอป tray ต้องมี crash log** —
+  v1.24.1: Lite ใช้ lambda dynamic text + action=None ใน MenuItem แล้ว
+  โปรเซสหายใน ~25 วิ (เมนู render ทุกครั้งที่เปิด และ exception ที่หลุด
+  จาก icon.run() ฆ่าแอปทันที) และตรวจยากเพราะ --windowed ตัด console —
+  กฎ: MenuItem ใช้ string ธรรมดา, เขียน crash log ลง %TEMP% ตั้งแต่
+  main() เริ่ม, และตรวจ sanity ด้วย "สตาร์ท → รอ → เช็ค process ยังอยู่"
+  เสมอ (ALIVE probe จับได้ก่อนผู้ใช้รายงาน)
 
 ## สไตล์โค้ด
 

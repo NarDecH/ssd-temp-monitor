@@ -23,12 +23,13 @@ Freeze to a single portable exe (see .github/workflows/release.yml):
         --name ssd_temp_lite --icon app_icon.ico lite/ssd_temp_lite.py
 """
 import ctypes
-import ctypes.wintypes as wt
 import json
+import os
 import subprocess
 import sys
 import threading
 import time
+import traceback
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -42,7 +43,24 @@ APP_TITLE = "SSD Temp Lite"
 # ---- tuning ----------------------------------------------------------------
 POLL_SECONDS = 5          # one SMART query every 5 s (lite = calm on purpose)
 ICON_SIZE = 64            # icon bitmap size; the tray scales it down
-DIGIT_MAX_POINTS = 96     # font height cap so "3" stays readable, "100" fits
+# Font height on the icon bitmap: tall enough to read "37", small enough
+# that 3-digit temperatures still fit inside the 64 px square.
+FONT_2DIGIT = 40
+FONT_3DIGIT = 28
+
+# Where a frozen (--windowed) app can still leave a crash trace.
+LOG_PATH = os.path.join(
+    os.environ.get("TEMP", os.path.expanduser("~")),
+    "ssd_temp_lite.log")
+
+
+def _log(msg):
+    """Append a line to the crash log (best effort - never raises)."""
+    try:
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + str(msg) + "\n")
+    except Exception:
+        pass
 
 # Same color bands as the main app (temp_color() in ssd_temp_tray.py).
 GREEN = (34, 197, 94)
@@ -119,18 +137,20 @@ def read_temps():
 # ---- icon rendering (same visual language as the main app) -----------------
 
 def make_digit_icon(temp):
-    """32..64px tray icon: colored pill + bold centered temperature digits."""
+    """64px tray icon: colored pill + bold centered temperature digits.
+
+    Font height scales with the digit count so 3-digit temperatures
+    still fit inside the square (the old 96 pt on 64 px overflowed).
+    """
     size = ICON_SIZE
     img = Image.new("RGB", (size, size), temp_color(temp))
     draw = ImageDraw.Draw(img)
     text = "--" if temp is None else str(temp)
-    # Try the bundled Segoe UI bold; fall back to PIL's default bitmap font
-    # (deinit Pillow fonts are not always available in frozen builds).
     font = None
     for candidate in ("segoeuib.ttf", "arialbd.ttf"):
         try:
-            font = ImageFont.truetype(candidate, DIGIT_MAX_POINTS
-                                      if len(text) < 3 else DIGIT_MAX_POINTS * 2 // 3)
+            font = ImageFont.truetype(
+                candidate, FONT_2DIGIT if len(text) < 3 else FONT_3DIGIT)
             break
         except OSError:
             continue
@@ -144,16 +164,18 @@ def make_digit_icon(temp):
 
 
 # ---- tray plumbing (pystray when available) --------------------------------
-
 def run_tray():
     """Build the pystray icon + menu and run its message loop.
 
     pystray runs the Win32 message loop on THIS thread; the poll thread
     only ever swaps `icon.icon` / `icon.title`, which pystray forwards to
     the loop thread internally (documented as thread-safe).
+
+    Menu items use STATIC text: pystray's dynamic-text callables fire on
+    every menu open and an exception there used to kill icon.run() and
+    therefore the whole process (the "lite disappeared" bug).
     """
     import pystray
-    from PIL import Image as _Img  # noqa: F401  (pystray wants PIL loaded)
 
     state = {"temps": [], "hot": None}
 
@@ -163,16 +185,15 @@ def run_tray():
         title=APP_TITLE,
         menu=pystray.Menu(
             pystray.MenuItem(
-                lambda item: _details_text(state),
-                lambda item, *_: _show_details(state),
+                "Details",
+                lambda icon, item: _show_details(state),
                 default=True),
+            pystray.Menu.SEPARATOR,
             pystray.MenuItem(
-                lambda item: _status_text(state),
-                None, enabled=False),
+                "Refresh",
+                lambda icon, item: poll_once(icon, state)),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Refresh", lambda item, *_: poll_once(icon, state)),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Exit", lambda item, *_: icon.stop()),
+            pystray.MenuItem("Exit", lambda icon, item: icon.stop()),
         ),
     )
 
@@ -182,14 +203,17 @@ def run_tray():
             time.sleep(POLL_SECONDS)
 
     threading.Thread(target=poller, daemon=True).start()
+    _log("tray starting")
     icon.run()
+    _log("tray loop ended")
 
 
 def poll_once(icon, state):
     """One SMART read + repaint. Never raises: the tray must survive."""
     try:
         temps = read_temps()
-    except Exception:
+    except Exception as exc:
+        _log("read_temps failed: " + repr(exc))
         temps = []
     valid = [t["temp"] for t in temps if t["temp"] is not None]
     hot = max(valid) if valid else None
@@ -198,8 +222,9 @@ def poll_once(icon, state):
     try:
         icon.icon = make_digit_icon(hot)
         icon.title = _tooltip_text(temps)
-    except Exception:
-        pass
+        _log("poll ok: hot=" + repr(hot) + " disks=" + str(len(temps)))
+    except Exception as exc:
+        _log("repaint failed: " + repr(exc))
 
 
 def _tooltip_text(temps):
@@ -209,22 +234,6 @@ def _tooltip_text(temps):
     return " | ".join(f"{t['model']}: {t['temp']}C"
                       if t["temp"] is not None else f"{t['model']}: n/a"
                       for t in temps)
-
-
-def _details_text(state):
-    """Dynamic label of the default menu item."""
-    hot = state["hot"]
-    if hot is None:
-        return "Details (no data)"
-    return f"Details - {hot} C now"
-
-
-def _status_text(state):
-    """Read-only status line under Details."""
-    temps = state["temps"]
-    if not temps:
-        return "run as administrator to read SMART"
-    return f"{len(temps)} SSD monitor"
 
 
 def _show_details(state):
@@ -242,17 +251,24 @@ def _show_details(state):
 
 
 def main():
+    _log("lite starting (pystray=" + str(pystray is not None) + ")")
     # single instance guard: same mutex pattern as the main app
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.CreateMutexW(None, False, "Local\\SSDTempMonitorLite")
     if ctypes.get_last_error() == 183:      # ERROR_ALREADY_EXISTS
+        _log("another instance already running")
         sys.exit(2)
 
     if pystray is None:
+        _log("FATAL: pystray not available")
         print("pystray is required: pip install pystray pillow", file=sys.stderr)
         sys.exit(1)
 
-    run_tray()
+    try:
+        run_tray()
+    except Exception:
+        _log("FATAL in run_tray:\n" + traceback.format_exc())
+        raise
 
 
 if __name__ == "__main__":
