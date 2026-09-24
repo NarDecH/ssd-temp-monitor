@@ -3,6 +3,16 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.23.1] — 2026-09-24
+
+### Fixed
+
+- 🚑 **v1.23.0 แนะนำบั๊กใหม่: tray message loop รันสองเธรดพร้อมกัน** —
+  watchdog ถูกเพิ่มมาโดยยังเรียก `App.run()` (ซึ่งรัน `icon.run()` อยู่แล้ว)
+  ทำให้มี message pump สองตัวบน tray เดียว แอปจะเสถียรไม่ได้เลย — ตอนนี้
+  watchdog เป็นเจ้าของ `icon.run()` ตัวเดียว (พร้อมสตาร์ท poll thread เอง)
+  และมีเทสกัน regression นี้ตลอดไป
+
 ## [1.23.0] — 2026-09-24
 
 ### Fixed

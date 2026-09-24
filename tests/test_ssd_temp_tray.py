@@ -2946,6 +2946,7 @@ class TestAboutCrashFix:
         (and exit cleanly on a real quit)."""
         a = app
         a._shutdown_requested = False
+        a.poll_loop = lambda: None
         runs = {"n": 0}
 
         class FakeIcon:
@@ -2958,12 +2959,16 @@ class TestAboutCrashFix:
 
         a.icon = FakeIcon()
         monkeypatch.setattr(m.time, "sleep", lambda s: None)
+        monkeypatch.setattr(
+            m.threading, "Thread",
+            lambda *a2, **k: types.SimpleNamespace(start=lambda: None))
         m._watch_icon_loop(a)
         assert runs["n"] == 2
 
-    def test_watchdog_no_restart_on_normal_quit(self, app):
+    def test_watchdog_no_restart_on_normal_quit(self, app, monkeypatch):
         a = app
         a._shutdown_requested = True
+        a.poll_loop = lambda: None
         runs = {"n": 0}
 
         class FakeIcon:
@@ -2971,8 +2976,45 @@ class TestAboutCrashFix:
                 runs["n"] += 1
 
         a.icon = FakeIcon()
+        monkeypatch.setattr(
+            m.threading, "Thread",
+            lambda *a2, **k: types.SimpleNamespace(start=lambda: None))
         m._watch_icon_loop(a)      # returns after the single run()
         assert runs["n"] == 1
+
+    def test_watchdog_starts_poll_thread_exactly_once(self, app,
+                                                      monkeypatch):
+        a = app
+        a._shutdown_requested = True
+        a.poll_loop = lambda: None
+
+        class FakeIcon:
+            def run(self):
+                pass
+
+        a.icon = FakeIcon()
+        started = []
+
+        def fake_thread(target=None, **kw):
+            started.append(target)
+            return types.SimpleNamespace(start=lambda: None)
+
+        monkeypatch.setattr(m.threading, "Thread", fake_thread)
+        m._watch_icon_loop(a)
+        assert len(started) == 1 and started[0] == a.poll_loop
+
+    def test_main_owns_one_message_pump_only(self):
+        """v1.23.0 regression: icon.run() ran in BOTH the watchdog thread
+        and App.run -> two Win32 message pumps, the tray died on the next
+        menu click."""
+        import inspect
+        src = inspect.getsource(m.main)
+        assert "_watch_icon_loop(App())" in src
+        assert "app.run()" not in src and "App().run()" not in src
+
+    def test_run_docstring_warns_not_to_call_it(self):
+        import inspect
+        assert "icon.run" in inspect.getsource(m.App.run)
 
     def test_main_spawns_watchdog_thread(self):
         import inspect

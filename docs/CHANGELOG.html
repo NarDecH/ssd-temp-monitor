@@ -75,7 +75,14 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
-  <h2><span class="ver-badge">v1.23.0</span> <span class="date">24 กันยายน 2026</span></h2>
+  <h2><span class="ver-badge">v1.23.1</span> <span class="date">24 กันยายน 2026</span></h2>
+
+  <h3><span class="pill fix-pill">Fixed</span></h3>
+  <ul>
+    <li>🚑 <strong>แก้บั๊กที่ v1.23.0 แนะนำเอง: tray message loop รันสองเธรด</strong> — watchdog + <code>App.run()</code> ต่างรัน <code>icon.run()</code> พร้อมกัน (message pump สองตัว) ทำให้ tray เสถียรไม่ได้ — watchdog เป็นเจ้าของ <code>icon.run()</code> ตัวเดียว พร้อมเทสกัน regression</li>
+  </ul>
+
+  <h2><span class="ver-badge old">v1.23.0</span> <span class="date">24 กันยายน 2026</span></h2>
 
   <h3><span class="pill fix-pill">Fixed</span></h3>
   <ul>

@@ -293,9 +293,14 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   ไม่ได้ — ยิ่งเปิดสองหน้าต่างพร้อมกัน (About + Settings) ยิ่งชนง่าย เพราะ
   Tcl interpreter มีต่อเธรด กฎ: marshal = เข้า `queue.Queue` ล้วน ๆ + drain
   loop บนเธรด tk เอง (จะวนซ้ำก็ใช้ `win.after` บนเธรดตัวเอง) และเช็ค
-  "หน้าต่างยังอยู่ไหม" จากเธรดอื่นด้วย flag (`root_winfo_exists`) ไม่ใช่
+  "หน้าต่างยังอยู่ไหม" จากเธรดอื่นด้วย flag (`root_winfo_exists`)  ไม่ใช่
   `winfo_exists` (v1.23.0) เสริมได้อีกชั้น: watchdog รอบ `icon.run()`
   (`_watch_icon_loop`) ให้ tray ฟื้นจาก native crash ที่ปิด message loop
+- **`icon.run()` ต้องมีเจ้าของเดียวเท่านั้น** — v1.23.1: เพิ่ม watchdog
+  แล้วลืมว่า `App.run()` ก็รัน `icon.run()` อยู่แล้ว → message pump สองตัว
+  บน tray เดียว ทำให้ tray เสถียรไม่ได้เลย (mainloop ของ Win32 รันสองเธรด
+  ไม่ได้) กฎ: ก่อนเพิ่มเลเยอร์ครอบ lifecycle ให้นับว่า message loop ถูก
+  start กี่ครั้ง และเขียนเทสอ่านซอร์ส `main()` กันการเรียกซ้ำ
 
 ## สไตล์โค้ด
 

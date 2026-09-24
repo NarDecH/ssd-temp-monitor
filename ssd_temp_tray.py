@@ -45,7 +45,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.23.0"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.23.1"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -4965,14 +4965,20 @@ def run_unattended_update():
 
 
 def _watch_icon_loop(app):
-    """Keep the tray message loop alive even if a native crash ends it.
+    """Run the tray message loop and restart it after a native fault.
 
     pystray's Win32 message loop runs inside ``icon.run()``; when that
-    call returns unexpectedly (native Tcl crash, explorer restart edge
-    cases) the old behavior was a silently dead process. The watchdog
-    logs the exit, hides any leftover tk windows via its shutdown flag
-    and re-runs the loop, so the tray survives transient native faults.
+    call returns unexpectedly (native Tcl crash in some other thread,
+    explorer restart edge cases) the old behavior was a silently dead
+    process. The watchdog logs the exit, asks the tk windows to close
+    via the shutdown flag and re-runs the loop, so the tray survives
+    transient native faults.
+
+    IMPORTANT: this replaces ``App.run`` as the icon.run() host - the
+    loop must run in exactly one thread or the Win32 message pump breaks
+    (v1.23.0 shipped both at once and died on the next menu click).
     """
+    threading.Thread(target=app.poll_loop, daemon=True).start()
     while True:
         try:
             app.icon.run()
@@ -5010,10 +5016,9 @@ def main():
     cleanup_stale_mei()
     heal_autostart_value()
     begin_healthy_session()
-    app = App()
-    threading.Thread(target=_watch_icon_loop, args=(app,),
-                     daemon=True).start()
-    app.run()
+    # the watchdog owns icon.run(): App.run (poll thread + icon.run) must
+    # not ALSO run the message loop - two pumps kill the tray (v1.23.0)
+    _watch_icon_loop(App())
 
 
 if __name__ == "__main__":
