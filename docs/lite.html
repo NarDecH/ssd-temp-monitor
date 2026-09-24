@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" type="image/svg+xml" href="img/favicon.svg">
 <meta property="og:type" content="website">
-<meta property="og:title" content="SSD Temp Lite — portable single-file tray (Typhon/Lazarus)">
-<meta property="og:description" content="โปรแกรมแยกแบบพอร์ตเทเบิล: โชว์อุณหภูมิ SSD เรียลไทม์บน system tray ไฟล์ Pascal ไฟล์เดียว ไม่ต้องติดตั้ง Python">
+<meta property="og:title" content="SSD Temp Lite — portable single-file tray (Python)">
+<meta property="og:description" content="โปรแกรมแยกแบบพอร์ตเทเบิล: โชว์อุณหภูมิ SSD เรียลไทม์บน system tray — Python ไฟล์เดียว freeze เป็น exe ไฟล์เดียว">
 <meta property="og:image" content="img/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <title>SSD Temp Lite — SSD Temperature Monitor</title>
@@ -61,10 +61,10 @@
 <div class="wrap">
   <div class="crumb"><a href="README.html">← คู่มือผู้ใช้</a> · SSD Temp Lite (portable)</div>
 
-  <h1>SSD Temp Lite <span class="pill">Pascal · Typhon/Lazarus · ไฟล์เดียว</span></h1>
-  <p class="sub">โปรแกรมแยกตัวเล็ก (<code>lite/ssd_temp_lite.lpr</code>) ทำอย่างเดียว:
-     <b>โชว์อุณหภูมิ SSD เรียลไทม์บน system tray</b> — ไม่มีกราฟ ไม่มีฐานข้อมูล
-     ไม่ต้องติดตั้ง Python คอมไพล์แล้วได้ exe เล็ก ๆ ไฟล์เดียว ยกไปรันที่ไหนก็ได้</p>
+  <h1>SSD Temp Lite <span class="pill">Python ไฟล์เดียว · Portable</span></h1>
+  <p class="sub">โปรแกรมแยกตัวเล็ก (<code>lite/ssd_temp_lite.py</code>) ทำอย่างเดียว:
+     <b>โชว์อุณหภูมิ SSD เรียลไทม์บน system tray</b> — ไม่มีกราฟ ไม่มีประวัติ
+     ไม่มีไฟล์ตั้งค่า และมีแค่ไฟล์เดียว ทั้งรันจากซอร์สหรือ freeze เป็น exe ก็สะอาดเหมือนกัน</p>
 
   <div class="card">
     <b>โชว์อะไรบ้าง</b>
@@ -75,13 +75,23 @@
     </ul>
   </div>
 
-  <h2>วิธี build (Typhon หรือ Lazarus)</h2>
+  <h2>วิธี build เป็น exe (CI ทำให้อัตโนมัติในทุก release)</h2>
   <div class="card">
-    <p><b>วิธีที่ 1 — ผ่าน IDE</b>: เปิด Typhon/Lazarus → <i>Project → Open Project</i> → เลือก <code>lite/ssd_temp_lite.lpr</code> → กด <b>F9 (Run)</b></p>
-    <p><b>วิธีที่ 2 — คำสั่งเดียว</b> (ต้องมี lazbuild ใน PATH):</p>
-    <pre>lazbuild ssd_temp_lite.lpr        # คอมไพล์ -> ได้ ssd_temp_lite.exe ข้าง ๆ ไฟล์</pre>
-    <p class="sub">หมายเหตุ: ไฟล์นี้ใช้แค่ units มาตรฐานของ FPC (Windows/ShellAPI/Process)
-    — <b>ไม่ต้องมี LCL package อื่น</b> และไม่มี dependency ภายนอก</p>
+    <p>คอมพิวเตอร์ที่มี Python + PyInstaller สั่งเองได้:</p>
+    <pre>pip install pystray pillow pyinstaller
+cd lite
+python -m PyInstaller --noconfirm --clean --onefile --windowed --uac-admin \
+    --name ssd_temp_lite --icon ../app_icon.ico ssd_temp_lite.py
+# ได้ dist/ssd_temp_lite.exe — ไฟล์เดียว จบ</pre>
+    <p class="sub">ธงสำคัญ: <code>--onefile</code> รวมทุกอย่างเป็น exe เดียว ·
+    <code>--windowed</code> ไม่โชว์หน้าต่าง console · <code>--uac-admin</code>
+    ขึ้น UAC ขอสิทธิ์ admin เอง (SMART ต้องใช้)</p>
+  </div>
+
+  <h2>รันจากซอร์ส</h2>
+  <div class="card">
+    <pre>pip install pystray pillow
+python lite/ssd_temp_lite.py      # เปิด shell แบบ admin เพื่อให้อ่าน SMART ได้</pre>
   </div>
 
   <h2>การใช้งาน</h2>
@@ -96,26 +106,23 @@
   <h2>อธิบายคำสั่งสำคัญในโค้ด</h2>
   <table>
     <tr><th>คำสั่ง / API</th><th>ทำอะไร</th></tr>
-    <tr><td><code>Get-PhysicalDisk</code></td><td>Windows enum ดิสก์ physical ทั้งหมด — กรอง <code>MediaType -eq 'SSD'</code> และ <code>BusType -ne 'USB'</code> (USB bridge รายงานอุณหภูมิมั่ว)</td></tr>
-    <tr><td><code>Get-StorageReliabilityCounter</code></td><td>ดึง SMART: Temperature / Wear — ต้อง admin จึงจะคืนค่าได้</td></tr>
-    <tr><td><code>TProcess</code></td><td>spawn <code>powershell.exe -NoProfile -NonInteractive -Command …</code> แบบ hidden (<code>poNoConsole</code>) แล้วอ่าน stdout ผ่าน <code>poUsePipes</code></td></tr>
-    <tr><td><code>Shell_NotifyIcon(NIM_ADD/MODIFY/DELETE)</code></td><td>สร้าง/อัปเดต/ลบ ไอคอนใน system tray — ส่ง struct <code>TNotifyIconDataA</code> ที่ระบุหน้าต่างรับ callback</td></tr>
-    <tr><td><code>HWND_MESSAGE</code> window</td><td>"message-only window" — หน้าต่างมองไม่เห็นทำหน้าที่รับ event ของ tray + timer ทำให้ทั้งแอปเป็น single-thread event-driven ไม่มี lock เลย</td></tr>
-    <tr><td><code>SetTimer(hwnd, 1, 5000, nil)</code></td><td>ตั้งนาฬิกาให้ Windows ยิง <code>WM_TIMER</code> ทุก 5 วิ → ทริกเกอร์การอ่านอุณหภูมิรอบใหม่ (ไม่ใช่ thread นอนหลับ)</td></tr>
-    <tr><td><code>CreateFontW + DrawTextW</code></td><td>วาดตัวเลขอุณหภูมิตัวหนากลางไอคอน 32×32 (ตัวเลข 3 หลักย่อฟอนต์อัตโนมัติ) — GDI ล้วน ไม่ง้อระบบ UI ใด</td></tr>
-    <tr><td><code>CreateIconIndirect</code></td><td>เอา bitmap สี + mask ที่วาดไว้ แปลงเป็น HICON จริงเพื่อป้อนเข้า tray</td></tr>
-    <tr><td><code>TrackPopupMenuEx(TPM_RETURNCMD)</code></td><td>เปิดเมนูคลิกขวาแล้ว "รอ" คำตอบเป็นตัวเลข id ของเมนูที่ผู้ใช้เลือก (1=Details, 2=Refresh, 3=Exit)</td></tr>
-    <tr><td><code>CreateMutexW + GetLastError</code></td><td>กันเปิดซ้ำ: ถ้ามี instance อื่นถือ mutex ชื่อเดียวกันอยู่ → <code>ERROR_ALREADY_EXISTS</code> → ออกทันที</td></tr>
-    <tr><td><code>GetMessage / DispatchMessage</code></td><td>message pump คลาสสิกของ Win32: กระจาย WM_TIMER/WMBUTTON ที่เราจับใน <code>LiteWndProc</code> จนกว่า Exit จะโพสต์ <code>WM_QUIT</code></td></tr>
+    <tr><td><code>Get-PhysicalDisk</code></td><td>Windows enum ดิสก์ physical ทั้งหมด — กรอง <code>MediaType -eq 'SSD'</code> และ <code>BusType -ne 'USB'</code> (USB bridge รายงานอุณหภูมิมั่ว) — query ชุดเดียวกับแอปหลัก</td></tr>
+    <tr><td><code>Get-StorageReliabilityCounter</code></td><td>ดึง SMART: Temperature / Wear — ต้อง admin จึงจะคืนค่าได้ (ไม่งั้น temp = None → ไอคอนโชว์ "--")</td></tr>
+    <tr><td><code>subprocess.run(...CREATE_NO_WINDOW)</code></td><td>เรียก powershell แบบเงียบ ไม่มีหน้าต่างดำกระพริบ พร้อม timeout 30 วิกันค้าง</td></tr>
+    <tr><td><code>pystray.Icon / icon.run()</code></td><td>จัดการ tray icon + message loop ของ Win32 ให้ทั้งหมด — เมนูคลิกขวาสร้างจาก <code>pystray.Menu</code> (Details / status / Refresh / Exit)</td></tr>
+    <tr><td><code>threading.Thread(poller)</code></td><td>เธรดหลักของ tray (icon.run) แยกจากเธรด poll — ทุก 5 วิอ่านอุณหภูมิแล้วสลับ <code>icon.icon</code>/<code>icon.title</code> (pystray ส่งต่อให้ message loop เธรดให้เองอย่างปลอดภัย)</td></tr>
+    <tr><td><code>PIL ImageDraw / ImageFont</code></td><td>วาดเม็ดสี + ตัวเลขอุณหภูมิตัวหนากลางไอคอน — ใช้ฟอนต์ Segoe UI Bold, ตัวเลข 3 หลักย่อขนาดอัตโนมัติ, โค้ดวาดเดียวกับแอปหลัก</td></tr>
+    <tr><td><code>MessageBoxW</code></td><td>หน้าต่าง Details แบบ native (กันปัญหา tk crash ที่เคยเจอ) — โชว์หนึ่งบรรทัดต่อดิสก์</td></tr>
+    <tr><td><code>CreateMutexW + GetLastError</code></td><td>กันเปิดซ้ำ: ถ้ามี instance อื่นถือ mutex ชื่อเดียวกันอยู่ → <code>ERROR_ALREADY_EXISTS</code> (183) → ออกทันที</td></tr>
   </table>
 
   <h2>ไฟล์ในโปรเจกต์</h2>
   <pre>lite/
-  └── ssd_temp_lite.lpr   ← โค้ดทั้งหมด (Pascal) + คอมเมนต์อธิบายละเอียด</pre>
+  └── ssd_temp_lite.py   ← โค้ดทั้งหมด (Python) + คอมเมนต์อธิบายละเอียด</pre>
 
   <div class="footer">
     <a class="btn" href="download.html">⬇ แอปหลัก (ฟีเจอร์ครบ)</a>
-    <a class="btn alt" href="https://github.com/NarDech/ssd-temp-monitor/blob/main/lite/ssd_temp_lite.lpr">ดูโค้ด ssd_temp_lite.lpr บน GitHub</a>
+    <a class="btn alt" href="https://github.com/NarDecH/ssd-temp-monitor/blob/main/lite/ssd_temp_lite.py">ดูโค้ด ssd_temp_lite.py บน GitHub</a>
   </div>
 </div>
 </body>

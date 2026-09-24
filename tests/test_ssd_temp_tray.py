@@ -3136,12 +3136,39 @@ class TestResetStatsV124:
 
     def test_lite_program_exists_and_is_self_contained(self):
         from pathlib import Path
-        p = Path(__file__).resolve().parents[1] / "lite" / "ssd_temp_lite.lpr"
+        p = Path(__file__).resolve().parents[1] / "lite" / "ssd_temp_lite.py"
         assert p.exists(), "lite program missing"
         src = p.read_text(encoding="utf-8")
-        # no LCL / Forms dependency: pure FPC + Win32
-        assert "Forms" not in src and "Interfaces" not in src
-        assert "ShellAPI" in src and "TProcess" in src
+        # lean deps: pystray + Pillow only (imported lazily), no tk/logging
+        assert "import tkinter" not in src
+        assert "import pystray" in src
+        assert "from PIL import" in src
         # same SMART query as the main app
         assert "Get-StorageReliabilityCounter" in src
         assert "ssd_temp_lite" in src
+
+    def test_lite_compiles(self):
+        import py_compile
+        from pathlib import Path
+        p = Path(__file__).resolve().parents[1] / "lite" / "ssd_temp_lite.py"
+        py_compile.compile(str(p), doraise=True)
+
+    def test_lite_shares_main_app_query(self):
+        """The lite PS_TEMPS must stay in sync with the main app's."""
+        from pathlib import Path
+        src = (Path(__file__).resolve().parents[1]
+               / "lite" / "ssd_temp_lite.py").read_text(encoding="utf-8")
+        for token in ("Get-PhysicalDisk", "MediaType -eq 'SSD'",
+                      "BusType -ne 'USB'", "Temperature", "ConvertTo-Json"):
+            assert token in src, token
+
+    def test_release_workflow_builds_lite(self):
+        from pathlib import Path
+        yml = (Path(__file__).resolve().parents[1]
+               / ".github" / "workflows" / "release.yml").read_text(
+                   encoding="utf-8")
+        assert "lite/ssd_temp_lite.py" in yml          # built from source
+        assert "ssd_temp_lite_v" in yml                # renamed with version
+        assert "SHA256SUMS.txt" in yml                 # checksummed like others
+        # attached to the release asset list
+        assert "ssd_temp_lite_v${{ steps.ver.outputs.version }}.exe" in yml

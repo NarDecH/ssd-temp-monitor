@@ -3,6 +3,23 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.24.1] — 2026-09-24
+
+### Changed
+
+- 🧩 **SSD Temp Lite เปลี่ยนเป็น Python ไฟล์เดียว** (`lite/ssd_temp_lite.py`)
+  แทน Pascal: งานเดิมครบ (tray เรียลไทม์ เกณฑ์สีเดียวกัน SMART query เดิม)
+  แต่ใช้ pystray + Pillow เท่านั้น — release workflow build ด้วย PyInstaller
+  เป็น `ssd_temp_lite_v*.exe` แนบเป็น asset ของทุก release พร้อมเข้า SHA256SUMS
+  และอ้างใน release notes
+
+### Fixed
+
+- 📜 **กรอง Error log viewer โดยตัวกรองอื่นที่ไม่ใช่ "all"** — `_match`
+  ใช้ `StringVar.current()` (ซึ่งมีแต่ Combobox) → exception เมื่อเลือกตัวกรอง
+  อื่น — แก้เป็น `fvar.get()` แล้วจับคู่ label → predicate (พิสูจน์ด้วยการ
+  เปิดหน้าต่างจริงกับ log จริงบนเครื่อง)
+
 ## [1.24.0] — 2026-09-24
 
 ### Fixed
@@ -20,10 +37,11 @@
   `ssd_temp_monitor.log`: กรองตามระดับ (ทั้งหมด/ข้อผิดพลาด/คำเตือน/อุณหภูมิเกิน/SMART/การอัปเดต),
   ช่องค้นหา, คัดลอกทั้งหมด, เปิดไฟล์ดิบ — บรรทัด error แดงหนา / warning ส้ม,
   tail ไฟล์ทุก 2 วิ ผ่าน marshaler แบบไม่แตะ Tcl ข้ามเธรด · ครบ 4 ภาษา
-- 🧩 **SSD Temp Lite** — โปรแกรมแยกแบบพอร์ตเทเบิล `lite/ssd_temp_lite.lpr`
-  (Object Pascal ไฟล์เดียว สำหรับ Typhon/Lazarus): โชว์อุณหภูมิ SSD เรียลไทม์บน tray
-  เกณฑ์สีเดียวกัน ใช้ PowerShell SMART query ชุดเดียวกัน ไม่พึ่ง LCL/Python —
-  พร้อมหน้าอธิบายการ build + คำสั่งสำคัญ: `docs/lite.html`
+- 🧩 **SSD Temp Lite** — โปรแกรมแยกแบบพอร์ตเทเบิล `lite/ssd_temp_lite.py`
+  (Python ไฟล์เดียว): โชว์อุณหภูมิ SSD เรียลไทม์บน tray เกณฑ์สีเดียวกัน ใช้
+  PowerShell SMART query ชุดเดียวกัน ไม่มีไฟล์ตั้งค่า/ประวัติ — release workflow
+  build เป็น `ssd_temp_lite_v*.exe` แนบทุก release พร้อมหน้าอธิบาย build +
+  คำสั่งสำคัญ: `docs/lite.html`
 
 ## [1.23.1] — 2026-09-24
 

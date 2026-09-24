@@ -45,7 +45,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.24.0"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.24.1"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -3512,7 +3512,11 @@ class App:
             """Line -> (level, shown?) honoring filter + search box."""
             parts = ln.split(" ", 2)
             lvl = parts[1] if len(parts) > 1 else "INFO"
-            if not filters[fvar.current()][1](lvl, ln):
+            # the combobox shows the label; find its predicate by label
+            # (fvar is a StringVar: use .get(), not Combobox.current())
+            label = fvar.get()
+            idx = next((i for i, f in enumerate(filters) if f[0] == label), 0)
+            if not filters[idx][1](lvl, ln):
                 return None
             needle = search_var.get().strip().lower()
             if needle and needle not in ln.lower():

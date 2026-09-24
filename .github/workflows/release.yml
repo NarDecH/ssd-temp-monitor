@@ -51,6 +51,19 @@ jobs:
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
 
+      - name: Build Lite tray (single-file PyInstaller)
+        shell: pwsh
+        run: |
+          # LITE sibling: same runtime deps as the main app (already
+          # installed above), just a leaner single-file program.
+          # --uac-admin: SMART needs an elevated process, same as the main
+          # exe; --icon shares the main app icon.
+          python -m PyInstaller --noconfirm --clean --onefile --windowed `
+            --uac-admin --name ssd_temp_lite --icon app_icon.ico `
+            lite/ssd_temp_lite.py
+          if (-not (Test-Path "dist\ssd_temp_lite.exe")) { exit 1 }
+          Write-Output "lite exe built OK"
+
       - name: Build installer
         shell: pwsh
         run: |
@@ -143,7 +156,8 @@ jobs:
           }
           $body = $body + "`n`n**Downloads**`n" +
             "- ``ssd_temp_monitor_setup_$ver.exe`` — installer (แนะนำ)`n" +
-            "- ``ssd_temp_monitor_$ver.exe`` — portable`n`n" +
+            "- ``ssd_temp_monitor_$ver.exe`` — portable`n" +
+            "- ``ssd_temp_lite_$ver.exe`` — LITE tray (โชว์แค่อุณหภูมิเรียลไทม์)`n`n" +
             "🔒 ดาวน์โหลดถูกตรวจ SHA-256 กับ ``SHA256SUMS.txt`` โดยแอปอัตโนมัติ`n"
           $body = $body.Replace('"', '""')
           Add-Content $env:GITHUB_OUTPUT "notes<<EOF_NOTES"
@@ -157,6 +171,7 @@ jobs:
         run: |
           Copy-Item "dist\ssd_temp_monitor.exe" "ssd_temp_monitor_v${{ steps.ver.outputs.version }}.exe"
           Copy-Item "installer\ssd_temp_monitor_setup.exe" "ssd_temp_monitor_setup_v${{ steps.ver.outputs.version }}.exe"
+          Copy-Item "dist\ssd_temp_lite.exe" "ssd_temp_lite_v${{ steps.ver.outputs.version }}.exe"
           # portable package: keep settings/history next to the exe
           New-Item -ItemType Directory -Force -Path "portable_tmp\portable_data" | Out-Null
           Copy-Item "ssd_temp_monitor_v${{ steps.ver.outputs.version }}.exe" "portable_tmp\"
@@ -170,6 +185,7 @@ jobs:
         shell: pwsh
         run: |
           $files = @(Get-ChildItem "ssd_temp_monitor*_v*.exe") +
+                   @(Get-ChildItem "ssd_temp_lite_v*.exe") +
                    @(Get-ChildItem "ssd_temp_monitor*_v*_portable.zip")
           $lines = foreach ($f in $files) {
             $h = (Get-FileHash -Algorithm SHA256 $f.FullName).Hash.ToLower()
@@ -188,5 +204,6 @@ jobs:
           files: |
             ssd_temp_monitor_v${{ steps.ver.outputs.version }}.exe
             ssd_temp_monitor_setup_v${{ steps.ver.outputs.version }}.exe
+            ssd_temp_lite_v${{ steps.ver.outputs.version }}.exe
             ssd_temp_monitor_v${{ steps.ver.outputs.version }}_portable.zip
             SHA256SUMS.txt

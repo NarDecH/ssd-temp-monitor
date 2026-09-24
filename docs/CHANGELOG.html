@@ -75,7 +75,19 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
-  <h2><span class="ver-badge">v1.24.0</span> <span class="date">24 กันยายน 2026</span></h2>
+  <h2><span class="ver-badge">v1.24.1</span> <span class="date">24 กันยายน 2026</span></h2>
+
+  <h3><span class="pill fix-pill">Fixed</span></h3>
+  <ul>
+    <li>📜 <strong>Error log viewer: ตัวกรองอื่นนอกจาก "all"</strong> — <code>_match</code> ใช้ <code>StringVar.current()</code> ที่ไม่มีจริง → exception เมื่อเลือกตัวกรอง — แก้เป็น <code>fvar.get()</code> (พิสูจน์ด้วยการเปิดหน้าต่างจริงกับ log จริง)</li>
+  </ul>
+
+  <h3><span class="pill chg-pill">Changed</span></h3>
+  <ul>
+    <li>🧩 <strong>SSD Temp Lite เป็น Python ไฟล์เดียว</strong> (<code>lite/ssd_temp_lite.py</code>) — release workflow build ด้วย PyInstaller แนบ <code>ssd_temp_lite_v*.exe</code> + SHA256SUMS ทุก release</li>
+  </ul>
+
+  <h2><span class="ver-badge old">v1.24.0</span> <span class="date">24 กันยายน 2026</span></h2>
 
   <h3><span class="pill fix-pill">Fixed</span></h3>
   <ul>
@@ -85,7 +97,7 @@
   <h3><span class="pill add-pill">Added</span></h3>
   <ul>
     <li>📜 <strong>หน้า Error log viewer</strong> (เมนู tray) — มุมมองสดของ event log: กรองระดับ/ช่องค้นหา/คัดลอกทั้งหมด/เปิดไฟล์, error แดงหนา warning ส้ม, tail ทุก 2 วิ ผ่าน marshaler แบบไม่แตะ Tcl ข้ามเธรด · ครบ 4 ภาษา</li>
-    <li>🧩 <strong>SSD Temp Lite</strong> — โปรแกรมแยกพอร์ตเทเบิล <a href="lite.html">lite/ssd_temp_lite.lpr</a> (Pascal ไฟล์เดียว, Typhon/Lazarus): อุณหภูมิ SSD เรียลไทม์บน tray เกณฑ์สีเดียวกัน ไม่พึ่ง LCL/Python พร้อมหน้าอธิบายการ build + คำสั่งสำคัญ</li>
+    <li>🧩 <strong>SSD Temp Lite</strong> — โปรแกรมแยกพอร์ตเทเบิล <a href="lite.html">lite/ssd_temp_lite.py</a> (Python ไฟล์เดียว): อุณหภูมิ SSD เรียลไทม์บน tray เกณฑ์สีเดียวกัน CI build เป็น exe แนบทุก release พร้อมหน้าอธิบายการ build + คำสั่งสำคัญ</li>
   </ul>
 
   <h2><span class="ver-badge old">v1.23.1</span> <span class="date">24 กันยายน 2026</span></h2>
