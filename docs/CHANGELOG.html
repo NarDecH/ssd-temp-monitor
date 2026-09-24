@@ -75,7 +75,28 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
-  <h2><span class="ver-badge">v1.21.0</span> <span class="date">23 กันยายน 2026</span></h2>
+  <h2><span class="ver-badge">v1.22.0</span> <span class="date">24 กันยายน 2026</span></h2>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>♻️ <strong>Reset statistics</strong> — เมนู tray "ล้างสถิติ" + ปุ่มใน Settings → Stats: ล้างบันทึกสุขภาพรายวัน ตัวนับแจ้งเตือน ค่าพื้นฐาน SMART และประวัติ 24 ชม. (มีกล่องยืนยัน) ไฟล์ส่งออกและ fine history ไม่ถูกแตะ — ครบ 4 ภาษา</li>
+  </ul>
+
+  <h3><span class="pill fix-pill">Fixed</span></h3>
+  <ul>
+    <li>🛑 <strong>โปรแกรมปิดเองโดยไม่มีสาเหตุ</strong> — (1) exception ใน callback เมนู tray หลุดออกจาก message loop ของ pystray จนโปรเซสจบเงียบ ๆ (AttributeError จากคลิกเมนู 24h/Stats) — ครอบ guard ทุก callback + flag default ใน <code>_spawn_once</code> (2) <code>root.after</code> จาก worker thread ไม่ thread-safe และเคยแตกใน tcl86t.dll — marshal ผ่าน <code>&lt;&lt;SsdMarshal&gt;&gt;</code> และ poll loop กัน crash ต่อรอบ</li>
+    <li>🕒 <strong>กราฟ 24 ชม. ว่างหลังอัปเดต</strong> — ไฟล์ 24h เขียนเฉพาะตอน quit สำเร็จ → persist ทันทีที่มีนาทีใหม่ + เติมย้อนหลังจาก fine history ตอนไฟล์ว่าง</li>
+    <li>📊 <strong>ตัวนับแจ้งเตือนใน Stats นับเกิน</strong> — <code>count_log_events</code> นับ <code>smart_alert</code> รวม <code>smart_alert_done</code> แก้เป็น match คำเต็ม</li>
+    <li>🎨 <strong>ข้อความ Stats จางบนธีมสว่าง</strong> — ตั้ง fg/bg ตามพาเลตต์ธีมปัจจุบันเสมอ</li>
+  </ul>
+
+  <h3><span class="pill chg-pill">Changed</span></h3>
+  <ul>
+    <li>📐 หน้าต่าง Stats และกราฟ 24 ชม. จำ geometry เหมือนหน้าต่างอื่น</li>
+    <li>🖥️ สไลด์แนะนำโปรเจกต์ 6 หน้า: <a href="slides.html">docs/slides.html</a> (ลิงก์จากหน้าดาวน์โหลด)</li>
+  </ul>
+
+  <h2><span class="ver-badge old">v1.21.0</span> <span class="date">23 กันยายน 2026</span></h2>
 
   <h3><span class="pill add-pill">Added</span></h3>
   <ul>

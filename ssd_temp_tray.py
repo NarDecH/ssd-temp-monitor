@@ -29,6 +29,7 @@ import json
 import logging
 import logging.handlers
 import os
+import queue
 import re
 import shutil
 import subprocess
@@ -44,7 +45,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.21.0"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.22.0"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -460,6 +461,14 @@ STRINGS = {
         "stats.disk_line": "  min {mn} °C   avg {av} °C   max {mx} °C   wear {wear}",
         "stats.refresh": "Refresh",
         "stats.window": "Based on the daily health log, last 7 days",
+        "stats.reset": "Reset statistics…",
+        "stats.reset_confirm": ("Delete all collected statistics?\n\n"
+                                "This clears the daily health log, alert "
+                                "counters, the 24-hour history and the SMART "
+                                "baseline. Saved exports and the fine "
+                                "temperature graph are kept."),
+        "stats.reset_done": "All statistics have been cleared.",
+        "menu.reset_stats": "Reset statistics",
         "menu.disks": "Show all disks (debug)",
         "menu.diagnostics": "Copy diagnostics to clipboard",
         "menu.refresh": "Refresh now",
@@ -559,6 +568,7 @@ STRINGS = {
         "about.check_updates": "Check for updates",
         "about.close": "Close",
         "common.close": "Close",
+        "common.cancel": "Cancel",
         "selftest.title": "Update self-test",
         "selftest.pass": (
             "ALL PASSED ({n}/{n} checks)\n\n"
@@ -611,6 +621,13 @@ STRINGS = {
         "stats.disk_line": "  ต่ำสุด {mn} °C   เฉลี่ย {av} °C   สูงสุด {mx} °C   สึก {wear}",
         "stats.refresh": "รีเฟรช",
         "stats.window": "จากบันทึกสุขภาพรายวัน ย้อนหลัง 7 วัน",
+        "stats.reset": "ล้างสถิติ…",
+        "stats.reset_confirm": ("ลบสถิติที่เก็บไว้ทั้งหมด?\n\n"
+                                "จะล้างบันทึกสุขภาพรายวัน ตัวนับการแจ้งเตือน "
+                                "ประวัติ 24 ชั่วโมง และค่าพื้นฐาน SMART "
+                                "ไฟล์ที่ส่งออกไว้และกราฟอุณหภูมิย่อยจะยังอยู่"),
+        "stats.reset_done": "ล้างสถิติทั้งหมดเรียบร้อยแล้ว",
+        "menu.reset_stats": "ล้างสถิติ",
         "menu.disks": "ดูดิสก์ทั้งหมด (debug)",
         "menu.diagnostics": "คัดลอกข้อมูลวินิจฉัย",
         "menu.refresh": "รีเฟรชเดี๋ยวนี้",
@@ -707,6 +724,7 @@ STRINGS = {
         "about.check_updates": "ตรวจหาการอัปเดต",
         "about.close": "ปิด",
         "common.close": "ปิด",
+        "common.cancel": "ยกเลิก",
         "selftest.title": "ทดสอบระบบอัปเดต",
         "selftest.pass": (
             "ผ่านทั้งหมด ({n}/{n} รายการ)\n\n"
@@ -759,6 +777,13 @@ STRINGS = {
         "stats.disk_line": "  最小 {mn} °C   平均 {av} °C   最大 {mx} °C   摩耗 {wear}",
         "stats.refresh": "更新",
         "stats.window": "日次ヘルスログより過去7日間",
+        "stats.reset": "統計をリセット…",
+        "stats.reset_confirm": ("収集した統計をすべて削除しますか？\n\n"
+                                "日次ヘルスログ、警告カウンター、24時間履歴、"
+                                "SMART基準値を消去します。保存済みのエクスポート"
+                                "と詳細グラフは残ります。"),
+        "stats.reset_done": "すべての統計を消去しました。",
+        "menu.reset_stats": "統計をリセット",
         "menu.disks": "全ディスクを表示 (デバッグ)",
         "menu.diagnostics": "診断情報をクリップボードへコピー",
         "menu.refresh": "今すぐ更新",
@@ -855,6 +880,7 @@ STRINGS = {
         "about.check_updates": "アップデートを確認",
         "about.close": "閉じる",
         "common.close": "閉じる",
+        "common.cancel": "キャンセル",
         "selftest.title": "更新システムの自己テスト",
         "selftest.pass": ("すべて合格 ({n}/{n} 項目)\n\n"
                           "バージョン比較 · リリース資産選択 · チェックサム検証\n"
@@ -906,6 +932,12 @@ STRINGS = {
         "stats.disk_line": "  最低 {mn} °C   平均 {av} °C   最高 {mx} °C   磨损 {wear}",
         "stats.refresh": "刷新",
         "stats.window": "基于每日健康日志，过去 7 天",
+        "stats.reset": "重置统计…",
+        "stats.reset_confirm": ("删除所有已收集的统计信息？\n\n"
+                                "将清空每日健康日志、警报计数、24 小时历史和 "
+                                "SMART 基线。已导出的文件与细粒度温度图会保留。"),
+        "stats.reset_done": "已清空所有统计数据。",
+        "menu.reset_stats": "重置统计",
         "menu.disks": "显示全部磁盘 (调试)",
         "menu.diagnostics": "复制诊断信息到剪贴板",
         "menu.refresh": "立即刷新",
@@ -1001,6 +1033,7 @@ STRINGS = {
         "about.check_updates": "检查更新",
         "about.close": "关闭",
         "common.close": "关闭",
+        "common.cancel": "取消",
         "selftest.title": "更新系统自检",
         "selftest.pass": ("全部通过 ({n}/{n} 项)\n\n"
                           "版本比较 · release 资产选择 · 校验和验证\n"
@@ -1347,15 +1380,18 @@ def count_log_events(event, days=7, log_path=None, now=None):
 
     Counts ``<ts> INFO <event>`` occurrences (any level actually) in the
     rotating log file - best effort: unreadable/missing log counts as 0.
+    The event name must match as a whole word, so ``smart_alert`` does
+    not also count ``smart_alert_done``.
     """
     path = log_path or LOG_FILE
     now = time.time() if now is None else now
     cutoff = now - days * 86400
     n = 0
+    pat = re.compile(r"\b" + re.escape(event) + r"\b")
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
             for line in f:
-                if event not in line:
+                if not pat.search(line):
                     continue
                 m = LOG_LINE_TS.match(line)
                 if not m:
@@ -1370,6 +1406,52 @@ def count_log_events(event, days=7, log_path=None, now=None):
     except OSError:
         pass
     return n
+
+
+def reset_stats(app=None):
+    """Clear all collected statistics - "factory-fresh" counters.
+
+    Removes the daily health log (min/avg/max, wear and disk usage
+    history), the event log (overheat/SMART alert counters), the SMART
+    baseline (so already-known counters re-alert from scratch) and the
+    24 h history. The fine history and saved graphs/CSV exports are NOT
+    touched. Runs on the tray app instance when given: the in-memory
+    24 h store is reseeded from the fine history so the graph keeps
+    working, while alert counters simply restart from zero.
+
+    Returns the number of files that were actually deleted.
+    """
+    removed = 0
+    files = (HEALTH_LOG_FILE, LOG_FILE, os.path.join(DATA_DIR,
+                                                     SMART_STATE_FILE),
+             HISTORY24_FILE, HISTORY24_STATE)
+    for f in files:
+        try:
+            os.remove(f)
+            removed += 1
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+    # start the rotating log again with a marker line
+    try:
+        log_event("stats_reset", removed=removed)
+    except Exception:
+        pass
+    if app is not None:
+        try:
+            with app._lock:
+                app._alert_since = None
+                app._last_alert = 0.0
+                app._last_smart_alert = 0.0
+                app._smart_state = load_smart_state()
+                app.history24 = []
+                app._h24_state = {"minute": 0.0, "bucket": None}
+                app.history24 = (_history24_load()
+                                 or _history24_load_fine_history())
+        except Exception:
+            pass
+    return removed
 
 
 def format_week_stats(stats):
@@ -2895,6 +2977,33 @@ def _history24_save_state(state):
         pass
 
 
+def _history24_load_fine_history():
+    """Backfill source for the 24 h store: recent 1 Hz history points.
+
+    v1.20/v1.21 only ever wrote the 24 h file on a clean quit, so machines
+    that were updated in place started with an empty store. Seeding the
+    store from the fine history file gives the 24 h view data immediately;
+    update_history24 then keeps exactly one point per minute going forward.
+    """
+    return load_history()
+
+
+def _history24_persist(points, state):
+    """Write the 24 h store/state when they changed (best effort).
+
+    Called after every poll so the store survives crashes and kills -
+    it is small (one row per minute), so rewriting it per sample is cheap.
+    """
+    try:
+        _history24_save(points)
+    except Exception:
+        pass
+    try:
+        _history24_save_state(state)
+    except Exception:
+        pass
+
+
 def update_history24(points, now, state, temps=None):
     """Add one minute-bucket point to the 24 h history.
 
@@ -2999,8 +3108,22 @@ class App:
         self._nagged_version = None      # nag once per (version, session)
         self._last_update_check = 0.0
         self._last_weekly_report = 0.0   # weekly auto-report timer
+        # restore the 24 h minute store; a fresh install backfills it from
+        # the fine history (the v1.21.0 store file was only written on a
+        # clean quit, so it stayed empty for most users) and writes it out
+        # right away so it survives an early crash
         self.history24 = _history24_load()
+        if not self.history24:
+            self.history24 = _history24_load_fine_history()
+            if self.history24:
+                _history24_persist(self.history24, {"minute": 0.0,
+                                                    "bucket": None})
         self._h24_state = _history24_load_state()
+        # window-open flags (default attributes: _spawn_once() reads them
+        # under the lock, so they must exist on a fresh App instance)
+        self._stats_open = False
+        self._graph24_open = False
+        self._reset_open = False
         self.icon = pystray.Icon(
             "ssd_temp",
             icon=make_icon("--", UNKNOWN),
@@ -3038,19 +3161,34 @@ class App:
         The Language submenu always shows both languages, natively labelled.
         """
         current = SETTINGS.get("language", "en")
+
+        def _safe(cb):
+            """Menu callbacks run inside pystray's Win32 message loop: an
+            exception there propagates out of icon.run() and the process
+            dies silently (the v1.21 "app closes by itself" bug - an
+            unhandled AttributeError in show_graph24/show_stats)."""
+            def run(*args, **kw):
+                try:
+                    cb(*args, **kw)
+                except Exception:
+                    log_event("menu_error")
+            return run
+
         return pystray.Menu(
-            pystray.MenuItem(tr("menu.details"), self.show_details, default=True),
-            pystray.MenuItem(tr("menu.graph"), self.show_graph),
-            pystray.MenuItem(tr("menu.graph24"), self.show_graph24),
-            pystray.MenuItem(tr("menu.stats"), self.show_stats),
-            pystray.MenuItem(tr("menu.disks"), self.show_disks),
-            pystray.MenuItem(tr("menu.diagnostics"), self.copy_diagnostics),
-            pystray.MenuItem(tr("menu.refresh"), self.refresh),
-            pystray.MenuItem(tr("menu.updates"), self.check_updates_now),
-            pystray.MenuItem(tr("menu.selftest"), self.run_update_selftest_ui),
-            pystray.MenuItem(tr("menu.restore"), self.restore_previous_version),
-            pystray.MenuItem(tr("menu.settings"), self.show_settings),
-            pystray.MenuItem(tr("menu.about"), self.show_about),
+            pystray.MenuItem(tr("menu.details"), _safe(self.show_details),
+                             default=True),
+            pystray.MenuItem(tr("menu.graph"), _safe(self.show_graph)),
+            pystray.MenuItem(tr("menu.graph24"), _safe(self.show_graph24)),
+            pystray.MenuItem(tr("menu.stats"), _safe(self.show_stats)),
+            pystray.MenuItem(tr("menu.reset_stats"), _safe(self.show_reset_stats)),
+            pystray.MenuItem(tr("menu.disks"), _safe(self.show_disks)),
+            pystray.MenuItem(tr("menu.diagnostics"), _safe(self.copy_diagnostics)),
+            pystray.MenuItem(tr("menu.refresh"), _safe(self.refresh)),
+            pystray.MenuItem(tr("menu.updates"), _safe(self.check_updates_now)),
+            pystray.MenuItem(tr("menu.selftest"), _safe(self.run_update_selftest_ui)),
+            pystray.MenuItem(tr("menu.restore"), _safe(self.restore_previous_version)),
+            pystray.MenuItem(tr("menu.settings"), _safe(self.show_settings)),
+            pystray.MenuItem(tr("menu.about"), _safe(self.show_about)),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(tr("menu.history"), self.toggle_history,
                              checked=lambda item: KEEP_HISTORY),
@@ -3148,7 +3286,9 @@ class App:
     def _spawn_once(self, flag_attr, target):
         """Run target() in its own thread, one instance at a time."""
         with self._lock:
-            if getattr(self, flag_attr):
+            # default False: an unknown/missing flag attr must never raise
+            # inside the tray's menu thread (that killed the whole app)
+            if getattr(self, flag_attr, False):
                 return  # already showing
             setattr(self, flag_attr, True)
 
@@ -3172,6 +3312,60 @@ class App:
     def show_stats(self, *_):
         self._spawn_once("_stats_open", self._stats_window)
 
+    def _confirm_reset_stats(self, parent, after=None):
+        """Ask before wiping all statistics, then reset off the tk thread."""
+        from tkinter import messagebox
+        if not messagebox.askyesno(tr("stats.reset"), tr("stats.reset_confirm"),
+                                   icon="warning", parent=parent):
+            return
+
+        def work():
+            reset_stats(self)
+            if after:
+                self.tk_after(parent, 0, after)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def show_reset_stats(self, *_):
+        self._spawn_once("_reset_open", self._reset_stats_window)
+
+    def _reset_stats_window(self):
+        """Standalone confirmation window for "Reset statistics".
+
+        The tray menu cannot host a native dialog (a MessageBox there
+        blocks the tray loop), so the askyesno runs in its own window
+        thread like every other dialog.
+        """
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.title(tr("stats.reset"))
+        root.attributes("-topmost", True)
+        root.resizable(False, False)
+        self._make_tk_after(root)
+        frame = tk.Frame(root, padx=22, pady=14)
+        frame.pack()
+        tk.Label(frame, text=tr("stats.reset_confirm"), wraplength=320,
+                 font=("Segoe UI", 10), justify="left").pack(anchor="w")
+
+        def _do_reset():
+            reset_stats(self)
+            messagebox.showinfo(tr("stats.reset"), tr("stats.reset_done"),
+                                parent=root)
+            root.destroy()
+
+        btns = tk.Frame(frame)
+        btns.pack(pady=(10, 0))
+        tk.Button(btns, text=tr("stats.reset"), font=("Segoe UI", 10),
+                  fg=RED, width=10, command=_do_reset).pack(side="left",
+                                                            padx=4)
+        tk.Button(btns, text=tr("common.cancel"), font=("Segoe UI", 10),
+                  width=10, command=root.destroy).pack(side="left", padx=4)
+        root.protocol("WM_DELETE_WINDOW", root.destroy)
+        root.bind("<Return>", lambda e: _do_reset())
+        root.bind("<Escape>", lambda e: root.destroy())
+        root.mainloop()
+
     def _stats_window(self):
         """Standalone 7-day usage summary (same data as the Settings
         Stats tab, no dialog needed). Own thread + tk per project rules."""
@@ -3180,10 +3374,15 @@ class App:
         root.title(tr("win.stats"))
         root.attributes("-topmost", True)
         root.resizable(False, False)
+        self._make_tk_after(root)
+        apply_geometry(root, "stats")
         c = ui_palette()
         box = tk.Text(root, width=52, height=13, wrap="word",
                       font=("Segoe UI", 10), relief="solid", bd=1,
                       bg=c["entry_bg"], fg=c["text"])
+        # fg is set here (not only via tags): on the light theme the
+        # default Text foreground was unreadably pale
+        box.configure(fg=c["text"], bg=c["entry_bg"], insertbackground=c["text"])
         box.pack(padx=14, pady=(14, 6))
 
         def _render():
@@ -3226,6 +3425,8 @@ class App:
         win.title(tr("win.graph24"))
         win.attributes("-topmost", True)
         win.resizable(False, False)
+        self._make_tk_after(win)
+        apply_geometry(win, "graph24")
         c = ui_palette()
         W, H, PAD = GRAPH_W, GRAPH_H, GRAPH_PAD
         canvas = tk.Canvas(win, width=W, height=H, bg=c["bg"],
@@ -3347,7 +3548,41 @@ class App:
             return list(getattr(self, attr))
 
     @staticmethod
-    def _raise_window(title):
+    def tk_after(win, ms, fn):
+        """Thread-safe root.after(): marshal the call onto the tk thread.
+
+        Calls to ``win.after`` from a worker thread are NOT thread-safe in
+        Tcl/Tk and crash the whole process inside tcl86t.dll (the "app
+        closes by itself" crashes in the event log). This schedules the
+        call from the tk thread's own event loop instead.
+        """
+        try:
+            win._ssd_after_queue.put((ms, fn))
+            win.event_generate("<<SsdMarshal>>", when="tail")
+        except Exception:
+            pass
+
+    def _make_tk_after(self, win):
+        """Install the <<SsdMarshal>> handler on ``win`` (tk thread only)."""
+        try:
+            win._ssd_after_queue = queue.Queue()
+
+            def _drain():
+                q = win._ssd_after_queue
+                while True:
+                    try:
+                        ms, fn = q.get_nowait()
+                    except queue.Empty:
+                        break
+                    try:
+                        win.after(ms, fn)
+                    except Exception:
+                        pass  # window may be closing
+            win.bind("<<SsdMarshal>>", lambda e: _drain())
+        except Exception:
+            pass
+        return self.tk_after
+
         """Bring an existing top-level window to the front (thread-safe).
 
         Uses plain Win32 so we never touch tkinter objects from outside
@@ -3587,6 +3822,7 @@ class App:
         root.title(tr("win.settings"))
         root.attributes("-topmost", True)
         root.resizable(False, False)
+        self._make_tk_after(root)
         outer = tk.Frame(root, padx=18, pady=12)
         outer.pack()
 
@@ -3843,9 +4079,12 @@ class App:
         status_lbl.grid(row=0, column=0, sticky="w")
 
         # ---- Stats tab: 7-day usage summary ---------------------------
+        c = ui_palette()
         stats_box = tk.Text(tab_stats, width=46, height=12, wrap="word",
                             font=("Segoe UI", 10), state="disabled",
-                            relief="solid", bd=1, bg=ui_palette()["entry_bg"])
+                            relief="solid", bd=1, bg=c["entry_bg"])
+        stats_box.configure(fg=c["text"], bg=c["entry_bg"],
+                            insertbackground=c["text"])
         stats_box.grid(row=0, column=0, columnspan=2, sticky="we",
                        pady=(0, 8))
 
@@ -3861,7 +4100,7 @@ class App:
                                     font=("Segoe UI", 10, "bold"))
             stats_box.tag_configure("muted",
                                     font=("Segoe UI", 8),
-                                    foreground="#64748b")
+                                    foreground=c["dim"])
             stats_box.config(state="disabled")
 
         _render_stats()
@@ -3869,6 +4108,11 @@ class App:
                                   font=("Segoe UI", 10),
                                   command=_render_stats)
         stats_refresh.grid(row=1, column=0, sticky="w")
+        stats_reset = tk.Button(tab_stats, text=tr("stats.reset"),
+                                font=("Segoe UI", 10), fg=RED,
+                                command=lambda: self._confirm_reset_stats(
+                                    root, after=_render_stats))
+        stats_reset.grid(row=1, column=1, sticky="e")
         refresh_btn = tk.Button(tab_health, text=tr("health.refresh"),
                                 font=("Segoe UI", 10), width=10)
         refresh_btn.grid(row=0, column=1, sticky="e", padx=(14, 0))
@@ -3942,7 +4186,7 @@ class App:
                         return  # window closed while probing
                     refresh_btn.config(state="normal")
 
-                root.after(0, done)
+                self.tk_after(root, 0, done)
 
             threading.Thread(target=work, daemon=True).start()
 
@@ -4287,10 +4531,7 @@ class App:
 
         def fetch_latest():
             rel = fetch_latest_release(repo, include_prereleases=pre)
-            try:
-                root.after(0, lambda: apply_latest(rel))
-            except Exception:
-                pass  # window already closed
+            self.tk_after(root, 0, lambda: apply_latest(rel))
 
         threading.Thread(target=fetch_latest, daemon=True).start()
 
@@ -4490,8 +4731,11 @@ class App:
             with self._lock:
                 points = list(self.history)
             save_history(points)
-        _history24_save(self.history24)
-        _history24_save_state(self._h24_state)
+        try:
+            _history24_save(self.history24)
+            _history24_save_state(self._h24_state)
+        except Exception:
+            pass  # shutdown must never fail because of a history file
         try:
             self.icon.remove_notification()
         except Exception:
@@ -4531,7 +4775,12 @@ class App:
 
     def poll_loop(self):
         while True:
-            self.update()
+            # one failed poll must never kill the whole app (crash loop =
+            # "the program closes by itself")
+            try:
+                self.update()
+            except Exception:
+                log_event("poll_error")
             # auto-update: check right after start, then every N minutes
             interval = SETTINGS.get("update_check_interval_minutes", 360) * 60
             if (SETTINGS.get("check_updates")
@@ -4565,13 +4814,21 @@ class App:
         self._smart_watch(temps)
         try:
             append_daily_health(temps)   # one row/day per disk, cheap no-op
-            # minute-resolution long-tail history for the 24 h view
+            # minute-resolution long-tail history for the 24 h view;
+            # persisted right away so it survives a crash or kill
+            prev_pts = self.history24
+            prev_state = self._h24_state
             pts, st = update_history24(self.history24, time.time(),
                                        self._h24_state, temps=temps)
             self.history24 = pts
             self._h24_state = st
         except Exception:
             pass
+        else:
+            if pts is not prev_pts:
+                _history24_persist(pts, st)
+            elif st.get("minute") != prev_state.get("minute"):
+                _history24_save_state(st)
         self._alert_drive(hottest, time.time())
 
         text = str(hottest) if hottest is not None else "--"

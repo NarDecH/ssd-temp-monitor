@@ -2597,3 +2597,259 @@ class TestGraph24ThemeStats:
         for lang in m.UI_LANGUAGES:
             assert "menu.stats" in m.STRINGS[lang]
             assert "win.stats" in m.STRINGS[lang]
+
+
+# ---------------------------------------------------------------------------
+# v1.22.0 - crash-proofing, h24 persistence, stats reset
+# ---------------------------------------------------------------------------
+class TestMenuCallbackSafety:
+    """A menu-callback exception used to propagate out of icon.run() and
+    silently kill the whole app (the "closes by itself" bug)."""
+
+    def test_spawn_once_flags_are_default_attributes(self):
+        import inspect
+        init_src = inspect.getsource(m.App.__init__)
+        for flag in ("_graph24_open", "_stats_open", "_reset_open"):
+            assert flag in init_src, flag
+
+    def test_missing_window_flag_no_longer_kills_menu(self, app):
+        # simulate the v1.21 state: the flag attribute does not exist
+        for flag in ("_graph24_open", "_stats_open", "_reset_open"):
+            if hasattr(app, flag):
+                delattr(app, flag)
+        calls = []
+
+        def fake_thread(**kw):
+            calls.append(kw)
+            return types.SimpleNamespace(start=lambda: None)
+
+        orig = m.threading.Thread
+        m.threading.Thread = fake_thread
+        try:
+            app.show_graph24()
+        finally:
+            m.threading.Thread = orig
+        assert len(calls) == 1          # spawn_once recovered via getattr
+
+    def test_menu_build_wraps_callbacks_safely(self):
+        import inspect
+        src = inspect.getsource(m.App._build_menu)
+        assert "_safe(" in src          # every item goes through the guard
+
+    def test_tk_after_is_thread_safe_marshaler(self):
+        import inspect
+        src = inspect.getsource(m.App.tk_after)
+        assert "event_generate" in src and "_ssd_after_queue" in src
+
+    def test_settings_health_probe_uses_marshaler(self):
+        import inspect
+        src = inspect.getsource(m.App._settings_window)
+        assert "root.after(0" not in src
+        assert "tk_after" in src
+
+    def test_about_latest_fetch_uses_marshaler(self):
+        import inspect
+        src = inspect.getsource(m.App._about_window)
+        assert "root.after(0" not in src
+        assert "tk_after" in src
+
+    def test_poll_loop_survives_update_crash(self, app, monkeypatch):
+        monkeypatch.setattr(m, "POLL_SECONDS", 1)
+        calls = {"n": 0}
+
+        def boom():
+            calls["n"] += 1
+            raise RuntimeError("poll exploded")
+
+        monkeypatch.setattr(app, "update", boom)
+
+        def fake_sleep(_):
+            if calls["n"] >= 2:
+                raise KeyboardInterrupt   # break out of the while True
+
+        monkeypatch.setattr(m.time, "sleep", fake_sleep)
+        with pytest.raises(KeyboardInterrupt):
+            app.poll_loop()
+        assert calls["n"] == 2          # kept polling after the crash
+
+
+class TestHistory24Persistence:
+    def test_update_persists_h24_immediately(self, app, tmp_path,
+                                             monkeypatch):
+        """The h24 file was only written on clean quit before, so updated
+        installs started with an empty 24-hour graph."""
+        f = tmp_path / "h24.csv"
+        sf = tmp_path / "h24.json"
+        monkeypatch.setattr(m, "HISTORY24_FILE", str(f))
+        monkeypatch.setattr(m, "HISTORY24_STATE", str(sf))
+        a = app
+        a.icon = types.SimpleNamespace(icon=None, title="")
+        a._record = lambda temp: None
+        a._smart_watch = lambda temps: None
+        a._alert_drive = lambda hottest, now: False
+        a._sync_extra_icons = lambda temps: None
+        monkeypatch.setattr(m, "read_temps", lambda: [
+            {"model": "D", "temp": 41, "wear": 1,
+             "read_errors": 0, "unfixed_errors": 0}])
+        monkeypatch.setattr(m, "KEEP_HISTORY", False)
+        a.history24 = []
+        a._h24_state = {"minute": 0.0, "bucket": None}
+        a.update()
+        assert f.exists() and f.stat().st_size > 0
+        assert sf.exists()
+
+    def test_init_backfills_empty_store_from_fine_history(
+            self, tmp_path, monkeypatch):
+        monkeypatch.setattr(m, "HISTORY24_FILE", str(tmp_path / "h24.csv"))
+        monkeypatch.setattr(m, "HISTORY24_STATE", str(tmp_path / "h24.json"))
+        hist = tmp_path / "fine.csv"
+        now = 1_800_000_000.0
+        hist.write_text(f"{now - 120},39\n{now - 60},40\n{now},41\n")
+        monkeypatch.setattr(m, "HISTORY_FILE", str(hist))
+
+        created = {}
+
+        class FakeTray:
+            def __init__(self, *a, **kw):
+                created["icon"] = self
+                self.menu = None
+                self.icon = None
+                self.title = ""
+
+        monkeypatch.setattr(m.pystray, "Icon", FakeTray)
+        monkeypatch.setattr(m, "log_event", lambda *a, **k: None)
+        a = m.App.__new__(m.App)
+        saved = {}
+
+        def fake_save(points):
+            saved["pts"] = list(points)
+
+        monkeypatch.setattr(m, "_history24_save", fake_save)
+        m.App.__init__(a)
+        assert [t for _, t in saved["pts"]] == [39, 40, 41]
+        assert [t for _, t in a.history24] == [39, 40, 41]
+
+    def test_persist_helper_writes_both_files(self, tmp_path, monkeypatch):
+        f = tmp_path / "h24.csv"
+        sf = tmp_path / "h24.json"
+        monkeypatch.setattr(m, "HISTORY24_FILE", str(f))
+        monkeypatch.setattr(m, "HISTORY24_STATE", str(sf))
+        m._history24_persist([(100.0, 42)], {"minute": 120.0, "bucket": 42})
+        assert m._history24_load() == [(100.0, 42)]
+        assert m._history24_load_state()["minute"] == 120.0
+
+
+class TestStatsReset:
+    def _make_files(self, tmp_path, monkeypatch):
+        health = tmp_path / "health_daily.csv"
+        logf = tmp_path / "app.log"
+        smart = tmp_path / "smart_state.json"
+        h24 = tmp_path / "h24.csv"
+        h24s = tmp_path / "h24.json"
+        health.write_text("date,time,model,bus,temp_c,wear_pct\n",
+                          encoding="utf-8")
+        logf.write_text("2026-09-24 08:00:00,000 INFO overheat_alert\n",
+                        encoding="utf-8")
+        smart.write_text("{}", encoding="utf-8")
+        h24.write_text("1800000000,41\n", encoding="utf-8")
+        h24s.write_text("{}", encoding="utf-8")
+        monkeypatch.setattr(m, "HEALTH_LOG_FILE", str(health))
+        monkeypatch.setattr(m, "LOG_FILE", str(logf))
+        monkeypatch.setattr(m, "SMART_STATE_FILE", "smart_state.json")
+        monkeypatch.setattr(m, "DATA_DIR", str(tmp_path))
+        monkeypatch.setattr(m, "HISTORY24_FILE", str(h24))
+        monkeypatch.setattr(m, "HISTORY24_STATE", str(h24s))
+        return {"health": health, "log": logf, "smart": smart,
+                "h24": h24, "h24s": h24s}
+
+    def test_reset_stats_deletes_all_stat_files(self, app, tmp_path,
+                                                monkeypatch):
+        files = self._make_files(tmp_path, monkeypatch)
+        removed = m.reset_stats(app)
+        assert removed == 5
+        for key in ("health", "log", "smart", "h24", "h24s"):
+            assert not files[key].exists(), key
+
+    def test_reset_stats_reseeds_h24_from_fine_history(
+            self, app, tmp_path, monkeypatch):
+        self._make_files(tmp_path, monkeypatch)
+        fine = tmp_path / "fine.csv"
+        now = 1_800_000_000.0
+        fine.write_text(f"{now - 60},40\n{now},42\n")
+        monkeypatch.setattr(m, "HISTORY_FILE", str(fine))
+        a = app
+        a.history24 = [(now, 41)]
+        m.reset_stats(a)
+        assert [t for _, t in a.history24] == [40, 42]
+        assert a._h24_state == {"minute": 0.0, "bucket": None}
+
+    def test_reset_stats_clears_alert_state(self, app, tmp_path,
+                                            monkeypatch):
+        self._make_files(tmp_path, monkeypatch)
+        a = app
+        a._alert_since = 123.0
+        a._last_alert = 456.0
+        a._last_smart_alert = 789.0
+        a._smart_state = {"X": {"wear": 9}}
+        m.reset_stats(a)
+        assert a._alert_since is None
+        assert a._last_alert == 0.0
+        assert a._last_smart_alert == 0.0
+        assert a._smart_state == {}
+
+    def test_reset_stats_missing_files_counted_as_zero(
+            self, app, tmp_path, monkeypatch):
+        self._make_files(tmp_path, monkeypatch)
+        a = app
+        assert m.reset_stats(a) == 5
+        assert m.reset_stats(a) == 0      # second run: nothing to delete
+
+    def test_reset_stats_keeps_fine_history(self, app, tmp_path,
+                                            monkeypatch):
+        files = self._make_files(tmp_path, monkeypatch)
+        fine = tmp_path / "ssd_temp_history.csv"
+        fine.write_text("1800000000,41\n")
+        a = app
+        m.reset_stats(a)
+        assert fine.exists()              # untouched
+
+    def test_reset_stats_survives_locked_file(self, app, tmp_path,
+                                              monkeypatch):
+        files = self._make_files(tmp_path, monkeypatch)
+        a = app
+
+        real_remove = m.os.remove
+
+        def locked_remove(path):
+            if str(path) == str(files["log"]):
+                raise PermissionError("in use")
+            return real_remove(path)
+
+        monkeypatch.setattr(m.os, "remove", locked_remove)
+        removed = m.reset_stats(a)
+        assert removed == 4               # the locked log is skipped
+        assert files["log"].exists()
+
+    def test_reset_stats_writes_marker_event(self, app, tmp_path,
+                                             monkeypatch):
+        self._make_files(tmp_path, monkeypatch)
+        events = []
+        monkeypatch.setattr(m, "log_event",
+                            lambda event, **kw: events.append(event))
+        a = app
+        m.reset_stats(a)
+        assert "stats_reset" in events
+
+    def test_reset_stats_i18n_parity(self):
+        for lang in m.UI_LANGUAGES:
+            for key in ("stats.reset", "stats.reset_confirm",
+                        "stats.reset_done", "menu.reset_stats",
+                        "common.cancel"):
+                assert key in m.STRINGS[lang], (lang, key)
+
+    def test_reset_stats_menu_and_settings_wired(self):
+        import inspect
+        assert "show_reset_stats" in inspect.getsource(m.App._build_menu)
+        assert "_confirm_reset_stats" in \
+            inspect.getsource(m.App._settings_window)
+        assert "reset_stats" in inspect.getsource(m.App._reset_stats_window)

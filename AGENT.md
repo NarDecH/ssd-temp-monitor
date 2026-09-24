@@ -277,6 +277,15 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   `c = ui_palette()` ห้าม hardcode และแท็บ/หน้าต่างใหม่ต้องมีคีย์ i18n ครบ
   4 ภาษา (เทส parity จับ) รวมถึง fixture `app` ของเทสต้องอัปเดต attribute
   ใหม่ที่ `__init__` สร้าง เพื่อไม่ให้เทสเก่า AttributeError แบบเงียบ ๆ
+- **exception ใน menu callback = แอปดับทั้งตัว** — pystray (Win32 backend)
+  เรียก callback ตรงใน message loop: exception ที่หลุดทำให้ `icon.run()`
+  คืนและโปรเซสจบเงียบ ๆ ไม่มี traceback ใน log ใดเลย (v1.21.0: AttributeError
+  จาก flag ที่ไม่ถูกประกาศใน `__init__`) กฎ: (1) `_build_menu` ครอบทุก callback
+  ด้วย `_safe()` (2) `_spawn_once` ใช้ `getattr(..., False)` (3) ห้ามเรียก
+  `root.after` จาก worker thread — ใช้ marshal ผ่าน `<<SsdMarshal>>`
+  (`App.tk_after`) ไม่งั้น Tcl panic ใน tcl86t.dll (0x80000003 ใน Event Log)
+  (4) ไฟล์ข้อมูลสำคัญต้อง persist ทันทีที่มีข้อมูลใหม่ อย่ารอ quit —
+  crash ทีหลังคือข้อมูลหายตลอด (v1.22.0: ไฟล์ 24h ว่างเพราะเขียนเฉพาะตอน quit)
 
 ## สไตล์โค้ด
 

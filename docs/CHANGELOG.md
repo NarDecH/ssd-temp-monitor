@@ -3,6 +3,39 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.22.0] — 2026-09-24
+
+### Added
+
+- ♻️ **Reset statistics** — เมนู tray "ล้างสถิติ" และปุ่มใน Settings → Stats:
+  ล้างบันทึกสุขภาพรายวัน ตัวนับแจ้งเตือน (overheat/SMART) ค่าพื้นฐาน SMART
+  และประวัติ 24 ชม. ให้เป็นของใหม่ มีกล่องยืนยันก่อนลบ (พร้อมอธิบายขอบเขต)
+  ไฟล์ที่ส่งออกไว้และกราฟย่อย (fine history) ไม่ถูกแตะ — ครบ 4 ภาษา
+
+### Fixed
+
+- 🛑 **โปรแกรมปิดเองโดยไม่มีสาเหตุ** — จุดราก 2 แห่ง: (1) คลิกเมนู
+  "24-hour history"/"Usage stats" แล้ว `AttributeError` หลุดออกจาก message
+  loop ของ pystray ทำให้ `icon.run()` คืนและโปรเซสจบแบบเงียบ ๆ (ตรงกับ crash
+  ใน Windows Event Log) — ตอนนี้ callback ทุกตัวถูกกัน exception + `_spawn_once`
+  ใช้ default เมื่อ flag ยังไม่มี (2) การเรียก `root.after` จาก worker thread
+  (Settings/About) ไม่ thread-safe และเคยแตกใน tcl86t.dll (0x80000003) —
+  เปลี่ยนเป็น marshal ผ่าน `<<SsdMarshal>>` บนเธรด tk เอง และ poll loop
+  กัน crash ต่อรอบ (log `poll_error`) ไม่ให้ดับทั้งแอป
+- 🕒 **กราฟ 24 ชม. ว่างหลังอัปเดตที่เครื่อง** — ไฟล์ `ssd_temp_history_24h.csv`
+  เขียนเฉพาะตอน quit สำเร็จ (และ crash ทำให้ไม่เคยเขียน) ตอนนี้ persist ทันที
+  ที่มีข้อมูลนาทีใหม่ และเติมย้อนหลังจาก fine history ตอนไฟล์ว่าง
+- 📊 **ตัวนับแจ้งเตือนใน Stats นับเกิน** — `count_log_events` เคยนับ `smart_alert`
+  รวมกับ `smart_alert_done` และ event อื่นที่มีชื่อต่อท้าย แก้เป็น match
+  คำเต็ม (word boundary) แล้ว
+- 🎨 **ข้อความ Stats จางบนธีมสว่าง** — หน้าต่าง/แท็บ Stats ตั้ง fg ตามพาเลตต์
+  ธีมปัจจุบันเสมอ (เดิมพึ่ง default ของ tk)
+
+### Changed
+
+- หน้าต่าง Stats และกราฟ 24 ชม. จำตำแหน่ง/ขนาด (geometry) เหมือนหน้าต่างอื่น
+- เพิ่มสไลด์แนะนำโปรเจกต์ 6 หน้า: `docs/slides.html` (ลิงก์จากหน้าดาวน์โหลด)
+
 ## [1.21.0] — 2026-09-23
 
 ### Added

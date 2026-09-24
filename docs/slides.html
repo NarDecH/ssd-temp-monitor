@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="img/favicon.svg">
+<meta property="og:type" content="website">
+<meta property="og:title" content="SSD Temperature Monitor — สไลด์แนะนำโปรเจกต์">
+<meta property="og:description" content="โอเพนซอร์ส Windows tray app ที่โชว์อุณหภูมิ SSD สด ๆ บน tray icon พร้อมกราฟ สถิติ แจ้งเตือน SMART และอัปเดตอัตโนมัติ">
+<meta property="og:image" content="img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<title>สไลด์แนะนำโปรเจกต์ — SSD Temperature Monitor</title>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8;
+    --green: #22c55e; --orange: #f59e0b; --red: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.55;
+    overflow: hidden;
+  }
+  .deck { position: relative; height: 100vh; }
+  .slide {
+    position: absolute; inset: 0; display: none;
+    flex-direction: column; justify-content: center; align-items: center;
+    text-align: center; padding: 6vh 8vw 12vh;
+  }
+  .slide.active { display: flex; animation: fade .35s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(10px); } }
+  .kicker {
+    color: var(--accent); font-weight: 700; letter-spacing: .12em;
+    text-transform: uppercase; font-size: .85rem; margin-bottom: 10px;
+  }
+  h1 { font-size: clamp(2rem, 5.5vw, 3.4rem); margin: 0 0 8px; line-height: 1.15; }
+  h2 { font-size: clamp(1.5rem, 3.6vw, 2.3rem); margin: 0 0 18px; }
+  .sub { color: var(--muted); font-size: clamp(1rem, 2vw, 1.2rem); max-width: 820px; }
+  .temp { font-weight: 800; }
+  .temp.g { color: var(--green); } .temp.o { color: var(--orange); }
+  .temp.r { color: var(--red); }
+  ul { text-align: left; max-width: 760px; margin: 0; padding: 0; list-style: none; }
+  ul li { padding: 9px 0 9px 38px; position: relative; font-size: clamp(1rem, 1.9vw, 1.15rem); }
+  ul li::before { content: "✔"; position: absolute; left: 6px; color: var(--green); font-weight: 700; }
+  ul li b { color: #fff; }
+  .cards { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; max-width: 900px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 18px 22px; width: 260px; text-align: left;
+  }
+  .card .big { font-size: 2rem; }
+  .card h3 { margin: 6px 0 4px; font-size: 1.02rem; }
+  .card p { margin: 0; color: var(--muted); font-size: .88rem; }
+  .steps { counter-reset: st; text-align: left; max-width: 720px; }
+  .step {
+    counter-increment: st; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px 18px 12px 58px; margin: 8px 0; position: relative;
+  }
+  .step::before {
+    content: counter(st); position: absolute; left: 14px; top: 12px;
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--accent); color: #082f49; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step b { color: #fff; }
+  .cta {
+    display: inline-block; background: var(--green); color: #052e16;
+    font-weight: 700; text-decoration: none; border-radius: 12px;
+    padding: 14px 34px; font-size: 1.15rem; margin-top: 22px;
+  }
+  .cta:hover { filter: brightness(1.1); }
+  .cta.alt { background: var(--surface); color: var(--text);
+             border: 1px solid var(--border); margin-left: 12px; font-weight: 600; }
+  code {
+    font-family: Consolas, monospace; font-size: .85em;
+    background: #0b1222; border-radius: 6px; padding: 2px 8px;
+  }
+  .nav {
+    position: fixed; bottom: 0; left: 0; right: 0; height: 64px;
+    display: flex; align-items: center; justify-content: center; gap: 18px;
+    background: rgba(15, 23, 42, .85); border-top: 1px solid var(--border);
+    backdrop-filter: blur(6px); z-index: 5;
+  }
+  .nav button {
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 8px 20px; font-size: 1rem; cursor: pointer;
+  }
+  .nav button:hover { border-color: var(--accent); }
+  .dots { display: flex; gap: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%;
+         background: var(--border); cursor: pointer; }
+  .dot.on { background: var(--accent); }
+  .counter { position: fixed; top: 14px; right: 18px; color: var(--muted);
+             font-size: .85rem; z-index: 5; }
+  .hint { color: var(--muted); font-size: .8rem; margin-top: 26px; }
+  .foot { position: fixed; bottom: 74px; left: 18px; color: var(--muted);
+          font-size: .8rem; z-index: 5; }
+  .foot a { color: var(--accent); text-decoration: none; }
+  @media print {
+    body { overflow: visible; }
+    .slide { display: flex !important; position: relative; height: 100vh;
+             page-break-after: always; }
+    .nav, .counter, .foot, .hint { display: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="counter" id="counter">1 / 6</div>
+<div class="foot"><a href="https://github.com/NarDech/ssd-temp-monitor">github.com/NarDech/ssd-temp-monitor</a></div>
+
+<div class="deck" id="deck">
+
+  <!-- 1) Title -->
+  <section class="slide active">
+    <div class="kicker">Open Source · Windows</div>
+    <h1>SSD Temperature <span class="temp g">Monitor</span></h1>
+    <p class="sub">เห็นอุณหภูมิ SSD ของคุณได้ทุกวินาที <b>โดยไม่ต้องเปิดโปรแกรมอื่น</b> —
+      ตัวเลขอยู่บน tray icon เลย สีเปลี่ยนตามความร้อน:
+      <span class="temp g">36°C เย็น</span> ·
+      <span class="temp o">58°C เริ่มร้อน</span> ·
+      <span class="temp r">72°C อันตราย</span></p>
+    <a class="cta" href="download.html">⬇ ดาวน์โหลดฟรี</a>
+    <p class="hint">ใช้ปุ่ม ← → เพื่อเปลี่ยนสไลด์</p>
+  </section>
+
+  <!-- 2) Problem -->
+  <section class="slide">
+    <div class="kicker">ทำไมต้องมี</div>
+    <h2>SSD ร้อนเกิน 65°C คือเรื่องเงียบ ๆ ที่ทำร้ายเครื่องคุณ</h2>
+    <div class="cards">
+      <div class="card"><div class="big">🔥</div><h3>ความร้อนทำให้ SSD ช้าลง</h3>
+        <p>Thermal throttling ลดความเร็วเขียนลงฮวบฮัวโดยที่คุณไม่รู้ตัว</p></div>
+      <div class="card"><div class="big">📉</div><h3>อายุการใช้งานสั้นลง</h3>
+        <p>ความร้อนสูงต่อเนื่องเร่งการสึกของเซลล์แฟลชและคอนโทรลเลอร์</p></div>
+      <div class="card"><div class="big">🕶️</div><h3>เครื่องมือทั่วไปรกเกินไป</h3>
+        <p>ต้องเปิดหน้าต่างเฝ้าดูทั้งวัน — ในเมื่อที่ต้องแค่ "เห็น" ตัวเลข</p></div>
+    </div>
+    <p class="sub" style="margin-top:22px">ทางออก: <b>เอาอุณหภูมิไปไว้ใน tray</b> แล้วให้โปรแกรมเป็นคนเฝ้าให้</p>
+  </section>
+
+  <!-- 3) Features -->
+  <section class="slide">
+    <div class="kicker">ฟีเจอร์</div>
+    <h2>เบา สงบ และครบเรื่องสุขภาพดิสก์</h2>
+    <ul>
+      <li><b>ตัวเลขอุณหภูมิบน tray icon</b> — อัปเดตทุกไม่กี่วินาที สีเขียว/ส้ม/แดงตามเกณฑ์ · รองรับหลาย SSD</li>
+      <li><b>กราฟย้อนหลัง</b> — รายละเอียดระดับวินาที + กราฟ 24 ชั่วโมงระดับนาที พร้อม zone bands และปุ่มส่งออก PNG/CSV</li>
+      <li><b>สถิติการใช้งาน 7 วัน</b> — min/avg/max, % สึกหรอ, จำนวนการแจ้งเตือน + รายงานรายสัปดาห์อัตโนมัติ (HTML/CSV)</li>
+      <li><b>แจ้งเตือนอัจฉริยะ</b> — อุณหภูมิเกินต่อเนื่อง, SMART ผิดปกติ (read errors, สึกหรอสูง, เทรนด์สึกเร็ว)</li>
+      <li><b>ธีมสว่าง/มืดตาม Windows</b> · 4 ภาษา (EN/TH/JA/ZH) · ปรับขนาด/ฟอนต์/สีของไอคอนได้ละเอียด</li>
+      <li><b>อัปเดตอัตโนมัติพร้อม rollback</b> — ตรวจ SHA-256 ทุกไฟล์ ถ้าเวอร์ชันใหม่มีปัญหา ย้อนกลับเองได้</li>
+    </ul>
+  </section>
+
+  <!-- 4) Screens / how it looks -->
+  <section class="slide">
+    <div class="kicker">หน้าตาเป็นอย่างไร</div>
+    <h2>ทุกอย่างอยู่ห่าง ๆ คลิกเดียว</h2>
+    <div class="cards">
+      <div class="card"><div class="big">🖥️</div><h3>Tray icon ตัวเลขเด้งสด</h3>
+        <p>เห็นอุณหภูมิโดยไม่ต้องเปิดหน้าต่าง — คลิกซ้ายเพื่อดูรายละเอียดดิสก์</p></div>
+      <div class="card"><div class="big">📈</div><h3>กราฟ 2 มุมมอง</h3>
+        <p>ย้อน 30 นาทีละเอียดระดับวินาที และ 24 ชั่วโมงระดับนาที เซฟ PNG/CSV ได้</p></div>
+      <div class="card"><div class="big">🩺</div><h3>Health &amp; Stats</h3>
+        <p>สแกน SMART สด, เทรนด์ 30 วัน, รายงานรายสัปดาห์ พร้อมปุ่มล้างสถิติ</p></div>
+    </div>
+    <p class="sub" style="margin-top:22px">เมนู tray: กราฟ · สถิติ · ดีเทลดิสก์ · รีเซ็ตสถิติ · ตั้งค่า · อัปเดต</p>
+  </section>
+
+  <!-- 5) Getting started -->
+  <section class="slide">
+    <div class="kicker">เริ่มใช้ใน 3 ขั้น</div>
+    <h2>ติดตั้งจบภายในหนึ่งนาที</h2>
+    <div class="steps">
+      <div class="step"><b>ดาวน์โหลด</b> installer จากหน้า <a href="download.html" style="color:var(--accent)">Download</a> — มี Portable zip ให้ด้วย ไม่ต้องติดตั้ง</div>
+      <div class="step"><b>ติดตั้งและอนุญาต UAC</b> — โปรแกรมขึ้น tray ทันที อ่านอุณหภูมิผ่าน SMART ของ Windows เอง ไม่ต้องตั้งค่าอะไร</div>
+      <div class="step"><b>ลืมมันไปได้เลย</b> — เฝ้าดิสก์ให้ตลอด เจอความร้อน/SMART ผิดปกติค่อยเด้ง toast มาหาคุณ</div>
+    </div>
+    <p class="sub" style="margin-top:18px">ปัญหาการใช้งาน? มี <a href="faq.html" style="color:var(--accent)">FAQ</a> และเมนู Self-test ในโปรแกรม</p>
+  </section>
+
+  <!-- 6) Closing -->
+  <section class="slide">
+    <div class="kicker">Open Source · MIT-friendly toolchain · Python + pystray + tkinter</div>
+    <h2>ขอบคุณครับ 🙏</h2>
+    <p class="sub">โค้ดทั้งหมดเปิดให้ดูและแก้ได้บน GitHub — สตาร์์/แจ้งบั๊ก/ส่ง PR ได้เลย
+      อัปเดตตาม release ใหม่ได้ผ่านโปรแกรมโดยตรง</p>
+    <div>
+      <a class="cta" href="download.html">⬇ ดาวน์โหลดเวอร์ชันล่าสุด</a>
+      <a class="cta alt" href="https://github.com/NarDech/ssd-temp-monitor">⭐ github.com/NarDech/ssd-temp-monitor</a>
+    </div>
+  </section>
+
+</div>
+
+<div class="nav">
+  <button id="prev" aria-label="ก่อนหน้า">←</button>
+  <div class="dots" id="dots"></div>
+  <button id="next" aria-label="ถัดไป">→</button>
+</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const dotsBox = document.getElementById('dots');
+  const counter = document.getElementById('counter');
+  let idx = 0;
+  slides.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i === 0 ? ' on' : '');
+    d.onclick = () => go(i);
+    dotsBox.appendChild(d);
+  });
+  const dots = Array.from(dotsBox.children);
+  function go(i) {
+    idx = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach((s, n) => s.classList.toggle('active', n === idx));
+    dots.forEach((d, n) => d.classList.toggle('on', n === idx));
+    counter.textContent = (idx + 1) + ' / ' + slides.length;
+    location.hash = idx + 1;
+  }
+  document.getElementById('prev').onclick = () => go(idx - 1);
+  document.getElementById('next').onclick = () => go(idx + 1);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') go(idx + 1);
+    if (e.key === 'ArrowLeft' || e.key === 'PageUp') go(idx - 1);
+    if (e.key === 'Home') go(0);
+    if (e.key === 'End') go(slides.length - 1);
+  });
+  // swipe
+  let x0 = null;
+  document.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; });
+  document.addEventListener('touchend', e => {
+    if (x0 === null) return;
+    const dx = e.changedTouches[0].clientX - x0;
+    if (Math.abs(dx) > 50) go(idx + (dx < 0 ? 1 : -1));
+    x0 = null;
+  });
+  // deep link: slides.html#3
+  const h = parseInt(location.hash.slice(1), 10);
+  if (h >= 1 && h <= slides.length) go(h - 1);
+</script>
+</body>
+</html>
