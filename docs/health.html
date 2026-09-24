@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="img/favicon.svg">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Project Health — SSD Temperature Monitor">
+<meta property="og:description" content="สถานะสดของโปรเจกต์: release ล่าสุด, CI checks, issues เปิด — ดึงสดจาก GitHub API ทุกครั้งที่เปิดหน้า">
+<meta property="og:image" content="img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<title>Project Health — SSD Temperature Monitor</title>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8;
+    --green: #22c55e; --orange: #f59e0b; --red: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', 'Noto Sans Thai', system-ui, sans-serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 28px 20px 64px; }
+  .crumb { font-size: .9rem; margin-bottom: 14px; }
+  .crumb a { color: var(--accent); text-decoration: none; }
+  h1 { margin: 6px 0 4px; font-size: 1.75rem; }
+  .sub { color: var(--muted); }
+  h2 { font-size: 1.1rem; margin-top: 32px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin: 18px 0; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 16px 18px;
+  }
+  .stat .label { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; }
+  .stat .value { font-size: 1.5rem; font-weight: 800; margin-top: 4px; }
+  .stat .value.ok { color: var(--green); }
+  .stat .value.warn { color: var(--orange); }
+  .stat .value.bad { color: var(--red); }
+  .stat .note { color: var(--muted); font-size: .78rem; margin-top: 2px; }
+  .card { background: var(--surface); border: 1px solid var(--border);
+          border-radius: 14px; padding: 14px 18px; margin: 12px 0; }
+  .item { padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .item:last-child { border-bottom: none; }
+  .item a { color: var(--accent); text-decoration: none; font-weight: 600; }
+  .item .meta { color: var(--muted); font-size: .82rem; margin-top: 2px; }
+  .badge { display: inline-block; font-size: .7rem; font-weight: 700;
+           padding: 2px 10px; border-radius: 999px; margin-right: 6px;
+           vertical-align: middle; }
+  .badge.stable { background: #14532d; color: #86efac; }
+  .badge.pre { background: #164e63; color: #67e8f9; }
+  .badge.fix { background: #7f1d1d; color: #fca5a5; }
+  .badge.enh { background: #14532d; color: #86efac; }
+  .pill { display: inline-block; background: #164e63; color: #67e8f9;
+          font-size: .72rem; font-weight: 700; padding: 2px 10px;
+          border-radius: 999px; margin-left: 8px; vertical-align: middle; }
+  .state { font-size: .74rem; font-weight: 700; padding: 1px 8px;
+           border-radius: 999px; margin-right: 6px; }
+  .state.open { background: #14532d; color: #86efac; }
+  .state.closed { background: #1e293b; color: var(--muted); }
+  .footer { margin-top: 44px; color: var(--muted); font-size: .85rem;
+            border-top: 1px solid var(--border); padding-top: 14px; }
+  .live { color: var(--green); }
+  a { color: var(--accent); }
+  .error { color: var(--orange); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="crumb"><a href="README.html">← คู่มือผู้ใช้</a> · Project Health</div>
+
+  <h1>Project Health <span class="pill">ข้อมูลสดจาก GitHub API</span></h1>
+  <p class="sub">หน้านี้ดึงข้อมูลตรงจาก GitHub ทุกครั้งที่เปิด (ไม่มี server, ไม่เก็บ cache)
+     — เวอร์ชันล่าสุด, ผล CI ของ release, issues ที่ยังเปิด และช่วงเวลาปล่อยเวอร์ชัน</p>
+
+  <div class="grid">
+    <div class="stat">
+      <div class="label">Latest release</div>
+      <div class="value ok" id="st-release">…</div>
+      <div class="note" id="st-release-note">loading</div>
+    </div>
+    <div class="stat">
+      <div class="label">Release CI checks</div>
+      <div class="value" id="st-ci">…</div>
+      <div class="note" id="st-ci-note">loading</div>
+    </div>
+    <div class="stat">
+      <div class="label">Open issues</div>
+      <div class="value" id="st-issues">…</div>
+      <div class="note" id="st-issues-note">bugs + enhancement ที่ยังเปิด</div>
+    </div>
+    <div class="stat">
+      <div class="label">Releases (30 วัน)</div>
+      <div class="value" id="st-cadence">…</div>
+      <div class="note" id="st-cadence-note">ความถี่การอัปเดต</div>
+    </div>
+  </div>
+
+  <h2>Releases ล่าสุด</h2>
+  <div class="card" id="releases"><div class="item meta">loading…</div></div>
+
+  <h2>Open issues</h2>
+  <div class="card" id="issues"><div class="item meta">loading…</div></div>
+
+  <h2>วิธีอ่านหน้านี้</h2>
+  <div class="card">
+    <ul style="margin:0; padding-left:20px">
+      <li><b>Release CI checks</b> = ผล workflow ของ tag ล่าสุด (build + test + sign + checksum) —
+        ถ้าเป็น <span class="ok">success</span> แปลว่าไฟล์ที่ปล่อยผ่านทุกขั้น</li>
+      <li><b>Releases (30 วัน)</b> = จำนวนเวอร์ชันที่ปล่อยในเดือนที่ผ่านมา (ความถี่การดูแล)</li>
+      <li>ทุกตัวเลขดึงสดผ่าน <code>api.github.com</code> (public, unauthenticated) —
+        ถ้า GitHub จำกัดอัตรา หน้าจะขึ้นสถานะ "rate limited" แล้วลองใหม่เอง</li>
+    </ul>
+  </div>
+
+  <div class="footer">
+    <a href="download.html">⬇ ดาวน์โหลด</a> ·
+    <a href="faq.html">FAQ</a> ·
+    <a href="https://github.com/NarDech/ssd-temp-monitor">GitHub</a>
+  </div>
+</div>
+
+<script>
+  const REPO = "NarDech/ssd-temp-monitor";
+  const API = "https://api.github.com/repos/" + REPO;
+  const ghHeaders = { "Accept": "application/vnd.github+json" };
+
+  function el(id) { return document.getElementById(id); }
+  function setStat(id, text, cls) {
+    const v = el(id);
+    v.textContent = text;
+    if (cls) v.className = "value " + cls;
+  }
+  function fmtDate(s) {
+    try { return new Date(s).toLocaleString(); } catch (e) { return s; }
+  }
+  function esc(s) {
+    const d = document.createElement("div");
+    d.textContent = s == null ? "" : String(s);
+    return d.innerHTML;
+  }
+  async function gh(path) {
+    const r = await fetch(API + path, { headers: ghHeaders });
+    if (r.status === 403) throw new Error("rate-limited");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  }
+
+  async function loadLatestRelease() {
+    const rel = await gh("/releases/latest");
+    setStat("st-release", rel.tag_name, "ok");
+    el("st-release-note").textContent = "published " + fmtDate(rel.published_at);
+    // release CI checks: query check-runs for the tag's commit SHA
+    try {
+      const checks = await gh("/commits/" + rel.target_commitish + "/check-runs");
+      const total = checks.total_count;
+      const bad = (checks.check_runs || []).filter(
+        c => c.conclusion && c.conclusion !== "success").length;
+      if (total === 0) {
+        setStat("st-ci", "n/a");
+        el("st-ci-note").textContent = "no check runs recorded";
+      } else if (bad === 0) {
+        setStat("st-ci", "success ✓", "ok");
+        el("st-ci-note").textContent = total + " checks passed";
+      } else {
+        setStat("st-ci", bad + " failed", "bad");
+        el("st-ci-note").textContent = "of " + total + " checks";
+      }
+    } catch (e) {
+      setStat("st-ci", "?", "warn");
+      el("st-ci-note").textContent = e.message === "rate-limited"
+        ? "rate limited" : "unavailable";
+    }
+    return rel;
+  }
+
+  async function loadRecentReleases() {
+    const list = await gh("/releases?per_page=8");
+    const box = el("releases");
+    box.innerHTML = "";
+    const now = Date.now();
+    let recent = 0;
+    for (const rel of list) {
+      if (now - new Date(rel.published_at).getTime() < 30 * 86400000) recent++;
+      const item = document.createElement("div");
+      item.className = "item";
+      const isPre = rel.prerelease;
+      item.innerHTML =
+        '<a href="' + esc(rel.html_url) + '">' + esc(rel.name || rel.tag_name) + '</a>' +
+        ' <span class="badge ' + (isPre ? "pre" : "stable") + '">' +
+        (isPre ? "pre-release" : "stable") + '</span>' +
+        '<div class="meta">published ' + fmtDate(rel.published_at) +
+        ' · ' + (rel.assets || []).length + ' assets</div>';
+      box.appendChild(item);
+    }
+    if (!list.length) box.innerHTML = '<div class="item meta">no releases yet</div>';
+    setStat("st-cadence", recent, recent ? "ok" : "");
+    el("st-cadence-note").textContent = recent ? "releases published" : "none in the last 30 days";
+  }
+
+  async function loadIssues() {
+    const issues = await gh("/issues?state=open&per_page=10");
+    const real = issues.filter(i => !i.pull_request);
+    const box = el("issues");
+    box.innerHTML = "";
+    setStat("st-issues", real.length, real.length ? "warn" : "ok");
+    if (!real.length) {
+      box.innerHTML = '<div class="item"><span class="live">✓ ไม่มี issue ที่ยังเปิด</span>' +
+        '<div class="meta">ทุกปัญหาที่รายงานถูกปิดเรียบร้อย</div></div>';
+      return;
+    }
+    for (const i of real) {
+      const labels = (i.labels || []).map(l => {
+        const cls = /fix|bug/i.test(l.name) ? "fix" : "enh";
+        return '<span class="badge ' + cls + '">' + esc(l.name) + '</span>';
+      }).join(" ");
+      const item = document.createElement("div");
+      item.className = "item";
+      item.innerHTML =
+        '<span class="state open">OPEN</span>' +
+        '<a href="' + esc(i.html_url) + '">#' + i.number + ' ' + esc(i.title) + '</a>' +
+        (labels ? " " + labels : "") +
+        '<div class="meta">opened ' + fmtDate(i.created_at) + ' by ' + esc(i.user.login) + '</div>';
+      box.appendChild(item);
+    }
+  }
+
+  function rateLimited() {
+    setStat("st-release", "rate limited", "warn");
+    el("st-release-note").textContent = "GitHub API limit - ลองเปิดใหม่ภายหลัง";
+    setStat("st-ci", "-", "");
+    setStat("st-issues", "-", "");
+    setStat("st-cadence", "-", "");
+  }
+
+  (async () => {
+    try {
+      const rel = await loadLatestRelease();
+      await Promise.all([loadRecentReleases(), loadIssues()]);
+    } catch (e) {
+      if (e.message === "rate-limited") rateLimited();
+      else {
+        el("st-release-note").innerHTML =
+          '<span class="error">unavailable: ' + esc(e.message) + '</span>';
+      }
+    }
+  })();
+</script>
+</body>
+</html>
