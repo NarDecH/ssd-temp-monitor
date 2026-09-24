@@ -315,6 +315,12 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   กฎ: MenuItem ใช้ string ธรรมดา, เขียน crash log ลง %TEMP% ตั้งแต่
   main() เริ่ม, และตรวจ sanity ด้วย "สตาร์ท → รอ → เช็ค process ยังอยู่"
   เสมอ (ALIVE probe จับได้ก่อนผู้ใช้รายงาน)
+- **ห้ามวางสิ่งที่บล็อกบนเธรดเมนูของ pystray — แม้แต่ MessageBox** —
+  v1.24.2: Lite เรียก MessageBoxW ตรงใน menu callback → modal box บล็อก
+  message loop → tray ค้าง + กล่องปิดไม่ได้ (เกิดซ้ำกับบั๊ก v1.14 ของแอป
+  หลักที่เคยแก้ด้วย _spawn_once) กฎเดียวกันกับ tk: ทุกอย่างที่บล็อก
+  (modal box, subprocess, sleep) ต้องไปเธรดของตัวเอง + มีธงกันเปิดซ้อน
+  และทดสอบด้วย "เปิดกล่อง → ปิดด้วย WM_CLOSE → เช็ค main thread ยังตอบสนอง"
 
 ## สไตล์โค้ด
 

@@ -174,6 +174,11 @@ def run_tray():
     Menu items use STATIC text: pystray's dynamic-text callables fire on
     every menu open and an exception there used to kill icon.run() and
     therefore the whole process (the "lite disappeared" bug).
+
+    Details and Refresh also never run on the menu thread itself - the
+    same rule as the main app: a modal MessageBox (or a 30 s PowerShell
+    call) on pystray's message loop freezes the tray and leaves the box
+    unclosable. Both are offloaded to short-lived worker threads.
     """
     import pystray
 
@@ -186,12 +191,14 @@ def run_tray():
         menu=pystray.Menu(
             pystray.MenuItem(
                 "Details",
-                lambda icon, item: _show_details(state),
+                lambda icon, item: _details_action(state),
                 default=True),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
                 "Refresh",
-                lambda icon, item: poll_once(icon, state)),
+                lambda icon, item: threading.Thread(
+                    target=poll_once, args=(icon, state),
+                    daemon=True).start()),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Exit", lambda icon, item: icon.stop()),
         ),
@@ -237,7 +244,13 @@ def _tooltip_text(temps):
 
 
 def _show_details(state):
-    """Native message box with one line per SSD (menu thread is fine)."""
+    """Native message box with one line per SSD.
+
+    BLOCKS until the user closes the box - only call from a dedicated
+    thread (see _details_action), never from pystray's menu thread: a
+    modal box on the message loop freezes the tray and cannot be closed
+    (the v1.14 main-app bug, repeated in lite v1.24.2).
+    """
     temps = state["temps"]
     if temps:
         body = "\n".join(
@@ -248,6 +261,33 @@ def _show_details(state):
     ctypes.windll.user32.MessageBoxW(
         None, body, APP_TITLE + " - Details",
         0x40 | 0x40000 | 0x10000)   # info | topmost | set foreground
+
+
+_details_lock = threading.Lock()
+_details_open = False
+
+
+def _details_action(state):
+    """Menu callback for Details: show the box on its OWN thread.
+
+    The menu thread returns immediately (tray stays responsive and the
+    box is closable), and a flag prevents stacking a second box while
+    the first one is still open.
+    """
+    global _details_open
+    with _details_lock:
+        if _details_open:
+            return                       # one box at a time
+        _details_open = True
+
+    def work():
+        global _details_open
+        try:
+            _show_details(state)
+        finally:
+            _details_open = False
+
+    threading.Thread(target=work, daemon=True).start()
 
 
 def main():
