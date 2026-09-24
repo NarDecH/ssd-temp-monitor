@@ -45,7 +45,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.22.0"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.23.0"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -369,6 +369,11 @@ KEEP_HISTORY = (SETTINGS["record_history"] if _env_history is None
                 else _env_history == "1")
 POLL_SECONDS = SETTINGS["poll_seconds"]
 
+# About dialog: bounded retry for the "latest release" line so it can
+# never sit at "checking..." forever
+_ABOUT_RELEASE_TIMEOUT = 20       # seconds of retries overall
+_ABOUT_RELEASE_RETRIES = 3        # attempts before the offline note wins
+
 # ---- overheat alert (from settings) ----
 ALERT_THRESHOLD = SETTINGS["alert_threshold"]        # °C
 ALERT_SUSTAIN_SECONDS = SETTINGS["alert_sustain_seconds"]
@@ -377,10 +382,12 @@ ALERT_COOLDOWN_SECONDS = SETTINGS["alert_cooldown_minutes"] * 60
 # ---- light/dark UI colors (follows Windows app theme by default) ----
 UI_DARK = {"bg": "#0f172a", "panel": "#1e293b", "grid": "#1e293b",
            "axis": "#334155", "text": "#e2e8f0", "muted": "#94a3b8",
-           "dim": "#64748b", "entry_bg": "#f8fafc", "head": "#0f172a"}
+           "dim": "#64748b", "entry_bg": "#f8fafc", "head": "#0f172a",
+           "link": "#38bdf8"}
 UI_LIGHT = {"bg": "#f1f5f9", "panel": "#ffffff", "grid": "#e2e8f0",
             "axis": "#94a3b8", "text": "#0f172a", "muted": "#475569",
-            "dim": "#64748b", "entry_bg": "#ffffff", "head": "#0f172a"}
+            "dim": "#64748b", "entry_bg": "#ffffff", "head": "#0f172a",
+            "link": "#0369a1"}
 
 
 def windows_app_is_dark():
@@ -561,6 +568,7 @@ STRINGS = {
         "settings.int_error": "Please enter whole numbers only.",
         "settings.save_error": "Could not write {path}",
         "about.latest.checking": "Latest release: checking…",
+        "about.latest.retrying": "Latest release: retrying…",
         "about.latest.unknown": "Latest release: unknown (offline?)",
         "about.latest.stable_none": "Latest stable: none · newest: {tag} (pre-release)",
         "about.latest.newer": "Latest release: {tag} — update available!",
@@ -717,6 +725,7 @@ STRINGS = {
         "settings.int_error": "กรุณากรอกตัวเลขจำนวนเต็มเท่านั้น",
         "settings.save_error": "เขียนไฟล์ {path} ไม่สำเร็จ",
         "about.latest.checking": "เวอร์ชันล่าสุด: กำลังตรวจ…",
+        "about.latest.retrying": "เวอร์ชันล่าสุด: กำลังตรวจซ้ำ…",
         "about.latest.unknown": "เวอร์ชันล่าสุด: ไม่ทราบ (ออฟไลน์?)",
         "about.latest.stable_none": "stable ล่าสุด: ไม่มี · ใหม่สุด: {tag} (pre-release)",
         "about.latest.newer": "เวอร์ชันล่าสุด: {tag} — มีเวอร์ชันใหม่!",
@@ -873,6 +882,7 @@ STRINGS = {
         "settings.int_error": "整数を入力してください。",
         "settings.save_error": "{path} に書き込めませんでした",
         "about.latest.checking": "最新リリース: 確認中…",
+        "about.latest.retrying": "最新リリース: 再試行中…",
         "about.latest.unknown": "最新リリース: 不明 (オフライン?)",
         "about.latest.stable_none": "stable 最新: なし · 新しい: {tag} (pre-release)",
         "about.latest.newer": "最新リリース: {tag} — 更新があります!",
@@ -1026,6 +1036,7 @@ STRINGS = {
         "settings.int_error": "请只输入整数。",
         "settings.save_error": "无法写入 {path}",
         "about.latest.checking": "最新版本: 检查中…",
+        "about.latest.retrying": "最新版本: 重试中…",
         "about.latest.unknown": "最新版本: 未知 (离线?)",
         "about.latest.stable_none": "stable 最新: 无 · 最新: {tag} (pre-release)",
         "about.latest.newer": "最新版本: {tag} — 有可用更新!",
@@ -1067,7 +1078,8 @@ _event_log.setLevel(logging.INFO)
 try:
     os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
     _handler = logging.handlers.RotatingFileHandler(
-        LOG_FILE, maxBytes=512 * 1024, backupCount=2, encoding="utf-8")
+        LOG_FILE, maxBytes=512 * 1024, backupCount=2, encoding="utf-8",
+    delay=True)   # open lazily: never block startup on a locked file
     _handler.setFormatter(logging.Formatter(
         "%(asctime)s %(levelname)s %(message)s"))
     _event_log.addHandler(_handler)
@@ -2581,6 +2593,22 @@ def geometry_of(win):
         return ""
 
 
+def root_winfo_exists(win):
+    """True while a tk window still exists.
+
+    Safe to call from ANY thread: ``winfo_exists`` normally talks to the
+    Tcl interpreter (forbidden off-thread), so this peeks the internal
+    alive flag instead.
+    """
+    try:
+        alive = getattr(win, "_ssd_alive", None)
+        if alive is not None:
+            return alive.is_set()
+    except Exception:
+        pass
+    return False
+
+
 def apply_geometry(win, key):
     """Restore a saved size/position for this window (best effort)."""
     geo = load_geometry().get(key)
@@ -3549,23 +3577,27 @@ class App:
 
     @staticmethod
     def tk_after(win, ms, fn):
-        """Thread-safe root.after(): marshal the call onto the tk thread.
+        """Thread-safe root.after(): enqueue for the tk thread to run.
 
-        Calls to ``win.after`` from a worker thread are NOT thread-safe in
-        Tcl/Tk and crash the whole process inside tcl86t.dll (the "app
-        closes by itself" crashes in the event log). This schedules the
-        call from the tk thread's own event loop instead.
+        Calls to ``win.after``/``win.event_generate`` from a worker thread
+        are NOT thread-safe in Tcl/Tk: they can raise back into the worker
+        (losing the callback - e.g. About stuck at "checking...") or panic
+        inside tcl86t.dll and hard-crash the process (0x80000003 in the
+        Windows Event Log, still seen on v1.22.0). This version never
+        touches the Tcl interpreter off-thread: it only appends to a plain
+        queue, and the tk thread drains it from its own event loop.
         """
         try:
             win._ssd_after_queue.put((ms, fn))
-            win.event_generate("<<SsdMarshal>>", when="tail")
         except Exception:
-            pass
+            pass  # window never had the marshaler (no _make_tk_after)
 
     def _make_tk_after(self, win):
-        """Install the <<SsdMarshal>> handler on ``win`` (tk thread only)."""
+        """Install the queue drain on ``win`` (must run on the tk thread)."""
         try:
             win._ssd_after_queue = queue.Queue()
+            win._ssd_alive = threading.Event()
+            win._ssd_alive.set()
 
             def _drain():
                 q = win._ssd_after_queue
@@ -3578,9 +3610,12 @@ class App:
                         win.after(ms, fn)
                     except Exception:
                         pass  # window may be closing
-            win.bind("<<SsdMarshal>>", lambda e: _drain())
+                if win._ssd_alive.is_set():
+                    win.after(120, _drain)
+
+            _drain()
         except Exception:
-            pass
+            pass  # a broken marshaler must not stop the window
         return self.tk_after
 
         """Bring an existing top-level window to the front (thread-safe).
@@ -4477,72 +4512,105 @@ class App:
         threading.Thread(target=worker, daemon=True).start()
 
     def _about_window(self):
-        """Small About dialog: version, repo link, update check button."""
+        """Small About dialog: version, repo link, update check button.
+
+        The "latest release" line is fetched on a worker thread. Workers
+        NEVER touch tkinter: they only fill a plain queue that this
+        window's own event loop drains (App.tk_after), and the fetch is
+        retried with a deadline so the line always reaches a final state -
+        never stuck at "checking...".
+        """
         import tkinter as tk
         import webbrowser
 
+        c = ui_palette()
         root = tk.Tk()
         root.title(tr("win.about"))
         root.attributes("-topmost", True)
         root.resizable(False, False)
-        frame = tk.Frame(root, padx=26, pady=14)
+        root.configure(bg=c["bg"])
+        self._make_tk_after(root)
+        frame = tk.Frame(root, padx=26, pady=14, bg=c["bg"])
         frame.pack()
         tk.Label(frame, text=tr("app.title"),
                  font=("Segoe UI", 15, "bold"),
-                 fg="#e2e8f0").pack(anchor="w")
+                 fg=c["head"], bg=c["bg"]).pack(anchor="w")
         tk.Label(frame, text=f"Version {effective_version()}",
                  font=("Segoe UI", 10),
-                 fg="#94a3b8").pack(anchor="w", pady=(2, 6))
+                 fg=c["dim"], bg=c["bg"]).pack(anchor="w", pady=(2, 6))
         repo = SETTINGS.get("github_repo") or DEFAULT_SETTINGS["github_repo"]
         link = tk.Label(frame, text=f"github.com/{repo}",
-                        font=("Segoe UI", 10, "underline"), fg="#38bdf8",
+                        font=("Segoe UI", 10, "underline"),
+                        fg=c.get("link", "#38bdf8"), bg=c["bg"],
                         cursor="hand2")
         link.pack(anchor="w")
         link.bind("<Button-1>",
                   lambda e: webbrowser.open(f"https://github.com/{repo}/releases/latest"))
 
-        # live "latest release" line: fetched on a worker thread, applied on
-        # the tk thread via root.after (no cross-thread tk mutation)
+        # live "latest release" line: workers only enqueue (App.tk_after);
+        # every mutation of the label happens on this tk thread
         latest_lbl = tk.Label(frame, text=tr("about.latest.checking"),
-                              font=("Segoe UI", 10), fg="#94a3b8")
+                              font=("Segoe UI", 10), fg=c["dim"],
+                              bg=c["bg"])
         latest_lbl.pack(anchor="w", pady=(2, 0))
         pre = bool(SETTINGS.get("update_channel") == "pre-release")
 
-        def apply_latest(release):
+        def apply_latest(release, attempt=0):
+            """Show the result - or a final offline note (never stuck)."""
             try:
                 if not release:
-                    latest_lbl.config(text=tr("about.latest.unknown"))
+                    if attempt >= _ABOUT_RELEASE_RETRIES:
+                        latest_lbl.config(
+                            text=tr("about.latest.unknown"), fg=c["muted"])
+                        return
+                    latest_lbl.config(
+                        text=tr("about.latest.retrying"), fg=c["muted"])
                     return
                 tag = str(release.get("tag_name") or "?")
                 if not pre and _is_prerelease(release):
                     latest_lbl.config(
-                        text=tr("about.latest.stable_none", tag=tag))
-                    return
-                if is_newer_version(tag):
+                        text=tr("about.latest.stable_none", tag=tag),
+                        fg=c["text"])
+                elif is_newer_version(tag):
                     latest_lbl.config(
                         text=tr("about.latest.newer", tag=tag),
-                        fg="#fbbf24")
+                        font=("Segoe UI", 10, "bold"), fg=ORANGE)
                 else:
                     latest_lbl.config(
                         text=tr("about.latest.uptodate", tag=tag),
-                        fg="#86efac")
+                        fg=GREEN)
+            except tk.TclError:
+                pass  # window closed while the worker was running
             except Exception:
                 pass
 
         def fetch_latest():
-            rel = fetch_latest_release(repo, include_prereleases=pre)
-            self.tk_after(root, 0, lambda: apply_latest(rel))
+            """Worker: retry the API with a deadline, then hand the result
+            to the tk thread. Must never raise and never touch tkinter."""
+            deadline = time.time() + _ABOUT_RELEASE_TIMEOUT
+            attempt = 0
+            while True:
+                attempt += 1
+                rel = fetch_latest_release(repo,
+                                           include_prereleases=pre)
+                if rel or time.time() >= deadline or not root_winfo_exists(root):
+                    self.tk_after(root, 0,
+                                  lambda r=rel, a=attempt: apply_latest(r, a))
+                    return
+                time.sleep(2)
 
         threading.Thread(target=fetch_latest, daemon=True).start()
 
-        btns = tk.Frame(frame)
+        btns = tk.Frame(frame, bg=c["bg"])
         btns.pack(pady=(12, 0))
         tk.Button(btns, text=tr("about.check_updates"), width=16,
                   command=lambda: self.check_updates_now(),
                   font=("Segoe UI", 9)).pack(side="left", padx=4)
         tk.Button(btns, text=tr("about.close"), width=10, command=root.destroy,
                   font=("Segoe UI", 9)).pack(side="left", padx=4)
+        root.protocol("WM_DELETE_WINDOW", root.destroy)
         root.bind("<Escape>", lambda e: root.destroy())
+        root.bind("<Return>", lambda e: root.destroy())
         root.mainloop()
 
     def _notify(self, message, title):
@@ -4726,6 +4794,11 @@ class App:
             self._shutdown_requested = True
         if graph_open:
             self._graph_done.wait(3.0)  # graph thread closes itself; bounded
+        else:
+            # no graph window, but other tk threads (About/Stats/24h/Settings)
+            # may still be in mainloop(); give them a moment to notice the
+            # shutdown flag and leave their Tcl interpreters behind cleanly
+            time.sleep(0.3)
         # flush any unrecorded history points so nothing is lost
         if KEEP_HISTORY:
             with self._lock:
@@ -4891,6 +4964,30 @@ def run_unattended_update():
     sys.exit(0)  # frees the mutex; the shim then runs the silent install
 
 
+def _watch_icon_loop(app):
+    """Keep the tray message loop alive even if a native crash ends it.
+
+    pystray's Win32 message loop runs inside ``icon.run()``; when that
+    call returns unexpectedly (native Tcl crash, explorer restart edge
+    cases) the old behavior was a silently dead process. The watchdog
+    logs the exit, hides any leftover tk windows via its shutdown flag
+    and re-runs the loop, so the tray survives transient native faults.
+    """
+    while True:
+        try:
+            app.icon.run()
+        except Exception:
+            log_event("tray_loop_error")
+        with app._lock:
+            if app._shutdown_requested:
+                return  # a normal quit - do not resurrect the tray
+            app._shutdown_requested = True
+        log_event("tray_loop_restarted")
+        time.sleep(1.0)
+        with app._lock:
+            app._shutdown_requested = False
+
+
 def main():
     if not acquire_single_instance():
         # Duplicate start: exit code 2. A message box is shown for human
@@ -4913,7 +5010,10 @@ def main():
     cleanup_stale_mei()
     heal_autostart_value()
     begin_healthy_session()
-    App().run()
+    app = App()
+    threading.Thread(target=_watch_icon_loop, args=(app,),
+                     daemon=True).start()
+    app.run()
 
 
 if __name__ == "__main__":

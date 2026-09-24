@@ -3,6 +3,35 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.23.0] — 2026-09-24
+
+### Fixed
+
+- 🛑 **กด Settings แล้วโปรแกรมปิดตัว (v1.22.0 ยังเหลือ crash)** — เจอ crash
+  ใหม่ใน Windows Event Log (tcl86t.dll 0x80000003) จากการเปิดหน้าต่าง tk
+  สองบานพร้อมกัน (เช่น About ค้างไว้ + กด Settings): Tcl interpreter สองตัว
+  ถูกใช้ข้ามเธรด และ `tk_after` รอบก่อนยังเรียก `event_generate` ข้ามเธรดอยู่
+  — เขียน marshaler ใหม่ที่ **ไม่แตะ Tcl จากเธรดอื่นเลย** (เข้าคิวล้วน ๆ +
+  drain loop บนเธรด tk เอง หยุดเองเมื่อหน้าต่างปิด) และเพิ่ม **watchdog**
+  ที่รี-รัน tray message loop ถ้าถูก crash แบบ native ปิดทิ้ง (log
+  `tray_loop_restarted`) — crash อีกก็ไม่ดับทั้งแอป
+- 📴 **หน้า About ค้าง "Latest release: checking…"** — callback ที่หายไป
+  พร้อม crash (จากปัญหาเดียวกัน) + ไม่มี retry เมื่อเน็ตล่มชั่วคราว —
+  worker ตอนนี้ retry จนถึง deadline 20 วิ แล้วขึ้น "offline" ให้เสมอ
+  (คีย์ใหม่ `about.latest.retrying` ครบ 4 ภาษา) และเช็ค "หน้าต่างยังอยู่ไหม"
+  ด้วย flag แทนการเรียก `winfo_exists` ข้ามเธรด
+- 🎨 **หน้า About อ่านไม่ออกบนธีมสว่าง** — สีข้อความเคย hardcode สำหรับธีม
+  มืด (`#e2e8f0`, `#94a3b8`) ทำให้แทบมองไม่เห็น — ใช้พาเลตต์ธีมปัจจุบันทั้ง
+  หน้า (เพิ่มสี `link` ในพาเลตต์) และไฮไลต์ผลเช็คเวอร์ชัน: **มีเวอร์ชันใหม่ =
+  ส้มตัวหนา**, เวอร์ชันตรง = เขียว, offline = สี muted
+
+### Changed
+
+- Rotating log เปิดไฟล์แบบ lazy (delay=True) — startup ไม่ติดถ้าไฟล์ log
+  ถูกล็อกโดยโปรแกรมอื่น
+- ตอน quit ให้เวลาหน้าต่าง tk อื่น ๆ ปิดตัวก่อน 0.3 วิ ลดโอกาส Tcl panic
+  ตอนปิดโปรแกรม
+
 ## [1.22.0] — 2026-09-24
 
 ### Added

@@ -75,7 +75,21 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
-  <h2><span class="ver-badge">v1.22.0</span> <span class="date">24 กันยายน 2026</span></h2>
+  <h2><span class="ver-badge">v1.23.0</span> <span class="date">24 กันยายน 2026</span></h2>
+
+  <h3><span class="pill fix-pill">Fixed</span></h3>
+  <ul>
+    <li>🛑 <strong>กด Settings แล้วโปรแกรมปิดตัว</strong> — crash native ใน tcl86t.dll (0x80000003) จาก Tcl interpreter สองตัวถูกใช้ข้ามเธรดเมื่อเปิดหน้าต่างสองบานพร้อมกัน + <code>tk_after</code> ยังเรียก <code>event_generate</code> ข้ามเธรด — marshaler ใหม่ไม่แตะ Tcl จากเธรดอื่นเลย (queue + drain loop บนเธรด tk) และมี watchdog รี-รัน tray loop ถ้าถูก crash ปิดทิ้ง (log <code>tray_loop_restarted</code>)</li>
+    <li>📴 <strong>About ค้าง "checking…"</strong> — callback หายพร้อม crash + ไม่มี retry เมื่อเน็ตล่ม — worker retry ถึง deadline 20 วิ แล้วขึ้น offline ให้เสมอ (คีย์ <code>about.latest.retrying</code> ครบ 4 ภาษา) เช็คหน้าต่างด้วย flag แทน <code>winfo_exists</code> ข้ามเธรด</li>
+    <li>🎨 <strong>About อ่านไม่ออกบนธีมสว่าง</strong> — สีเคย hardcode สำหรับธีมมืด — ใช้พาเลตต์ทั้งหน้า (มีสี <code>link</code> ใหม่) และไฮไลต์ผลเช็คเวอร์ชัน: มีเวอร์ชันใหม่ = ส้มหนา, ตรง = เขียว, offline = muted</li>
+  </ul>
+
+  <h3><span class="pill chg-pill">Changed</span></h3>
+  <ul>
+    <li>📝 Rotating log เปิดไฟล์แบบ lazy — startup ไม่ติดถ้า log ถูกล็อก · quit ให้เวลาหน้าต่าง tk ปิดตัว 0.3 วิ ลด Tcl panic ตอนปิดโปรแกรม</li>
+  </ul>
+
+  <h2><span class="ver-badge old">v1.22.0</span> <span class="date">24 กันยายน 2026</span></h2>
 
   <h3><span class="pill add-pill">Added</span></h3>
   <ul>

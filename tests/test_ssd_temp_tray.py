@@ -2853,3 +2853,132 @@ class TestStatsReset:
         assert "_confirm_reset_stats" in \
             inspect.getsource(m.App._settings_window)
         assert "reset_stats" in inspect.getsource(m.App._reset_stats_window)
+
+
+# ---------------------------------------------------------------------------
+# v1.23.0 - About crash fix, non-blocking marshaler, retrying release line
+# ---------------------------------------------------------------------------
+class TestAboutCrashFix:
+    """v1.22.0 still crashed in tcl86t.dll: tk_after() called
+    event_generate() off-thread, which raises back into the worker (About
+    stuck at "checking...") or panics natively (Settings click crash)."""
+
+    def test_tk_after_never_touches_tcl_off_thread(self):
+        import inspect
+        src = inspect.getsource(m.App.tk_after)
+        assert "win.event_generate(" not in src
+        assert "win.after(" not in src       # no Tcl call on the win object
+        assert "_ssd_after_queue.put" in src
+
+    def test_tk_after_noop_without_marshaler(self):
+        # a window that never got _make_tk_after must not raise
+        class FakeWin:
+            pass
+        m.App.tk_after(FakeWin(), 0, lambda: None)   # must not raise
+
+    def test_root_winfo_exists_reads_flag_not_tcl(self):
+        import types
+        win = types.SimpleNamespace(
+            _ssd_alive=threading.Event())
+        win._ssd_alive.set()
+        assert m.root_winfo_exists(win) is True
+        win._ssd_alive.clear()
+        assert m.root_winfo_exists(win) is False
+        # no flag at all -> conservative False (worker stops polling)
+        assert m.root_winfo_exists(types.SimpleNamespace()) is False
+
+    def test_drain_loop_stops_when_window_dies(self, app):
+        """The 120 ms drain loop must end once the window is gone."""
+        import queue as _q
+        import types
+        win = types.SimpleNamespace()
+        calls = []
+
+        def fake_after(ms, fn=None):
+            calls.append(ms)
+            raise RuntimeError("interp gone")
+
+        win.after = fake_after
+        win._ssd_alive = threading.Event()
+        win._ssd_alive.set()
+        win._ssd_after_queue = _q.Queue()
+        win._ssd_after_queue.put((0, lambda: None))
+        win.bind = lambda *a, **k: None
+        app._make_tk_after(win)     # must swallow, not raise
+        assert win._ssd_after_queue.empty()   # the queued item was consumed
+        assert calls                      # drain actually ran
+        win._ssd_alive.clear()
+
+    def test_about_uses_theme_palette_not_hardcoded_colors(self):
+        import inspect
+        src = inspect.getsource(m.App._about_window)
+        assert "ui_palette()" in src
+        for dead in ("#e2e8f0", "#94a3b8", "#fbbf24", "#86efac"):
+            assert dead not in src, dead
+        assert "c[\"head\"]" in src and "c[\"bg\"]" in src
+
+    def test_about_highlights_newer_release(self):
+        import inspect
+        src = inspect.getsource(m.App._about_window)
+        assert "is_newer_version(tag)" in src
+        assert "ORANGE" in src and "GREEN" in src
+
+    def test_about_release_line_never_stuck(self):
+        import inspect
+        src = inspect.getsource(m.App._about_window)
+        assert "_ABOUT_RELEASE_TIMEOUT" in src
+        assert "_ABOUT_RELEASE_RETRIES" in src
+        assert "about.latest.retrying" in src
+        assert "root_winfo_exists" in src
+
+    def test_about_retrying_i18n_parity(self):
+        for lang in m.UI_LANGUAGES:
+            assert "about.latest.retrying" in m.STRINGS[lang], lang
+
+    def test_palettes_have_link_color(self):
+        assert m.UI_LIGHT["link"].startswith("#")
+        assert m.UI_DARK["link"].startswith("#")
+        assert m.UI_LIGHT["link"] != m.UI_DARK["link"]
+
+    def test_watchdog_restarts_tray_loop_after_native_death(self, app,
+                                                             monkeypatch):
+        """If icon.run() dies unexpectedly the watchdog must restart it
+        (and exit cleanly on a real quit)."""
+        a = app
+        a._shutdown_requested = False
+        runs = {"n": 0}
+
+        class FakeIcon:
+            def run(self):
+                runs["n"] += 1
+                if runs["n"] == 1:
+                    raise RuntimeError("native crash")
+                with a._lock:
+                    a._shutdown_requested = True   # second run: user quits
+
+        a.icon = FakeIcon()
+        monkeypatch.setattr(m.time, "sleep", lambda s: None)
+        m._watch_icon_loop(a)
+        assert runs["n"] == 2
+
+    def test_watchdog_no_restart_on_normal_quit(self, app):
+        a = app
+        a._shutdown_requested = True
+        runs = {"n": 0}
+
+        class FakeIcon:
+            def run(self):
+                runs["n"] += 1
+
+        a.icon = FakeIcon()
+        m._watch_icon_loop(a)      # returns after the single run()
+        assert runs["n"] == 1
+
+    def test_main_spawns_watchdog_thread(self):
+        import inspect
+        src = inspect.getsource(m.main)
+        assert "_watch_icon_loop" in src
+
+    def test_about_retry_constants(self):
+        assert 0 < m._ABOUT_RELEASE_RETRIES <= 10
+        assert 5 <= m._ABOUT_RELEASE_TIMEOUT <= 120

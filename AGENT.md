@@ -286,6 +286,16 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   (`App.tk_after`) ไม่งั้น Tcl panic ใน tcl86t.dll (0x80000003 ใน Event Log)
   (4) ไฟล์ข้อมูลสำคัญต้อง persist ทันทีที่มีข้อมูลใหม่ อย่ารอ quit —
   crash ทีหลังคือข้อมูลหายตลอด (v1.22.0: ไฟล์ 24h ว่างเพราะเขียนเฉพาะตอน quit)
+- **Tcl ห้ามถูกแตะจากเธรดอื่นแม้แต่บรรทัดเดียว — event_generate ก็ไม่ได้** —
+  v1.22.0 ยังแตกเพราะ `tk_after` เรียก `event_generate` ข้ามเธรด: บางที raise
+  กลับเป็น Python exception (callback หาย → About ค้าง "checking…") บางที
+  panic ใน tcl86t.dll เป็น native crash (0x80000003) ที่จับด้วย try/except
+  ไม่ได้ — ยิ่งเปิดสองหน้าต่างพร้อมกัน (About + Settings) ยิ่งชนง่าย เพราะ
+  Tcl interpreter มีต่อเธรด กฎ: marshal = เข้า `queue.Queue` ล้วน ๆ + drain
+  loop บนเธรด tk เอง (จะวนซ้ำก็ใช้ `win.after` บนเธรดตัวเอง) และเช็ค
+  "หน้าต่างยังอยู่ไหม" จากเธรดอื่นด้วย flag (`root_winfo_exists`) ไม่ใช่
+  `winfo_exists` (v1.23.0) เสริมได้อีกชั้น: watchdog รอบ `icon.run()`
+  (`_watch_icon_loop`) ให้ tray ฟื้นจาก native crash ที่ปิด message loop
 
 ## สไตล์โค้ด
 
