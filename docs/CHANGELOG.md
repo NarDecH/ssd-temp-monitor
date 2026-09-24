@@ -3,6 +3,22 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.24.5] — 2026-09-24
+
+### Fixed
+
+- 🛟 **Watchdog เปิดแอปใน Session 0 (มองไม่เห็น tray)** — task แบบ SYSTEM
+  สร้างโปรเซสใน session 0 ที่ tray icon ไม่แสดง — เปลี่ยนเป็น interactive
+  session ของผู้ใช้ที่ล็อกอิน (`LogonType Interactive`) ซึ่งถูกต้องสำหรับ
+  แอป tray (แอปขึ้น UAC ขอสิทธิ์เองอยู่แล้ว)
+
+### Added
+
+- 🧩 **Lite: แจ้งเตือนเมื่อไม่ได้รัน admin + ปุ่มแก้ในเมนู** — ถ้า SMART คืน
+  ค่า null ต่อเนื่อง 3 นาที (อาการของโปรเซสที่ไม่ elevated) จะโชว์ balloon
+  toast หนึ่งครั้ง พร้อมเมนูใหม่ "Restart as administrator" (relaunch ผ่าน
+  UAC แล้วออกจาก instance เดิม)
+
 ## [1.24.4] — 2026-09-24
 
 ### Fixed

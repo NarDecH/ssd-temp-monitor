@@ -321,6 +321,12 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   หลักที่เคยแก้ด้วย _spawn_once) กฎเดียวกันกับ tk: ทุกอย่างที่บล็อก
   (modal box, subprocess, sleep) ต้องไปเธรดของตัวเอง + มีธงกันเปิดซ้อน
   และทดสอบด้วย "เปิดกล่อง → ปิดด้วย WM_CLOSE → เช็ค main thread ยังตอบสนอง"
+- **scheduled task สำหรับแอป tray ต้องเป็น interactive session เท่านั้น** —
+  v1.24.5: watchdog task แบบ SYSTEM เปิดแอปใน session 0 → tray icon
+  มองไม่เห็น แม้โปรเซสยังรัน (เช็คจาก `tasklist` คอลัมน์ Session =
+  `Services`) กฎ: task ที่สตาร์ท GUI ต้องใช้ `LogonType Interactive`
+  กับ user ที่ล็อกอิน และหลังติดตั้ง task ต้องเช็ค Session ของโปรเซส
+  ที่ task เปิดด้วย ไม่ใช่แค่ "โปรเซสมีอยู่"
 
 ## สไตล์โค้ด
 

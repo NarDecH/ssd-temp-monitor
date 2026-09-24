@@ -164,6 +164,9 @@ def make_digit_icon(temp):
 
 
 # ---- tray plumbing (pystray when available) --------------------------------
+_NULL_WARN_SECONDS = 180    # all-null counters for 3 min -> toast once
+
+
 def run_tray():
     """Build the pystray icon + menu and run its message loop.
 
@@ -182,7 +185,8 @@ def run_tray():
     """
     import pystray
 
-    state = {"temps": [], "hot": None}
+    state = {"temps": [], "hot": None,
+             "null_since": None, "null_warned": False}
 
     icon = pystray.Icon(
         "ssd_temp_lite",
@@ -199,10 +203,14 @@ def run_tray():
                 lambda icon, item: threading.Thread(
                     target=poll_once, args=(icon, state),
                     daemon=True).start()),
+            pystray.MenuItem(
+                "Restart as administrator",
+                lambda icon, item: _restart_elevated()),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Exit", lambda icon, item: icon.stop()),
         ),
     )
+    _current_icon["icon"] = icon
 
     def poller():
         while True:
@@ -216,7 +224,12 @@ def run_tray():
 
 
 def poll_once(icon, state):
-    """One SMART read + repaint. Never raises: the tray must survive."""
+    """One SMART read + repaint. Never raises: the tray must survive.
+
+    A run of ALL-null counters (disk visible, no numbers) for longer
+    than _NULL_WARN_SECONDS is the signature of a non-elevated process:
+    toast the user once and offer "Restart as administrator" in the menu.
+    """
     try:
         temps = read_temps()
     except Exception as exc:
@@ -224,6 +237,19 @@ def poll_once(icon, state):
         temps = []
     valid = [t["temp"] for t in temps if t["temp"] is not None]
     hot = max(valid) if valid else None
+    now = time.time()
+    if hot is None and temps:
+        if state.get("null_since") is None:
+            state["null_since"] = now
+        elif (now - state["null_since"] >= _NULL_WARN_SECONDS
+              and not state.get("null_warned")):
+            state["null_warned"] = True
+            _log("SMART null for " + str(int(_NULL_WARN_SECONDS)) + "s - "
+                 "warning about elevation")
+            _notify_no_admin()
+    else:
+        state["null_since"] = None
+        state["null_warned"] = False
     state["temps"] = temps
     state["hot"] = hot
     try:
@@ -232,6 +258,20 @@ def poll_once(icon, state):
         _log("poll ok: hot=" + repr(hot) + " disks=" + str(len(temps)))
     except Exception as exc:
         _log("repaint failed: " + repr(exc))
+
+
+def _notify_no_admin():
+    """Balloon toast pointing at the "Restart as administrator" item."""
+    try:
+        state_icon = _current_icon.get("icon")
+        if state_icon is not None:
+            state_icon.notify(
+                APP_TITLE + ": no temperature data for "
+                + str(int(_NULL_WARN_SECONDS / 60)) + " minutes - use\n"
+                "'Restart as administrator' in the menu.",
+                title=APP_TITLE)
+    except Exception:
+        pass
 
 
 def _tooltip_text(temps):
@@ -265,6 +305,26 @@ def _show_details(state):
 
 _details_lock = threading.Lock()
 _details_open = False
+_current_icon = {"icon": None}    # for the balloon toast
+
+
+def _restart_elevated():
+    """Relaunch Lite elevated (UAC), then let the current instance exit.
+
+    The elevated copy is a NEW process: it hits the single-instance mutex
+    only after this one exits, so we stop the tray right after spawning.
+    """
+    _log("menu: restart as administrator")
+    try:
+        exe = sys.executable
+        ret = ctypes.windll.shell32.ShellExecuteW(
+            None, "runas", exe, None, None, 1)   # SW_SHOWNORMAL
+        if ret > 32:
+            time.sleep(0.3)
+            os._exit(0)                          # hard-exit: free the mutex
+        _log("restart declined/failed ret=" + str(ret))
+    except Exception as exc:
+        _log("restart failed: " + repr(exc))
 
 
 def _details_action(state):
