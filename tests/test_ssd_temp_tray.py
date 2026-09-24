@@ -2765,10 +2765,22 @@ class TestStatsReset:
     def test_reset_stats_deletes_all_stat_files(self, app, tmp_path,
                                                 monkeypatch):
         files = self._make_files(tmp_path, monkeypatch)
+        # rotated backups hold old counters too - they must go as well
+        (tmp_path / "app.log.1").write_text(
+            "2026-09-20 08:00:00,000 INFO overheat_alert\n")
+        (tmp_path / "app.log.2").write_text(
+            "2026-09-19 08:00:00,000 INFO overheat_alert\n")
         removed = m.reset_stats(app)
-        assert removed == 5
-        for key in ("health", "log", "smart", "h24", "h24s"):
+        assert removed == 7
+        for key in ("health", "smart", "h24", "h24s"):
             assert not files[key].exists(), key
+        # the current log may be re-created with the marker line, but the
+        # counters read from it must be zero (the v1.23.1 bug: the old
+        # log survived the reset, so "Overheat alerts this week" stayed)
+        assert m.count_log_events("overheat_alert", days=7) == 0
+        assert m.count_log_events("smart_alert", days=7) == 0
+        for name in ("app.log.1", "app.log.2"):
+            assert not (tmp_path / name).exists(), name
 
     def test_reset_stats_reseeds_h24_from_fine_history(
             self, app, tmp_path, monkeypatch):
@@ -2797,12 +2809,24 @@ class TestStatsReset:
         assert a._last_smart_alert == 0.0
         assert a._smart_state == {}
 
-    def test_reset_stats_missing_files_counted_as_zero(
-            self, app, tmp_path, monkeypatch):
+    def test_reset_stats_idempotent_counters(self, app, tmp_path,
+                                             monkeypatch):
+        """Two resets in a row still leave zeroed counters (the log file
+        itself is re-created by the marker line each time)."""
         self._make_files(tmp_path, monkeypatch)
         a = app
-        assert m.reset_stats(a) == 5
-        assert m.reset_stats(a) == 0      # second run: nothing to delete
+        assert m.reset_stats(a) >= 5
+        m.reset_stats(a)
+        assert m.count_log_events("overheat_alert", days=7) == 0
+
+    def test_reset_stats_log_reopen_allows_later_writes(
+            self, app, tmp_path, monkeypatch):
+        """After the reset the module must keep logging (fresh handler)."""
+        self._make_files(tmp_path, monkeypatch)
+        a = app
+        m.reset_stats(a)
+        m.log_event("after_reset_probe")
+        assert m.count_log_events("after_reset_probe", days=1) == 1
 
     def test_reset_stats_keeps_fine_history(self, app, tmp_path,
                                             monkeypatch):
@@ -3024,3 +3048,100 @@ class TestAboutCrashFix:
     def test_about_retry_constants(self):
         assert 0 < m._ABOUT_RELEASE_RETRIES <= 10
         assert 5 <= m._ABOUT_RELEASE_TIMEOUT <= 120
+
+
+# ---------------------------------------------------------------------------
+# v1.24.0 - reset actually zeroes counters, log viewer, lite program
+# ---------------------------------------------------------------------------
+class TestResetStatsV124:
+    """v1.23.1 bug: the counters read the log + its rotated .1/.2 files,
+    but reset_stats only deleted the log - and on Windows the open
+    RotatingFileHandler handle made even THAT deletion fail (removed=4).
+    "Overheat alerts this week" therefore never reset."""
+
+    def test_reset_includes_rotated_backups(self, app, tmp_path,
+                                            monkeypatch):
+        files = self._files(tmp_path, monkeypatch)
+        for suffix in ("", ".1", ".2"):
+            (tmp_path / ("app.log" + suffix)).write_text(
+                "2026-09-20 08:00:00,000 INFO overheat_alert\n")
+        removed = m.reset_stats(app)
+        for suffix in (".1", ".2"):
+            assert not (tmp_path / ("app.log" + suffix)).exists()
+        assert removed >= 6
+
+    def _files(self, tmp_path, monkeypatch):
+        health = tmp_path / "health_daily.csv"
+        logf = tmp_path / "app.log"
+        smart = tmp_path / "smart_state.json"
+        h24 = tmp_path / "h24.csv"
+        h24s = tmp_path / "h24.json"
+        for f in (health, smart, h24, h24s):
+            f.write_text("{}", encoding="utf-8")
+        logf.write_text("2026-09-24 08:00:00,000 INFO overheat_alert\n",
+                        encoding="utf-8")
+        monkeypatch.setattr(m, "HEALTH_LOG_FILE", str(health))
+        monkeypatch.setattr(m, "LOG_FILE", str(logf))
+        monkeypatch.setattr(m, "DATA_DIR", str(tmp_path))
+        monkeypatch.setattr(m, "HISTORY24_FILE", str(h24))
+        monkeypatch.setattr(m, "HISTORY24_STATE", str(h24s))
+        return {"log": logf, "health": health}
+
+    def test_reopen_handler_detaches_and_recreates(self, tmp_path,
+                                                   monkeypatch):
+        """_reopen_log_handler must swap the module handler so the old
+        file handle is released (Windows cannot delete open files)."""
+        real_log = m.LOG_FILE               # remember: monkeypatch hides it
+        testlog = tmp_path / "swap.log"
+        monkeypatch.setattr(m, "LOG_FILE", str(testlog))
+        old = m._handler
+        m._reopen_log_handler()
+        try:
+            assert m._handler is not old       # swapped to a fresh handler
+            m.log_event("probe_after_reopen")
+            assert testlog.exists()            # new handler writes to LOG_FILE
+        finally:
+            # give the module a healthy handler on the REAL log again
+            m._reopen_log_handler(real_log)
+
+    def test_reset_works_twice_in_a_row(self, app, tmp_path, monkeypatch):
+        """Second reset must also find zero counters (fresh handler each
+        time - no stale handle, no leak)."""
+        self._files(tmp_path, monkeypatch)
+        m.reset_stats(app)
+        m.log_event("overheat_alert")           # one new alert after reset
+        assert m.count_log_events("overheat_alert", days=1) == 1
+        m.reset_stats(app)
+        assert m.count_log_events("overheat_alert", days=1) == 0
+
+    def test_log_viewer_wired(self):
+        import inspect
+        assert "show_log" in inspect.getsource(m.App._build_menu)
+        src = inspect.getsource(m.App._log_window)
+        assert "_spawn_once" not in src
+        assert "tk_after" in src                 # queue-only marshal
+        assert "mainloop" in src                 # own thread + tk
+        assert "mainloop" not in inspect.getsource(m.App.show_log)
+
+    def test_log_viewer_i18n_parity(self):
+        keys = ("menu.log", "win.log", "log.filter", "log.search",
+                "log.reload", "log.copy", "log.open", "log.hint",
+                "log.lines", "log.filter.all", "log.filter.errors",
+                "log.filter.warnings", "log.filter.overheat",
+                "log.filter.smart", "log.filter.updates")
+        for lang in m.UI_LANGUAGES:
+            for key in keys:
+                assert key in m.STRINGS[lang], (lang, key)
+            assert "{n}" in m.STRINGS[lang]["log.lines"]
+
+    def test_lite_program_exists_and_is_self_contained(self):
+        from pathlib import Path
+        p = Path(__file__).resolve().parents[1] / "lite" / "ssd_temp_lite.lpr"
+        assert p.exists(), "lite program missing"
+        src = p.read_text(encoding="utf-8")
+        # no LCL / Forms dependency: pure FPC + Win32
+        assert "Forms" not in src and "Interfaces" not in src
+        assert "ShellAPI" in src and "TProcess" in src
+        # same SMART query as the main app
+        assert "Get-StorageReliabilityCounter" in src
+        assert "ssd_temp_lite" in src

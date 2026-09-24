@@ -45,7 +45,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.23.1"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.24.0"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -476,6 +476,22 @@ STRINGS = {
                                 "temperature graph are kept."),
         "stats.reset_done": "All statistics have been cleared.",
         "menu.reset_stats": "Reset statistics",
+        "menu.log": "Error log",
+        "win.log": "SSD Temperature - Error log",
+        "log.filter": "Show:",
+        "log.filter.all": "all",
+        "log.filter.errors": "errors",
+        "log.filter.warnings": "warnings",
+        "log.filter.overheat": "overheat",
+        "log.filter.smart": "SMART",
+        "log.filter.updates": "updates",
+        "log.search": "Search:",
+        "log.reload": "Reload",
+        "log.copy": "Copy all",
+        "log.open": "Open file",
+        "log.hint": ("Live view of ssd_temp_monitor.log - red = error, "
+                     "orange = warning. Auto-refreshes every 2 s."),
+        "log.lines": "{n} lines shown",
         "menu.disks": "Show all disks (debug)",
         "menu.diagnostics": "Copy diagnostics to clipboard",
         "menu.refresh": "Refresh now",
@@ -577,6 +593,7 @@ STRINGS = {
         "about.close": "Close",
         "common.close": "Close",
         "common.cancel": "Cancel",
+        "common.copy": "Copy",
         "selftest.title": "Update self-test",
         "selftest.pass": (
             "ALL PASSED ({n}/{n} checks)\n\n"
@@ -636,6 +653,22 @@ STRINGS = {
                                 "ไฟล์ที่ส่งออกไว้และกราฟอุณหภูมิย่อยจะยังอยู่"),
         "stats.reset_done": "ล้างสถิติทั้งหมดเรียบร้อยแล้ว",
         "menu.reset_stats": "ล้างสถิติ",
+        "menu.log": "บันทึกข้อผิดพลาด",
+        "win.log": "SSD Temperature - บันทึกข้อผิดพลาด",
+        "log.filter": "แสดง:",
+        "log.filter.all": "ทั้งหมด",
+        "log.filter.errors": "ข้อผิดพลาด",
+        "log.filter.warnings": "คำเตือน",
+        "log.filter.overheat": "อุณหภูมิเกิน",
+        "log.filter.smart": "SMART",
+        "log.filter.updates": "การอัปเดต",
+        "log.search": "ค้นหา:",
+        "log.reload": "โหลดใหม่",
+        "log.copy": "คัดลอกทั้งหมด",
+        "log.open": "เปิดไฟล์",
+        "log.hint": ("มุมมองสดของ ssd_temp_monitor.log - แดง = ข้อผิดพลาด, "
+                     "ส้ม = คำเตือน รีเฟรชเองทุก 2 วินาที"),
+        "log.lines": "แสดง {n} บรรทัด",
         "menu.disks": "ดูดิสก์ทั้งหมด (debug)",
         "menu.diagnostics": "คัดลอกข้อมูลวินิจฉัย",
         "menu.refresh": "รีเฟรชเดี๋ยวนี้",
@@ -734,6 +767,7 @@ STRINGS = {
         "about.close": "ปิด",
         "common.close": "ปิด",
         "common.cancel": "ยกเลิก",
+        "common.copy": "คัดลอก",
         "selftest.title": "ทดสอบระบบอัปเดต",
         "selftest.pass": (
             "ผ่านทั้งหมด ({n}/{n} รายการ)\n\n"
@@ -793,6 +827,22 @@ STRINGS = {
                                 "と詳細グラフは残ります。"),
         "stats.reset_done": "すべての統計を消去しました。",
         "menu.reset_stats": "統計をリセット",
+        "menu.log": "エラーログ",
+        "win.log": "SSD Temperature - エラーログ",
+        "log.filter": "表示:",
+        "log.filter.all": "すべて",
+        "log.filter.errors": "エラー",
+        "log.filter.warnings": "警告",
+        "log.filter.overheat": "過熱",
+        "log.filter.smart": "SMART",
+        "log.filter.updates": "更新",
+        "log.search": "検索:",
+        "log.reload": "再読込",
+        "log.copy": "すべてコピー",
+        "log.open": "ファイルを開く",
+        "log.hint": ("ssd_temp_monitor.log のライブビュー - 赤=エラー、"
+                     "橙=警告。2秒ごとに自動更新。"),
+        "log.lines": "{n} 行表示",
         "menu.disks": "全ディスクを表示 (デバッグ)",
         "menu.diagnostics": "診断情報をクリップボードへコピー",
         "menu.refresh": "今すぐ更新",
@@ -891,6 +941,7 @@ STRINGS = {
         "about.close": "閉じる",
         "common.close": "閉じる",
         "common.cancel": "キャンセル",
+        "common.copy": "コピー",
         "selftest.title": "更新システムの自己テスト",
         "selftest.pass": ("すべて合格 ({n}/{n} 項目)\n\n"
                           "バージョン比較 · リリース資産選択 · チェックサム検証\n"
@@ -948,6 +999,22 @@ STRINGS = {
                                 "SMART 基线。已导出的文件与细粒度温度图会保留。"),
         "stats.reset_done": "已清空所有统计数据。",
         "menu.reset_stats": "重置统计",
+        "menu.log": "错误日志",
+        "win.log": "SSD Temperature - 错误日志",
+        "log.filter": "显示:",
+        "log.filter.all": "全部",
+        "log.filter.errors": "错误",
+        "log.filter.warnings": "警告",
+        "log.filter.overheat": "过热",
+        "log.filter.smart": "SMART",
+        "log.filter.updates": "更新",
+        "log.search": "搜索:",
+        "log.reload": "重新加载",
+        "log.copy": "全部复制",
+        "log.open": "打开文件",
+        "log.hint": ("ssd_temp_monitor.log 实时视图 - 红=错误，"
+                     "橙=警告。每 2 秒自动刷新。"),
+        "log.lines": "显示 {n} 行",
         "menu.disks": "显示全部磁盘 (调试)",
         "menu.diagnostics": "复制诊断信息到剪贴板",
         "menu.refresh": "立即刷新",
@@ -1045,6 +1112,7 @@ STRINGS = {
         "about.close": "关闭",
         "common.close": "关闭",
         "common.cancel": "取消",
+        "common.copy": "复制",
         "selftest.title": "更新系统自检",
         "selftest.pass": ("全部通过 ({n}/{n} 项)\n\n"
                           "版本比较 · release 资产选择 · 校验和验证\n"
@@ -1424,7 +1492,8 @@ def reset_stats(app=None):
     """Clear all collected statistics - "factory-fresh" counters.
 
     Removes the daily health log (min/avg/max, wear and disk usage
-    history), the event log (overheat/SMART alert counters), the SMART
+    history), the event log and its rotated .1/.2 backups (overheat/
+    SMART alert counters), the SMART
     baseline (so already-known counters re-alert from scratch) and the
     24 h history. The fine history and saved graphs/CSV exports are NOT
     touched. Runs on the tray app instance when given: the in-memory
@@ -1434,9 +1503,22 @@ def reset_stats(app=None):
     Returns the number of files that were actually deleted.
     """
     removed = 0
-    files = (HEALTH_LOG_FILE, LOG_FILE, os.path.join(DATA_DIR,
-                                                     SMART_STATE_FILE),
-             HISTORY24_FILE, HISTORY24_STATE)
+    files = [HEALTH_LOG_FILE,
+             LOG_FILE,
+             LOG_FILE + ".1",
+             LOG_FILE + ".2",
+             os.path.join(DATA_DIR, SMART_STATE_FILE),
+             HISTORY24_FILE,
+             HISTORY24_STATE]
+    # close + detach the log handler so the log files can be deleted:
+    # on Windows a file with an open handle cannot be removed, which is
+    # exactly why the current log (and its alert counters) survived every
+    # reset before v1.24.0
+    real_log = os.path.realpath(LOG_FILE)
+    for f in files:
+        if os.path.realpath(f) == real_log:
+            _reopen_log_handler()
+            break
     for f in files:
         try:
             os.remove(f)
@@ -1464,6 +1546,34 @@ def reset_stats(app=None):
         except Exception:
             pass
     return removed
+
+
+def _reopen_log_handler(path=None):
+    """Close and re-create the rotating file handler.
+
+    On Windows a file cannot be deleted while a process holds an open
+    handle to it. reset_stats() closes the module-level handler, deletes
+    the log files, then calls this to start a fresh log - the next reset
+    works the same way (no stale handle, no leak).
+    """
+    global _handler
+    path = path or LOG_FILE
+    try:
+        old = _handler
+        _event_log.removeHandler(old)
+        try:
+            old.close()
+        except Exception:
+            pass
+        new = logging.handlers.RotatingFileHandler(
+            path, maxBytes=512 * 1024, backupCount=2, encoding="utf-8",
+            delay=True)
+        new.setFormatter(logging.Formatter(
+            "%(asctime)s %(levelname)s %(message)s"))
+        _event_log.addHandler(new)
+        _handler = new
+    except Exception:
+        pass
 
 
 def format_week_stats(stats):
@@ -3211,6 +3321,7 @@ class App:
             pystray.MenuItem(tr("menu.reset_stats"), _safe(self.show_reset_stats)),
             pystray.MenuItem(tr("menu.disks"), _safe(self.show_disks)),
             pystray.MenuItem(tr("menu.diagnostics"), _safe(self.copy_diagnostics)),
+            pystray.MenuItem(tr("menu.log"), _safe(self.show_log)),
             pystray.MenuItem(tr("menu.refresh"), _safe(self.refresh)),
             pystray.MenuItem(tr("menu.updates"), _safe(self.check_updates_now)),
             pystray.MenuItem(tr("menu.selftest"), _safe(self.run_update_selftest_ui)),
@@ -3356,6 +3467,193 @@ class App:
 
     def show_reset_stats(self, *_):
         self._spawn_once("_reset_open", self._reset_stats_window)
+
+    def show_log(self, *_):
+        self._spawn_once("_log_open", self._log_window)
+
+    def _log_window(self):
+        """Live viewer for the rotating event log (own thread + tk).
+
+        Shows every line of ssd_temp_monitor.log with a level filter
+        (errors / warnings / alerts / updates), a text search, copy and
+        reload buttons. A background worker tails the file every 2 s and
+        hands new lines to the tk thread through the queue-only marshaler
+        (App.tk_after) - it never touches Tcl off-thread and stops as
+        soon as the window is gone (root_winfo_exists flag).
+        """
+        import tkinter as tk
+        from tkinter import ttk
+
+        c = ui_palette()
+        root = tk.Tk()
+        root.title(tr("win.log"))
+        root.attributes("-topmost", True)
+        root.resizable(False, False)
+        self._make_tk_after(root)
+        apply_geometry(root, "log")
+        bar = tk.Frame(root, bg=c["bg"])
+        bar.pack(fill="x", padx=12, pady=(10, 4))
+
+        filters = (
+            (tr("log.filter.all"), lambda lvl, ln: True),
+            (tr("log.filter.errors"),
+             lambda lvl, ln: lvl in ("ERROR", "CRITICAL")),
+            (tr("log.filter.warnings"), lambda lvl, ln: lvl == "WARNING"),
+            (tr("log.filter.overheat"),
+             lambda lvl, ln: "overheat_alert" in ln),
+            (tr("log.filter.smart"), lambda lvl, ln: "smart_alert" in ln),
+            (tr("log.filter.updates"),
+             lambda lvl, ln: any(k in ln for k in
+                                 ("update", "rollback", "startup",
+                                  "shutdown"))),
+        )
+
+        def _match(ln):
+            """Line -> (level, shown?) honoring filter + search box."""
+            parts = ln.split(" ", 2)
+            lvl = parts[1] if len(parts) > 1 else "INFO"
+            if not filters[fvar.current()][1](lvl, ln):
+                return None
+            needle = search_var.get().strip().lower()
+            if needle and needle not in ln.lower():
+                return None
+            return lvl
+
+        tk.Label(bar, text=tr("log.filter"), font=("Segoe UI", 9),
+                 fg=c["text"], bg=c["bg"]).pack(side="left")
+        fvar = tk.StringVar(value=filters[0][0])
+        fbox = ttk.Combobox(bar, textvariable=fvar, width=12,
+                            state="readonly",
+                            values=tuple(f[0] for f in filters))
+        fbox.pack(side="left", padx=(6, 12))
+        tk.Label(bar, text=tr("log.search"), font=("Segoe UI", 9),
+                 fg=c["text"], bg=c["bg"]).pack(side="left")
+        search_var = tk.StringVar()
+        search_box = tk.Entry(bar, textvariable=search_var, width=18,
+                              font=("Segoe UI", 9), fg=c["text"],
+                              bg=c["entry_bg"], insertbackground=c["text"],
+                              relief="solid", bd=1)
+        search_box.pack(side="left", padx=(6, 0))
+
+        count_lbl = tk.Label(root, text="", font=("Segoe UI", 8),
+                             fg=c["dim"], bg=c["bg"])
+        count_lbl.pack(fill="x", padx=12)
+
+        box = tk.Text(root, width=104, height=26, wrap="none",
+                      font=("Consolas", 9), relief="solid", bd=1,
+                      fg=c["text"], bg=c["entry_bg"],
+                      insertbackground=c["text"], state="disabled")
+        box.pack(padx=12, pady=(2, 4))
+        for tag, color in (("err", RED), ("warn", ORANGE),
+                           ("head", c["text"]), ("muted", c["dim"])):
+            box.tag_configure(tag, foreground=color)
+        box.tag_configure("err", font=("Consolas", 9, "bold"))
+
+        all_lines = []          # raw log text (for Copy all), bounded
+        state = {"reload": False}
+
+        def append_lines(chunk):
+            """Apply filter/search to new lines and insert (tk thread)."""
+            all_lines.extend(chunk.splitlines())
+            del all_lines[:-2000]                  # bound the copy buffer
+            box.config(state="normal")
+            shown = 0
+            for ln in chunk.splitlines():
+                lvl = _match(ln)
+                if lvl is None:
+                    continue
+                tag = ("err" if lvl in ("ERROR", "CRITICAL")
+                       else "warn" if lvl == "WARNING" else ())
+                box.insert("end", ln + "\n", tag)
+                shown += 1
+            box.see("end")
+            box.config(state="disabled")
+            count_lbl.config(text=tr("log.lines", n=shown))
+
+        def _refilter(*_):
+            """Filter/search changed -> re-filter everything shown."""
+            box.config(state="normal")
+            box.delete("1.0", "end")
+            shown = 0
+            for ln in all_lines:
+                lvl = _match(ln)
+                if lvl is None:
+                    continue
+                tag = ("err" if lvl in ("ERROR", "CRITICAL")
+                       else "warn" if lvl == "WARNING" else ())
+                box.insert("end", ln + "\n", tag)
+                shown += 1
+            box.see("end")
+            box.config(state="disabled")
+            count_lbl.config(text=tr("log.lines", n=shown))
+
+        fvar.trace_add("write", _refilter)
+        search_var.trace_add("write", _refilter)
+
+        def _copy_all():
+            text = "\n".join(all_lines)
+            root.clipboard_clear()
+            root.clipboard_append(text)
+            self._notify(tr("notify.copied"), tr("app.title"))
+
+        def _open_file():
+            try:
+                os.startfile(LOG_FILE)      # noqa: S606 - by design
+            except OSError:
+                pass
+
+        def _reload():
+            all_lines.clear()
+            box.config(state="normal")
+            box.delete("1.0", "end")
+            box.config(state="disabled")
+            state["reload"] = True          # tail worker re-reads from 0
+
+        btns = tk.Frame(root, bg=c["bg"])
+        btns.pack(pady=(2, 10))
+        for text, cmd, w in ((tr("log.reload"), _reload, 10),
+                             (tr("log.copy"), _copy_all, 12),
+                             (tr("log.open"), _open_file, 12),
+                             (tr("common.close"), root.destroy, 10)):
+            tk.Button(btns, text=text, width=w, font=("Segoe UI", 9),
+                      command=cmd).pack(side="left", padx=4)
+        tk.Label(root, text=tr("log.hint"), font=("Segoe UI", 8),
+                 fg=c["dim"], bg=c["bg"]).pack(pady=(0, 8))
+        root.protocol("WM_DELETE_WINDOW", root.destroy)
+        root.bind("<Return>", lambda e: root.destroy())
+        root.bind("<Escape>", lambda e: root.destroy())
+
+        def tail():
+            """Worker: tail the log file, marshal new lines to the tk
+            thread. Never touches Tcl; exits when the window is gone."""
+            pos = 0
+            while True:
+                if not root_winfo_exists(root):
+                    return
+                try:
+                    size = os.path.getsize(LOG_FILE)
+                    if state["reload"]:
+                        state["reload"] = False
+                        pos = 0
+                    if size < pos:              # rotated / truncated
+                        pos = 0
+                    if size > pos:
+                        with open(LOG_FILE, encoding="utf-8",
+                                  errors="replace") as f:
+                            f.seek(pos)
+                            chunk = f.read()
+                            pos = f.tell()
+                        self.tk_after(root, 0,
+                                      lambda ch=chunk: append_lines(ch))
+                except OSError:
+                    pos = 0
+                time.sleep(2.0)
+
+        threading.Thread(target=tail, daemon=True).start()
+        root.mainloop()
+        geo = geometry_of(root)
+        if geo:
+            save_geometry({"log": geo})
 
     def _reset_stats_window(self):
         """Standalone confirmation window for "Reset statistics".
@@ -3609,7 +3907,10 @@ class App:
                     try:
                         win.after(ms, fn)
                     except Exception:
-                        pass  # window may be closing
+                        # the Tcl interpreter is gone -> tell background
+                        # workers (log tail, About fetch) to stop polling
+                        win._ssd_alive.clear()
+                        return
                 if win._ssd_alive.is_set():
                     win.after(120, _drain)
 

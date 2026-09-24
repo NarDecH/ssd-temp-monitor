@@ -301,6 +301,13 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   บน tray เดียว ทำให้ tray เสถียรไม่ได้เลย (mainloop ของ Win32 รันสองเธรด
   ไม่ได้) กฎ: ก่อนเพิ่มเลเยอร์ครอบ lifecycle ให้นับว่า message loop ถูก
   start กี่ครั้ง และเขียนเทสอ่านซอร์ส `main()` กันการเรียกซ้ำ
+- **"ล้างข้อมูล" ที่อ่านจาก log ต้องคิดถึง 3 ชั้นเสมอ** — v1.24.0: Reset
+  statistics เคยลบ log ไม่ได้เลยเพราะ (1) RotatingFileHandler ถือ handle
+  เปิด → Windows ห้ามลบไฟล์ที่เปิดอยู่ (PermissionError ถูก except กลืน)
+  (2) ตัวนับอ่านจากไฟล์ rotated .1/.2 ด้วย (3) log เองถูกสร้างใหม่ด้วย
+  marker line หลังลบ — กฎ: ก่อนลบไฟล์ที่ตัวเองเปิดค้าง ต้อง close/detach
+  handler ก่อน (`_reopen_log_handler`) และเทสต้อง assert "ตัวนับ = 0"
+  ไม่ใช่ "ไฟล์หาย" เพราะไฟล์อาจถูกสร้างใหม่ทันที
 
 ## สไตล์โค้ด
 

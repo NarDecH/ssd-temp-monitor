@@ -75,7 +75,20 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
-  <h2><span class="ver-badge">v1.23.1</span> <span class="date">24 กันยายน 2026</span></h2>
+  <h2><span class="ver-badge">v1.24.0</span> <span class="date">24 กันยายน 2026</span></h2>
+
+  <h3><span class="pill fix-pill">Fixed</span></h3>
+  <ul>
+    <li>♻️ <strong>Reset statistics ไม่รีเซ็ตตัวนับแจ้งเตือน</strong> — ตัวนับอ่านจาก log + ไฟล์ rotated .1/.2 แต่ reset ลบไม่ครบ แถมบน Windows ลบ log ที่ handler ถือ handle เปิดอยู่ไม่ได้ — ตอนนี้ปิด handler → ลบรวมไฟล์ rotated → สร้าง handler ใหม่ ตัวนับเป็นศูนย์จริง (มีเทส reset ซ้ำ)</li>
+  </ul>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>📜 <strong>หน้า Error log viewer</strong> (เมนู tray) — มุมมองสดของ event log: กรองระดับ/ช่องค้นหา/คัดลอกทั้งหมด/เปิดไฟล์, error แดงหนา warning ส้ม, tail ทุก 2 วิ ผ่าน marshaler แบบไม่แตะ Tcl ข้ามเธรด · ครบ 4 ภาษา</li>
+    <li>🧩 <strong>SSD Temp Lite</strong> — โปรแกรมแยกพอร์ตเทเบิล <a href="lite.html">lite/ssd_temp_lite.lpr</a> (Pascal ไฟล์เดียว, Typhon/Lazarus): อุณหภูมิ SSD เรียลไทม์บน tray เกณฑ์สีเดียวกัน ไม่พึ่ง LCL/Python พร้อมหน้าอธิบายการ build + คำสั่งสำคัญ</li>
+  </ul>
+
+  <h2><span class="ver-badge old">v1.23.1</span> <span class="date">24 กันยายน 2026</span></h2>
 
   <h3><span class="pill fix-pill">Fixed</span></h3>
   <ul>
