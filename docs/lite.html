@@ -97,8 +97,9 @@ python lite/ssd_temp_lite.py      # เปิด shell แบบ admin เพื
   <h2>การใช้งาน</h2>
   <div class="card">
     <ul>
-      <li><span class="warn">สำคัญ:</span> การอ่าน SMART ต้องสิทธิ์ admin — คลิกขวาที่ exe → <b>Run as administrator</b> (ถ้าไม่มีสิทธิ์ไอคอนจะโชว์ <code>--</code>)</li>
+      <li><span class="ok">อัตโนมัติ:</span> การอ่าน SMART ต้องสิทธิ์ admin — Lite <b>ขึ้น UAC ขอสิทธิ์เองตอนเปิด</b> (ถ้ากดยกเลิกไอคอนจะโชว์ <code>--</code> และ Details อธิบายเหตุผล)</li>
       <li>รันพร้อมแอปหลักได้ (mutex คนละตัวกัน) — เหมาะกับเครื่องสำรอง/เครื่องที่อยากได้แค่ตัวเลข</li>
+      <li>มี crash log ที่ <code>%TEMP%\ssd_temp_lite.log</code> เผื่อเกิดปัญหา</li>
       <li>Portable จริง ๆ: ไม่เขียน config, ไม่สร้างไฟล์ข้อมูล, ปิดแล้วจบ</li>
     </ul>
   </div>

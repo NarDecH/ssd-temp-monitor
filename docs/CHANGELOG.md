@@ -3,6 +3,16 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.24.4] — 2026-09-24
+
+### Fixed
+
+- 🌡️ **Lite โชว์ "--" แทนอุณหภูมิ** — Windows คืนค่า SMART เป็น null เมื่อ
+  ไม่ได้รันแบบ admin (เห็นดิสก์แต่ไม่บอกอุณหภูมิ) — Lite ขึ้น **UAC relaunch**
+  เองเหมือนแอปหลักแล้ว (`ensure_admin`): รันจากที่ไหนก็ได้ ถ้าผู้ใช้กดยกเลิก
+  UAC จะยังรันต่อด้วย "--" + Details อธิบายเหตุผล — พิสูจน์จาก log จริง:
+  `elevation accepted → poll ok: hot=35`
+
 ## [1.24.3] — 2026-09-24
 
 ### Fixed

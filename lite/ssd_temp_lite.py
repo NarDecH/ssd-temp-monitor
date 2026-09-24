@@ -290,6 +290,48 @@ def _details_action(state):
     threading.Thread(target=work, daemon=True).start()
 
 
+def is_admin():
+    """True when this process can read SMART reliability counters."""
+    try:
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except Exception:
+        return False
+
+
+def ensure_admin():
+    """Relaunch self elevated (UAC) when needed - like the main app.
+
+    Without admin, Get-StorageReliabilityCounter returns null counters:
+    Lite runs fine, sees the disk, but the icon shows "--" forever (the
+    "no temperature" report). The frozen exe already asks via its UAC
+    manifest; this covers plain source runs and any build without it.
+
+    Returns True when the current process is (now) elevated. If the user
+    declines the UAC prompt we keep running unprivileged - the icon shows
+    "--" and Details explains why.
+    """
+    if is_admin():
+        return True
+    _log("not elevated - asking UAC to relaunch")
+    try:
+        params = " ".join(f'"{a}"' for a in sys.argv[1:])
+        target = sys.executable
+        if getattr(sys, "frozen", False):
+            exe = target                       # the frozen lite exe itself
+        else:
+            exe = target
+            params = f'"{os.path.abspath(__file__)}" ' + params
+        ret = ctypes.windll.shell32.ShellExecuteW(
+            None, "runas", exe, params, None, 1)   # SW_SHOWNORMAL
+        if ret > 32:
+            _log("elevation accepted - handing over")
+            sys.exit(0)                        # the elevated copy takes over
+        _log("elevation declined/failed ret=" + str(ret))
+    except Exception as exc:
+        _log("elevation failed: " + repr(exc))
+    return False
+
+
 def main():
     _log("lite starting (pystray=" + str(pystray is not None) + ")")
     # single instance guard: same mutex pattern as the main app
@@ -303,6 +345,8 @@ def main():
         _log("FATAL: pystray not available")
         print("pystray is required: pip install pystray pillow", file=sys.stderr)
         sys.exit(1)
+
+    ensure_admin()      # UAC relaunch when not elevated (decline = keep going)
 
     try:
         run_tray()
