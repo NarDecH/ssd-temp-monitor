@@ -3,7 +3,7 @@
 ; Requires dist\ssd_temp_monitor.exe (run build_exe.bat first)
 
 #define MyAppName "SSD Temperature Monitor"
-#define MyAppVersion "1.24.9"
+#define MyAppVersion "1.25.0"
 #define MyAppExeName "ssd_temp_monitor.exe"
 #define MyMutex "Local\SSDTempMonitor_SingleInstance"
 

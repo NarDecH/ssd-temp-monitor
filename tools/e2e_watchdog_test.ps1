@@ -66,9 +66,10 @@ function Get-AppCount {
     @(Get-Process -Name $procName -ErrorAction SilentlyContinue).Count
 }
 function Start-AppViaWmi {
-    # same spawn method as watchdog.ps1 (outside any task job object)
+    # same spawn method AND flags as watchdog.ps1 (outside any task job
+    # object, silent when a duplicate mutex lingers)
     Invoke-CimMethod -ClassName Win32_Process -MethodName Create `
-        -Arguments @{ CommandLine = "`"$exe`"" } | Out-Null
+        -Arguments @{ CommandLine = "`"$exe`" --duplicate-silent" } | Out-Null
 }
 function Wait-AppCount([int]$min, [int]$timeout) {
     $deadline = (Get-Date).AddSeconds($timeout)

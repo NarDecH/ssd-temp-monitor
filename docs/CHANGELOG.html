@@ -75,7 +75,22 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
-  <h2><span class="ver-badge">v1.24.9</span> <span class="date">25 กันยายน 2026</span></h2>
+  <h2><span class="ver-badge">v1.25.0</span> <span class="date">26 กันยายน 2026</span></h2>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>🧪 <strong>CI job <code>watchdog-e2e</code></strong> — ทุก push บน main ติดตั้ง installer จริงบน Windows runner แล้วรัน E2E watchdog (kill → ต้องถูกปลุก, marker → ต้องเงียบ) — ห่วงโซ่ watchdog พังไม่ผ่าน build อีกต่อไป</li>
+    <li>📂 <strong>เมนู "บันทึกการทำงานของ Watchdog"</strong> — เปิด <code>watchdog.log</code> ด้วย Notepad จากเธรด worker ถ้ายังไม่มีไฟล์จะแจ้งเตือนสุภาพแทน error</li>
+  </ul>
+
+  <h3><span class="pill fix-pill">Fixed</span></h3>
+  <ul>
+    <li>💀 <strong>ซอมบี้หลังกด Exit ถือ mutex</strong> — <code>icon.stop()</code> บางเคสไม่ปิดโปรเซส (พบจริง: poll thread เขียน history ต่ออีก 10+ นาที) ไอคอนหายแต่เปิด exe ขึ้น dialog "already running" ตลอด — quit() ตั้ง hard-exit timer 3 วินาทีก่อนหยุด tray</li>
+    <li>🔕 <strong>watchdog spawn เงียบ</strong> — ช่วง crash storm ที่ mutex เก่ายังค้าง instance ที่ถูกปลุกแพ้ mutex แล้วเด้ง dialog ทุกรอบ — spawn ด้วย <code>--duplicate-silent</code> แล้ว</li>
+    <li>🗜️ <strong>watchdog.log ไม่ถูกลบตอนหมุนเวียน</strong> — เก็บไว้เป็น <code>watchdog.log.old</code> หนึ่งไฟล์ เมนูเปิดตัวเก่าให้ด้วย</li>
+  </ul>
+
+  <h2><span class="ver-badge old">v1.24.9</span> <span class="date">25 กันยายน 2026</span></h2>
 
   <h3><span class="pill add-pill">Added</span></h3>
   <ul>

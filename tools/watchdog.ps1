@@ -35,7 +35,10 @@ function Write-WdLog([string]$msg) {
         }
         $log = Join-Path $dir "watchdog.log"
         if ((Test-Path $log) -and ((Get-Item $log).Length -gt 512KB)) {
-            Set-Content -Path $log -Value "" -Encoding UTF8   # simple size cap
+            # rotate: keep ONE old part (the app's "Watchdog log" menu item
+            # opens the current file or this .old part) instead of silently
+            # truncating evidence
+            Move-Item -Force $log ($log + ".old")
         }
         Add-Content -Path $log -Encoding UTF8 `
             ("{0} {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $msg)
@@ -80,8 +83,14 @@ if ($updating) {
 # as the app lives (later triggers fail with 0x800710E0) and the 5-minute
 # ExecutionTimeLimit KILLS the restarted app. Creating the process via WMI
 # parents it to WmiPrvSE instead, escaping the task's job entirely.
+#
+# --duplicate-silent: when a previous instance is mid-death (native crash
+# storm) its mutex can outlive it for a few seconds - a duplicate start
+# then pops the "already running" MessageBox on the user's desktop, over
+# and over with every restart attempt. The flag makes duplicates exit
+# quietly (exit code 2); a real fresh start ignores the extra argument.
 $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create `
-    -Arguments @{ CommandLine = "`"$exe`"" }
+    -Arguments @{ CommandLine = "`"$exe`" --duplicate-silent" }
 if ($r.ReturnValue -eq 0) {
     Write-WdLog "spawned app (pid $($r.ProcessId))"
 } else {

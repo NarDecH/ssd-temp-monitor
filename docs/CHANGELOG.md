@@ -3,6 +3,28 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.25.0] — 2026-09-26
+
+### Added
+
+- 🧪 **CI job `watchdog-e2e`** — ทุก push บน main จะติดตั้ง installer จริงบน
+  Windows runner แล้วรัน E2E watchdog (kill → ต้องถูกปลุก, marker → ต้องเงียบ)
+  ทำให้ห่วงโซ่ watchdog พังไม่ผ่าน build อีกต่อไป
+- 📂 **เมนู "บันทึกการทำงานของ Watchdog"** — เปิด `watchdog.log` ด้วย Notepad
+  (จากเธรด worker) ถ้ายังไม่มีไฟล์จะแจ้งเตือนสุภาพแทน error
+
+### Fixed
+
+- 💀 **ซอมบี้หลังกด Exit ถือ mutex** — `icon.stop()` บางเคสไม่ปิดโปรเซส
+  (พบจริง: poll thread ยังเขียน history อีก 10+ นาทีหลัง Exit) ผลคือไอคอน
+  หายแต่ดับเบิลคลิก exe ขึ้น dialog "already running" ตลอด — quit() ตั้ง
+  hard-exit timer 3 วินาทีก่อนหยุด tray (exit ปกติไม่ได้รับผลกระทบ)
+- 🔕 **watchdog spawn เงียบ** — ช่วง crash storm ที่ mutex เก่ายังค้าง
+  instance ที่ถูกปลุกใหม่จะแพ้ mutex แล้วเด้ง dialog ใส่ผู้ใช้ทุกรอบ —
+  ตอนนี้ spawn ด้วย `--duplicate-silent` จึงไม่มี dialog ระหว่าง storm
+- 🗜️ **watchdog.log ไม่ถูกลบทิ้งตอนหมุนเวียน** — เปลี่ยนจาก truncate เป็น
+  เก็บไว้เป็น `watchdog.log.old` หนึ่งไฟล์ (เมนูเปิดตัวเก่าให้ด้วย)
+
 ## [1.24.9] — 2026-09-25
 
 ### Added

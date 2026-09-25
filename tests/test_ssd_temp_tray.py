@@ -3245,6 +3245,19 @@ class TestInstallerWatchdogWiring:
         assert "Win32_Process" in src and "Invoke-CimMethod" in src
         assert "Start-Process" not in src
 
+    def test_watchdog_spawns_duplicates_silently(self):
+        """A crashing instance's mutex can outlive it for seconds: every
+        watchdog restart attempt then lost the mutex race and popped the
+        "already running" MessageBox on the user's desktop (v1.24.9 bug).
+        The spawn must pass --duplicate-silent so duplicates exit with
+        code 2 quietly; a fresh start ignores the extra argument."""
+        src = self._read("tools", "watchdog.ps1")
+        spawn_idx = src.index("Invoke-CimMethod")
+        assert "--duplicate-silent" in src[spawn_idx:]
+        # and the E2E gate spawns the same way
+        e2e = self._read("tools", "e2e_watchdog_test.ps1")
+        assert "--duplicate-silent" in e2e
+
     def test_launcher_runs_powershell_hidden(self):
         src = self._read("tools", "watchdog_launcher.vbs")
         assert "watchdog.ps1" in src
@@ -3374,6 +3387,20 @@ class TestWatchdogExitMarkerSetting:
         app.quit()
         assert not marker.exists()
 
+    def test_quit_arms_hard_exit_only_when_frozen(self):
+        """icon.stop() can leave a zombie that keeps the single-instance
+        mutex -> every exe double-click pops the "already running" box.
+        quit() must arm a bounded os._exit timer, but ONLY in the frozen
+        exe (a timer under pytest would kill the test process)."""
+        import inspect
+        src = inspect.getsource(m.App.quit)
+        timer_idx = src.index("threading.Timer")
+        frozen_idx = src.index('getattr(sys, "frozen", False)')
+        stop_idx = src.index("self.icon.stop()")
+        # guard first, timer armed before stop(), hard exit inside it
+        assert frozen_idx < timer_idx < stop_idx
+        assert "os._exit" in src
+
     def test_settings_dialog_shows_state_and_saves_choice(self):
         src = (PROJECT_ROOT / "ssd_temp_tray.py").read_text(encoding="utf-8")
         assert 'tr("settings.watchdog_marker")' in src
@@ -3456,3 +3483,77 @@ class TestE2EWatchdogScript:
         assert "IsInRole" in src                        # elevated only
         assert "SSDTempMonitor Watchdog" in src         # real task preflight
         assert "not installed" in src                   # helpful failure
+
+    def test_ci_runs_the_e2e_gate(self):
+        """CI must exercise the E2E on a real Windows runner so a broken
+        watchdog chain fails the build instead of waiting for a user."""
+        yml = self._read(".github", "workflows", "ci.yml")
+        assert "watchdog-e2e:" in yml
+        assert "e2e_watchdog_test.ps1" in yml
+        job = yml[yml.index("watchdog-e2e:"):yml.index("installer-test:")]
+        assert "needs: build" in job
+        assert "always()" in job                        # cleanup even on fail
+
+
+class TestWatchdogLogMenu:
+    """The tray menu opens the watchdog decision log (Notepad, worker
+    thread), and watchdog.ps1 rotates to one .old part instead of
+    silently truncating evidence."""
+
+    @staticmethod
+    def _read(*parts):
+        from pathlib import Path
+        return (Path(__file__).resolve().parents[1].joinpath(*parts)).read_text(
+            encoding="utf-8")
+
+    def test_menu_item_and_worker_thread(self):
+        import inspect
+        assert hasattr(m.App, "open_watchdog_log")
+        src = inspect.getsource(m.App.open_watchdog_log)
+        assert "threading.Thread" in src                # never block the menu
+        helper = inspect.getsource(m._open_watchdog_log)
+        assert "notepad.exe" in helper
+        assert "CREATE_NO_WINDOW" in helper
+        assert ".old" in helper                         # rotated part too
+
+    def test_open_prefers_log_then_old_else_notify(self, app, monkeypatch,
+                                                   tmp_path):
+        opened = []
+        monkeypatch.setattr(m.subprocess, "Popen",
+                            lambda cmd, **k: opened.append(cmd))
+        notified = []
+        monkeypatch.setattr(app, "_notify",
+                            lambda msg, title: notified.append(msg))
+        log = tmp_path / "watchdog.log"
+        monkeypatch.setattr(m, "WATCHDOG_LOG_FILE", str(log))
+        # neither file exists -> friendly notification, no error
+        m._open_watchdog_log(app)
+        assert not opened and len(notified) == 1
+        # current log exists -> opened in notepad
+        log.write_text("spawned app (pid 1)", encoding="utf-8")
+        m._open_watchdog_log(app)
+        assert opened and opened[-1][0] == "notepad.exe"
+        assert opened[-1][1] == str(log)
+        # only the rotated .old part exists -> opened instead
+        log.unlink()
+        old = tmp_path / "watchdog.log.old"
+        old.write_text("older", encoding="utf-8")
+        m._open_watchdog_log(app)
+        assert opened[-1][1] == str(old)
+
+    def test_menu_key_all_languages(self):
+        old = m.SETTINGS.get("language")
+        try:
+            for lang in ("en", "th", "ja", "zh"):
+                m.SETTINGS["language"] = lang
+                assert m.tr("menu.watchdog_log") != "menu.watchdog_log"
+                assert m.tr("notify.watchdog_log_missing") \
+                    != "notify.watchdog_log_missing"
+        finally:
+            m.SETTINGS["language"] = old
+
+    def test_watchdog_log_rotation_keeps_old_part(self):
+        src = self._read("tools", "watchdog.ps1")
+        assert "Move-Item" in src and ".old" in src
+        # no silent truncation of the previous log
+        assert 'Set-Content -Path $log -Value ""' not in src

@@ -46,7 +46,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.24.9"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.25.0"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -87,6 +87,25 @@ GEOMETRY_FILE = os.path.join(DATA_DIR, "window_geometry.json")
 # Removed on every successful start so the watchdog resumes watching.
 WATCHDOG_SUPPRESS_FILE = os.path.join(DATA_DIR, "watchdog_skip.flag")
 WATCHDOG_TASK_NAME = "SSDTempMonitor Watchdog"
+# Decision log written by tools\watchdog.ps1 (restarts, guard skips,
+# spawn failures - never the healthy no-op minutes).
+WATCHDOG_LOG_FILE = os.path.join(DATA_DIR, "watchdog.log")
+
+
+def _open_watchdog_log(app):
+    """Open the watchdog decision log (or its rotated .old part) in
+    Notepad. The file is written by tools\\watchdog.ps1, so it may not
+    exist yet on a healthy machine - say so instead of erroring.
+    Runs on a worker thread; must not touch the tray or block the menu."""
+    for path in (WATCHDOG_LOG_FILE, WATCHDOG_LOG_FILE + ".old"):
+        if os.path.isfile(path):
+            subprocess.Popen(["notepad.exe", path],
+                             creationflags=subprocess.CREATE_NO_WINDOW)
+            return
+    try:
+        app._notify(tr("notify.watchdog_log_missing"), tr("app.title"))
+    except Exception:
+        pass
 
 
 def _watchdog_task_detail():
@@ -532,6 +551,10 @@ STRINGS = {
         "stats.reset_done": "All statistics have been cleared.",
         "menu.reset_stats": "Reset statistics",
         "menu.log": "Error log",
+        "menu.watchdog_log": "Watchdog log",
+        "notify.watchdog_log_missing":
+            "No watchdog log yet - it appears after the first restart or "
+            "skip event.",
         "win.log": "SSD Temperature - Error log",
         "log.filter": "Show:",
         "log.filter.all": "all",
@@ -716,6 +739,10 @@ STRINGS = {
         "stats.reset_done": "ล้างสถิติทั้งหมดเรียบร้อยแล้ว",
         "menu.reset_stats": "ล้างสถิติ",
         "menu.log": "บันทึกข้อผิดพลาด",
+        "menu.watchdog_log": "บันทึกการทำงานของ Watchdog",
+        "notify.watchdog_log_missing":
+            "ยังไม่มี watchdog log — จะเกิดหลังเหตุการณ์แรก "
+            "(ปลุกกลับ / ข้ามงาน)",
         "win.log": "SSD Temperature - บันทึกข้อผิดพลาด",
         "log.filter": "แสดง:",
         "log.filter.all": "ทั้งหมด",
@@ -897,6 +924,9 @@ STRINGS = {
         "stats.reset_done": "すべての統計を消去しました。",
         "menu.reset_stats": "統計をリセット",
         "menu.log": "エラーログ",
+        "menu.watchdog_log": "ウォッチドッグログ",
+        "notify.watchdog_log_missing":
+            "ウォッチドッグログはまだありません。",
         "win.log": "SSD Temperature - エラーログ",
         "log.filter": "表示:",
         "log.filter.all": "すべて",
@@ -1076,6 +1106,8 @@ STRINGS = {
         "stats.reset_done": "已清空所有统计数据。",
         "menu.reset_stats": "重置统计",
         "menu.log": "错误日志",
+        "menu.watchdog_log": "看护日志",
+        "notify.watchdog_log_missing": "暂无看护日志。",
         "win.log": "SSD Temperature - 错误日志",
         "log.filter": "显示:",
         "log.filter.all": "全部",
@@ -3400,6 +3432,7 @@ class App:
             pystray.MenuItem(tr("menu.disks"), _safe(self.show_disks)),
             pystray.MenuItem(tr("menu.diagnostics"), _safe(self.copy_diagnostics)),
             pystray.MenuItem(tr("menu.log"), _safe(self.show_log)),
+            pystray.MenuItem(tr("menu.watchdog_log"), _safe(self.open_watchdog_log)),
             pystray.MenuItem(tr("menu.refresh"), _safe(self.refresh)),
             pystray.MenuItem(tr("menu.updates"), _safe(self.check_updates_now)),
             pystray.MenuItem(tr("menu.selftest"), _safe(self.run_update_selftest_ui)),
@@ -3562,6 +3595,11 @@ class App:
 
     def show_log(self, *_):
         self._spawn_once("_log_open", self._log_window)
+
+    def open_watchdog_log(self, *_):
+        # notepad + disk I/O stay off the menu thread (AGENT.md rule)
+        threading.Thread(target=_open_watchdog_log, args=(self,),
+                         daemon=True).start()
 
     def _log_window(self):
         """Live viewer for the rotating event log (own thread + tk).
@@ -5270,6 +5308,16 @@ class App:
                     os.remove(WATCHDOG_SUPPRESS_FILE)
             except OSError:
                 pass
+        # Belt and braces: icon.stop() can leave the process alive (message-
+        # pump edge cases) - a zombie that still holds the single-instance
+        # mutex, so every double-click on the exe then pops the "already
+        # running" box forever while the tray icon is gone (seen 2026-09-26:
+        # the zombie kept polling for 10+ minutes after Exit). Arm a bounded
+        # hard-exit BEFORE stopping the icon: a clean exit removes the timer
+        # with the process, so nothing changes in the normal path - and it
+        # is armed only in the frozen exe, never under pytest (source runs).
+        if getattr(sys, "frozen", False):
+            threading.Timer(3.0, os._exit, args=(0,)).start()
         self.icon.stop()
 
     # ---- history recording ----

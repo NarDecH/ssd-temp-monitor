@@ -70,6 +70,54 @@ jobs:
           name: ssd_temp_monitor-setup
           path: installer/ssd_temp_monitor_setup.exe
 
+  watchdog-e2e:
+    # Real end-to-end exercise of the crash watchdog on a Windows runner:
+    # install -> kill the app -> a scheduled task must restart it -> the
+    # quit marker must keep it down (tools/e2e_watchdog_test.ps1 clones
+    # the task under a test name and cleans up after itself).
+    runs-on: windows-latest
+    needs: build
+    if: github.event_name == 'push'
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ssd_temp_monitor-setup
+          path: installer
+
+      - name: Silent install (registers the watchdog task)
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath ".\installer\ssd_temp_monitor_setup.exe" `
+            -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
+          Write-Output "install exit code: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { exit 1 }
+          $t = Get-ScheduledTask -TaskName "SSDTempMonitor Watchdog" -ErrorAction SilentlyContinue
+          if (-not $t) { Write-Output "::error::watchdog task not registered by installer"; exit 1 }
+          Write-Output "watchdog task state: $($t.State)"
+
+      - name: Run E2E watchdog test (real restart + marker cases)
+        shell: pwsh
+        run: |
+          powershell -ExecutionPolicy Bypass -File tools\e2e_watchdog_test.ps1 -WaitSeconds 150
+
+      - name: Uninstall (cleanup)
+        if: always()
+        shell: pwsh
+        run: |
+          Unregister-ScheduledTask -TaskName "SSDTempMonitor Watchdog E2E" -Confirm:$false -ErrorAction SilentlyContinue
+          Stop-Process -Name ssd_temp_monitor -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 2
+          if (Test-Path "C:\Program Files\SSD Temp Monitor\unins000.exe") {
+            $p = Start-Process -FilePath "C:\Program Files\SSD Temp Monitor\unins000.exe" `
+              -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/FORCECLOSEAPPLICATIONS" -Wait -PassThru
+            Write-Output "uninstall exit code: $($p.ExitCode)"
+          }
+          Write-Output "cleanup OK"
+
   installer-test:
     runs-on: windows-latest
     needs: build

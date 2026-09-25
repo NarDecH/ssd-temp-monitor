@@ -351,6 +351,18 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   ผล spawn rc; นาทีที่แอปรันปกติเงียบ ทุกบรรทัดใน log จึงมีความหมาย
   และ tools\e2e_watchdog_test.ps1 (clone task ชื่อทดสอบ ไม่แตะ task จริง)
   ใช้เป็น gate ก่อน release ทุกครั้ง
+- **quit() ต้องการันตีว่าโปรเซสตายจริง** — v1.24.9: icon.stop() คืนแล้วแต่
+  โปรเซสยังมีชีวิต (poll thread ยังเขียน history อีก 10+ นาที) → ซอมบี้ถือ
+  single-instance mutex → ผู้ใช้ดับเบิลคลิก exe แล้วเจอ dialog "already
+  running" ทุกครั้ง ทั้งที่ไอคอน tray หายไปแล้ว แก้: quit() ตั้ง
+  threading.Timer(3 วิ, os._exit(0)) **ก่อน** icon.stop() — exit ปกติปิด
+  โปรเซสพร้อม timer อยู่แล้ว จึงไม่มีผลกับเส้นทางปกติ และ arm เฉพาะตอน
+  frozen (exe) เพื่อไม่ฆ่า pytest
+- **spawn จาก watchdog ต้องส่ง --duplicate-silent** — ช่วง crash storm
+  (power event + native crash) mutex ของ instance เก่าอาจมีชีวิตอยู่
+  อีกไม่กี่วินาที → instance ที่ watchdog ปลุกใหม่แพ้ mutex → dialog
+  "already running" เด้งใส่ผู้ใช้ทุกรอบที่ปลุก ให้ spawn เงียบเสมอ
+  (เปิดปกติไม่ได้รับผลกระทบเพราะ mutex ว่าง)
 
 ## สไตล์โค้ด
 
