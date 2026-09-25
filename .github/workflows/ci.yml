@@ -104,6 +104,17 @@ jobs:
         run: |
           powershell -ExecutionPolicy Bypass -File tools\e2e_watchdog_test.ps1 -WaitSeconds 150
 
+      - name: Upload E2E evidence on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: watchdog-e2e-logs
+          path: |
+            **/watchdog.log*
+            **/ssd_temp_monitor.log
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Uninstall (cleanup)
         if: always()
         shell: pwsh

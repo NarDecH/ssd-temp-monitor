@@ -3,6 +3,18 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.25.1] — 2026-09-26
+
+### Fixed
+
+- 🤖 **CI job `watchdog-e2e` บนเครื่อง virgin** — เคส marker ล้มเพราะเขียน
+  `watchdog_skip.flag` ไม่ได้: โฟลเดอร์ `%APPDATA%\SSDTempMonitor` ยังไม่ถูกสร้าง
+  (แอปสร้างตอนรันครั้งแรก ซึ่ง runner สดไม่เคยไปถึง) — E2E สร้างโฟลเดอร์ก่อนเขียน
+  เสมอ และ watchdog.log ก็สร้างโฟลเดอร์เองได้ในกรณีเดียวกัน (เคส crash-restart
+  ผ่านบน runner จริงแล้ว: ปลุกกลับใน 60 วินาที, parent = WmiPrvSE)
+- 📤 **E2E evidence อัปโหลดอัตโนมัติ** — เมื่อ job พัง ไฟล์ `watchdog.log` และ
+  app log ถูกอัปโหลดเป็น artifact ทันที วินิจฉัยจากหน้า CI ได้เลย
+
 ## [1.25.0] — 2026-09-26
 
 ### Added

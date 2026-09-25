@@ -122,6 +122,9 @@ try {
 
     # --- case 2: quit marker -> the watchdog stays silent ---------------------
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    # a fresh machine may not have the data dir yet (the app creates it
+    # lazily on first run - a virgin CI runner never got that far)
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $marker) | Out-Null
     Set-Content -Path $marker -Value "e2e" -Encoding ASCII
     Stop-Process -Name $procName -Force -ErrorAction SilentlyContinue
     Wait-AppCount 0 15 | Out-Null

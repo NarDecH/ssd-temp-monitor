@@ -31,7 +31,16 @@ function Write-WdLog([string]$msg) {
     try {
         $dir = Join-Path $env:APPDATA "SSDTempMonitor"
         if (-not (Test-Path $dir)) {
-            $dir = Join-Path (Split-Path -Parent $here) "portable_data"
+            # fresh machine: the app creates this dir lazily on first run, but
+            # the watchdog may want to log BEFORE that ever happened (CI,
+            # first boot after install) - a log write that throws silently is
+            # exactly the "no evidence" trap this log exists to prevent
+            $portable = Join-Path (Split-Path -Parent $here) "portable_data"
+            if (Test-Path $portable) {
+                $dir = $portable
+            } else {
+                New-Item -ItemType Directory -Force -Path $dir -ErrorAction Stop | Out-Null
+            }
         }
         $log = Join-Path $dir "watchdog.log"
         if ((Test-Path $log) -and ((Get-Item $log).Length -gt 512KB)) {

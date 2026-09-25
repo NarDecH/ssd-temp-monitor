@@ -75,7 +75,15 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
-  <h2><span class="ver-badge">v1.25.0</span> <span class="date">26 กันยายน 2026</span></h2>
+  <h2><span class="ver-badge">v1.25.1</span> <span class="date">26 กันยายน 2026</span></h2>
+
+  <h3><span class="pill fix-pill">Fixed</span></h3>
+  <ul>
+    <li>🤖 <strong>CI job <code>watchdog-e2e</code> บนเครื่อง virgin</strong> — เคส marker ล้มเพราะโฟลเดอร์ <code>%APPDATA%\SSDTempMonitor</code> ยังไม่ถูกสร้าง (แอปสร้างตอนรันครั้งแรก ซึ่ง runner สดไม่เคยไปถึง) — E2E สร้างโฟลเดอร์ก่อนเขียนเสมอ และ watchdog.log ก็สร้างโฟลเดอร์เองได้ในกรณีเดียวกัน (เคส crash-restart ผ่านบน runner จริงแล้ว: ปลุกกลับใน 60 วินาที, parent = WmiPrvSE)</li>
+    <li>📤 <strong>E2E evidence อัปโหลดอัตโนมัติ</strong> — เมื่อ job พัง ไฟล์ <code>watchdog.log</code> และ app log ถูกอัปโหลดเป็น artifact ทันที วินิจฉัยจากหน้า CI ได้เลย</li>
+  </ul>
+
+  <h2><span class="ver-badge old">v1.25.0</span> <span class="date">26 กันยายน 2026</span></h2>
 
   <h3><span class="pill add-pill">Added</span></h3>
   <ul>
