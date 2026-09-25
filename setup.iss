@@ -55,10 +55,9 @@ Name: "{commonstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; \
 
 [Run]
 ; register the 1-minute crash watchdog (invisible wscript launcher,
-; interactive session - see AGENT.md lessons); {app} resolves with 32-bit
-; quirks disabled so the path matches the real 64-bit install dir
+; interactive session - see AGENT.md lessons)
 Filename: "powershell.exe"; \
-    Parameters: "-NoProfile -ExecutionPolicy Bypass -File """{app}\watchdog\register_watchdog_task.ps1""" -AppDir """{app}""""; \
+    Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\watchdog\register_watchdog_task.ps1"" -AppDir ""{app}"""; \
     Flags: runhidden waituntilterminated; \
     Check: IsAdminLoggedOn
 ; runasoriginaluser: after a silent auto-update (elevated) the app must come
