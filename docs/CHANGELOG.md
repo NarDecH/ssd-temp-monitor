@@ -3,6 +3,19 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.25.2] — 2026-09-26
+
+### Fixed
+
+- 🏁 **เรซใน E2E harness เอง (เจอบน CI)** — เคส marker-suppress ล้มใน 0 วินาที
+  เพราะหน้าต่างเนกาทีฟ sample โปรเซสทันทีหลัง kill: โปรเซสที่กำลังตายยังค้าง
+  ใน process table อีกเสี้ยววินาทีจึงถูกนับเป็น "ถูกปลุก" หลอก (บนเครื่อง dev
+  ผ่านเพราะจังหวะตายเร็วกว่า — เรซแท้) ตอนนี้รอ count = 0 จริงด้วย
+  `Wait-AppGone` และ sleep ก่อน sample แรกเสมอ
+- 📜 **หลักฐานในตัว** — E2E dump watchdog.log ท้ายผลลัพธ์เสมอ (เห็นใน CI
+  output ตรง ๆ) และ CI copy log จาก %APPDATA% เข้า workspace ก่อนอัปโหลด
+  artifact (upload-artifact เข้าถึงได้เฉพาะไฟล์ใน workspace)
+
 ## [1.25.1] — 2026-09-26
 
 ### Fixed

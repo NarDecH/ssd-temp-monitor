@@ -363,6 +363,17 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   อีกไม่กี่วินาที → instance ที่ watchdog ปลุกใหม่แพ้ mutex → dialog
   "already running" เด้งใส่ผู้ใช้ทุกรอบที่ปลุก ให้ spawn เงียบเสมอ
   (เปิดปกติไม่ได้รับผลกระทบเพราะ mutex ว่าง)
+- **negative test ต้องรอ "ตัวตายตายจริง" ก่อน sample ครั้งแรก** — E2E เคส
+  marker-suppress FAIL บน CI ใน 0 วิ ทั้งที่ watchdog เงียบจริง เพราะ (1)
+  `Wait-AppCount 0 15` เป็น no-op (`count >= 0` จริงเสมอ → คืนทันที)
+  (2) ลูปเนกาทีฟ sample โปรเซสทันทีหลัง Stop-Process — โปรเซสที่กำลังตาย
+  ยังค้างใน process table อีกเสี้ยววินาที → โดนนับเป็น "ถูกปลุก" หลอก
+  (บนเครื่อง dev ผ่านเพราะจังหวะตายเร็วกว่า = เรซแท้ ๆ) กฎ: หน้าต่างเนกาทีฟ
+  ต้อง sleep **ก่อน** sample แรก และ "รอของหาย" ต้องเขียนฟังก์ชันรอ
+  count == 0 ตรง ๆ ห้าม reuse ฟังก์ชัน "รอ count >= N" — และ harness
+  ต้อง dump หลักฐาน (watchdog.log tail) ลง job output เสมอ เพราะ artifact
+  อาจ skip: `actions/upload-artifact` เข้าถึงได้เฉพาะไฟล์ใน workspace
+  (log ใน %APPDATA% ต้อง Copy-Item เข้า workspace ก่อนอัปโหลด)
 
 ## สไตล์โค้ด
 

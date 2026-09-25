@@ -79,6 +79,17 @@ function Wait-AppCount([int]$min, [int]$timeout) {
     }
     return ((Get-AppCount) -ge $min)
 }
+function Wait-AppGone([int]$timeout) {
+    # wait until the process table shows ZERO instances - a plain
+    # "Wait-AppCount 0" would return instantly (count >= 0 is always true)
+    # and the negative window would sample a process that is still dying
+    $deadline = (Get-Date).AddSeconds($timeout)
+    while ((Get-Date) -lt $deadline) {
+        if ((Get-AppCount) -eq 0) { return $true }
+        Start-Sleep -Milliseconds 300
+    }
+    return ((Get-AppCount) -eq 0)
+}
 
 $results = @()
 function Add-Result([string]$name, [bool]$pass, [double]$seconds) {
@@ -107,7 +118,7 @@ try {
     # --- case 1: crash -> a watchdog task restarts the app --------------------
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     Stop-Process -Name $procName -Force -ErrorAction SilentlyContinue
-    Wait-AppCount 0 15 | Out-Null                    # let dying procs leave
+    Wait-AppGone 15 | Out-Null                       # let dying procs leave
     $ok1 = Wait-AppCount 1 $WaitSeconds
     $sw.Stop()
     $parent = "gone"
@@ -127,13 +138,16 @@ try {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $marker) | Out-Null
     Set-Content -Path $marker -Value "e2e" -Encoding ASCII
     Stop-Process -Name $procName -Force -ErrorAction SilentlyContinue
-    Wait-AppCount 0 15 | Out-Null
-    # negative test: the process count must stay 0 for the whole window
+    Wait-AppGone 15 | Out-Null
+    # negative test: the process count must stay 0 for the whole window;
+    # sleep BEFORE the first sample so a process caught mid-death (visible
+    # for a moment after TerminateProcess) can never fake a failure
     $ok2 = $true
     $deadline = (Get-Date).AddSeconds($WaitSeconds)
     while ((Get-Date) -lt $deadline) {
-        if ((Get-AppCount) -ge 1) { $ok2 = $false; break }
         Start-Sleep -Seconds 2
+        if ((Get-Date) -ge $deadline) { break }
+        if ((Get-AppCount) -ge 1) { $ok2 = $false; break }
     }
     $sw.Stop()
     Add-Result "marker-suppresses-restart" $ok2 $sw.Elapsed.TotalSeconds
@@ -152,5 +166,12 @@ foreach ($r in $results) {
     Write-Output ("[E2E] {0}  {1} ({2:n0}s)" -f $tag, $r.name, $r.seconds)
 }
 Write-Output ("[E2E] === {0}/{1} passed ===" -f $passed, $results.Count)
+# echo the watchdog decision log into the job output - visible directly in
+# CI even if the artifact upload step is skipped or the run is local
+$wlog = Join-Path $env:APPDATA "SSDTempMonitor\watchdog.log"
+if (Test-Path $wlog) {
+    Write-Output "--- watchdog.log (tail) ---"
+    Get-Content $wlog -Tail 20 | ForEach-Object { Write-Output ("[wd] " + $_) }
+}
 if ($passed -ne $results.Count) { exit 1 }
 exit 0

@@ -104,14 +104,23 @@ jobs:
         run: |
           powershell -ExecutionPolicy Bypass -File tools\e2e_watchdog_test.ps1 -WaitSeconds 150
 
+      - name: Collect E2E evidence on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          # upload-artifact only reaches files inside the workspace - copy
+          # the app's logs (in %APPDATA%) in first
+          New-Item -ItemType Directory -Force -Path e2e-logs | Out-Null
+          Copy-Item "$env:APPDATA\SSDTempMonitor\watchdog.log*" -Destination e2e-logs\ -ErrorAction SilentlyContinue
+          Copy-Item "$env:APPDATA\SSDTempMonitor\ssd_temp_monitor.log" -Destination e2e-logs\ -ErrorAction SilentlyContinue
+          Get-ChildItem e2e-logs | ForEach-Object { Write-Output "collected: $($_.Name)" }
+
       - name: Upload E2E evidence on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: watchdog-e2e-logs
-          path: |
-            **/watchdog.log*
-            **/ssd_temp_monitor.log
+          path: e2e-logs/
           if-no-files-found: ignore
           retention-days: 7
 

@@ -3557,3 +3557,33 @@ class TestWatchdogLogMenu:
         assert "Move-Item" in src and ".old" in src
         # no silent truncation of the previous log
         assert 'Set-Content -Path $log -Value ""' not in src
+
+    def test_e2e_case2_kills_then_waits_death_before_sampling(self):
+        """CI bug (v1.25.1): case 2 failed in 0 s because the negative
+        window sampled the process table ~30 ms after Stop-Process - a
+        process caught mid-death counts as 'the watchdog restarted it'.
+        The harness must wait until the count is 0 (Wait-AppGone) and sleep
+        BEFORE the first sample of the negative window; a plain
+        'Wait-AppCount 0' is a no-op (count >= 0 is always true)."""
+        src = self._read("tools", "e2e_watchdog_test.ps1")
+        assert "function Wait-AppGone" in src
+        c2 = src.index("case 2")
+        c2src = src[c2:]
+        assert "Stop-Process" in c2src
+        assert "Wait-AppGone" in c2src[:c2src.index("negative test")]
+        neg = c2src[c2src.index("negative test"):]
+        assert neg.index("Start-Sleep") < neg.index("Get-AppCount")
+
+    def test_e2e_failure_dumps_watchdog_log_into_job_output(self):
+        """The decision log is the evidence - it must appear in the CI job
+        output itself, not only in a (possibly skipped) artifact step."""
+        src = self._read("tools", "e2e_watchdog_test.ps1")
+        assert "watchdog.log (tail)" in src
+
+    def test_ci_uploads_e2e_logs_from_workspace(self):
+        """upload-artifact cannot reach %APPDATA% - the workflow must copy
+        the app's logs into the workspace before uploading them."""
+        ci = self._read(".github", "workflows", "ci.yml")
+        assert "Copy-Item" in ci and "e2e-logs" in ci
+        watchdog_idx = ci.index("watchdog-e2e")
+        assert ci.index("Copy-Item", watchdog_idx) > watchdog_idx

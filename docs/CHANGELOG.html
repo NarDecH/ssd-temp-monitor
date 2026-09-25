@@ -75,7 +75,15 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
-  <h2><span class="ver-badge">v1.25.1</span> <span class="date">26 กันยายน 2026</span></h2>
+  <h2><span class="ver-badge">v1.25.2</span> <span class="date">26 กันยายน 2026</span></h2>
+
+  <h3><span class="pill fix-pill">Fixed</span></h3>
+  <ul>
+    <li>🏁 <strong>เรซใน E2E harness เอง (เจอบน CI)</strong> — เคส marker-suppress ล้มใน 0 วินาที เพราะหน้าต่างเนกาทีฟ sample โปรเซสทันทีหลัง kill: โปรเซสที่กำลังตายยังค้างใน process table อีกเสี้ยววินาทีจึงถูกนับเป็น "ถูกปลุก" หลอก (บนเครื่อง dev ผ่านเพราะจังหวะตายเร็วกว่า — เรซแท้) ตอนนี้รอ count = 0 จริงด้วย <code>Wait-AppGone</code> และ sleep ก่อน sample แรกเสมอ</li>
+    <li>📜 <strong>หลักฐานในตัว</strong> — E2E dump <code>watchdog.log</code> ท้ายผลลัพธ์เสมอ (เห็นใน CI output ตรง ๆ) และ CI copy log จาก %APPDATA% เข้า workspace ก่อนอัปโหลด artifact (upload-artifact เข้าถึงได้เฉพาะไฟล์ใน workspace)</li>
+  </ul>
+
+  <h2><span class="ver-badge old">v1.25.1</span> <span class="date">26 กันยายน 2026</span></h2>
 
   <h3><span class="pill fix-pill">Fixed</span></h3>
   <ul>
