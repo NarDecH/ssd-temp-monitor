@@ -81,6 +81,11 @@ DATA_DIR = (os.path.join(BASE_DIR, "portable_data") if _is_portable()
                               "SSDTempMonitor"))
 CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
 GEOMETRY_FILE = os.path.join(DATA_DIR, "window_geometry.json")
+# Written when the user quits from the tray menu: the external crash watchdog
+# (tools\watchdog.ps1, scheduled task "SSDTempMonitor Watchdog") sees this
+# marker and does NOT restart the app - a deliberate exit is not a crash.
+# Removed on every successful start so the watchdog resumes watching.
+WATCHDOG_SUPPRESS_FILE = os.path.join(DATA_DIR, "watchdog_skip.flag")
 # Digit fonts offered in Settings: {family: {style -> (ttf file, tk name)}}.
 # Every family below ships with Windows 10/11; a missing .ttf file or an
 # unknown family gracefully falls back to Arial (bold).
@@ -5119,6 +5124,13 @@ class App:
             self.icon.remove_notification()
         except Exception:
             pass
+        # tell the external crash watchdog this was a deliberate quit -
+        # without the marker it would resurrect the app within a minute
+        try:
+            with open(WATCHDOG_SUPPRESS_FILE, "w", encoding="utf-8") as f:
+                f.write("user quit at %s\n" % time.strftime("%Y-%m-%d %H:%M:%S"))
+        except OSError:
+            pass
         self.icon.stop()
 
     # ---- history recording ----
@@ -5332,6 +5344,13 @@ def main():
         run_unattended_update()
     cleanup_stale_mei()
     heal_autostart_value()
+    # a successful start clears the "user quit on purpose" marker so the
+    # external crash watchdog resumes watching from here
+    try:
+        if os.path.isfile(WATCHDOG_SUPPRESS_FILE):
+            os.remove(WATCHDOG_SUPPRESS_FILE)
+    except OSError:
+        pass
     begin_healthy_session()
     # the watchdog owns icon.run(): App.run (poll thread + icon.run) must
     # not ALSO run the message loop - two pumps kill the tray (v1.23.0)

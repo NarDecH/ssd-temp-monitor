@@ -109,6 +109,26 @@
   </details>
 
   <details>
+    <summary>แอปถูกเปิดกลับมาเองเรื่อย ๆ คืออะไร? (watchdog) ปิดได้ไหม?</summary>
+    <div class="answer">
+      <p>ตัวติดตั้งสร้าง scheduled task ชื่อ <b>SSDTempMonitor Watchdog</b>
+      ที่รันทุก 1 นาที — ถ้าโปรเซสของแอปตาย (เช่น native crash)
+      จะเปิดแอปกลับมาเอง เพื่อให้ไอคอนใน tray ไม่หายเงียบ ๆ</p>
+      <p>ลักษณะการทำงาน: รันแบบ<b>ไม่มีหน้าต่างกระพริบ</b> (ผ่าน wscript ไม่ใช่
+      powershell ตรง ๆ), เปิดแอปกลับใน<b>เซสชันของผู้ใช้</b> (ไอคอนขึ้นปกติ),
+      ไม่เปิดสำเนาที่สอง (มี mutex กัน) ไม่แทรกช่วงที่ตัวอัปเดตอัตโนมัติ
+      กำลังติดตั้งเวอร์ชันใหม่ และ<b>ถ้าคุณกด Exit เอง</b>จากเมนู แอปจะจด marker
+      ไว้ให้ watchdog รู้ว่าไม่ใช่ crash — จะไม่ถูกเปิดกลับจนกว่าคุณจะเปิดแอปเอง
+      — ไฟล์ที่ใช้อยู่ในโฟลเดอร์
+      <code>&lt;ตำแหน่งติดตั้ง&gt;\watchdog\</code> และ task จะถูกลบตอน uninstall</p>
+      <p>ถ้าไม่ต้องการ ลบได้เลย (ไม่มีอะไรผูกกับมัน):</p>
+      <pre>schtasks /Delete /TN "SSDTempMonitor Watchdog" /F</pre>
+      <p>หรือปิดผ่าน Task Scheduler GUI สำหรับโหมด portable ให้รัน
+      <code>tools\install_watchdog.ps1</code> ครั้งเดียวจากคอนโซลแอดมิน</p>
+    </div>
+  </details>
+
+  <details>
     <summary>ใช้จาก USB stick ได้ไหม (โหมด portable)?</summary>
     <div class="answer">
       <p>ได้ — โหลด <code>portable.zip</code> จากหน้า

@@ -24,6 +24,18 @@ $procName = "ssd_temp_monitor"
 $running = Get-Process -Name $procName -ErrorAction SilentlyContinue
 if ($running) { exit 0 }                        # healthy - nothing to do
 
+# The app writes this marker when the user quits from the tray menu:
+# a deliberate exit is not a crash - do not resurrect. The marker is
+# removed again on the next successful app start.
+$appRoot = Split-Path -Parent $here
+$skipPaths = @(
+    (Join-Path $env:APPDATA "SSDTempMonitor\watchdog_skip.flag"),
+    (Join-Path $appRoot "portable_data\watchdog_skip.flag")
+)
+foreach ($p in $skipPaths) {
+    if (Test-Path $p) { exit 0 }
+}
+
 # No process: crash (or update in progress). The updater creates a shim
 # cmd.exe with "ssd_temp" in its command line - never restart during that
 # window or the silent install gets racing processes.

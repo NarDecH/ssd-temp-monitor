@@ -99,6 +99,38 @@ Press Win+R, type `shell:startup`, and put a shortcut to
 `start_ssd_temp_monitor.bat` in that folder. Windows will show a UAC
 prompt at each login (admin is required for SMART temperature data).
 
+## Crash watchdog (installed automatically)
+
+The installer registers a scheduled task, **SSDTempMonitor Watchdog**,
+that runs every minute and restarts the app if its process died (for
+example after a native fault). It is the last line of defense so the
+tray icon never silently disappears.
+
+How it behaves:
+
+- **Invisible** — the task runs `wscript.exe` + a small VBS launcher;
+  no PowerShell/console window ever flashes on the taskbar.
+- **In your session** — the restarted app lands on your desktop
+  (Console session), never in the invisible session 0.
+- **Safe with updates** — it never starts a second copy (single-instance
+  mutex) and stays out of the way while the silent updater runs.
+- **Respects your choice** — quitting from the tray menu leaves a marker
+  file; the watchdog will not bring the app back until you start it
+  yourself again.
+- **Self-contained** — the launcher and script live in
+  `<install dir>\watchdog\` (staged by the installer) and the task is
+  removed again on uninstall.
+
+Remove or disable it any time (nothing else depends on it):
+
+```
+schtasks /Delete /TN "SSDTempMonitor Watchdog" /F
+```
+
+For portable/manual layouts, run
+`powershell -ExecutionPolicy Bypass -File tools\install_watchdog.ps1`
+from an elevated console once.
+
 ## Documentation
 
 - **[Download page](https://nardech.github.io/ssd-temp-monitor/download.html)** — live download page (fetches the latest release + SHA-256 checksums automatically)

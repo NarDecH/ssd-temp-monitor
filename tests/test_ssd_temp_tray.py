@@ -3250,3 +3250,23 @@ class TestInstallerWatchdogWiring:
         assert "watchdog.ps1" in src
         assert "-WindowStyle Hidden" in src
         assert ", 0, False" in src                  # hidden window, no wait
+
+    def test_watchdog_respects_user_quit_marker(self):
+        """The watchdog must NOT resurrect the app after a deliberate quit
+        from the tray menu: the app writes watchdog_skip.flag, the marker
+        is cleared again on the next successful start."""
+        src = self._read("tools", "watchdog.ps1")
+        assert "watchdog_skip.flag" in src
+        app_src = self._read("ssd_temp_tray.py")
+        assert "WATCHDOG_SUPPRESS_FILE" in app_src
+        # marker is written on quit...
+        quit_idx = app_src.index("def quit(self, *_):"
+                                 ) if "def quit(self, *_):" in app_src \
+            else app_src.index("def quit(")
+        assert app_src.index("WATCHDOG_SUPPRESS_FILE, \"w\""
+                             ) > quit_idx
+        # ...and removed during startup, before the tray loop starts
+        start_idx = app_src.index("def main():")
+        loop_idx = app_src.index("_watch_icon_loop(App())")
+        remove_idx = app_src.index("os.remove(WATCHDOG_SUPPRESS_FILE)")
+        assert start_idx < remove_idx < loop_idx
