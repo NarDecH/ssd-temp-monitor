@@ -3,6 +3,28 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.24.6] — 2026-09-25
+
+### Fixed
+
+- 🪟 **หน้าต่าง PowerShell กระพริบทุกนาที** — watchdog task เคย execute
+  `powershell.exe` (console subsystem) ตรง ๆ → Windows สร้างหน้าต่าง conhost
+  ก่อน `-WindowStyle Hidden` จะทำงาน — task ใหม่รันผ่าน `wscript.exe`
+  (GUI subsystem) + VBS launcher: ไม่มี console เกิดขึ้นเลย
+- 🧟 **Watchdog ปลุกแอปหลังผู้ใช้กด Exit + วงจร kill/restart เงียบ ๆ** —
+  (1) แอปที่เปิดด้วย `Start-Process` ตกอยู่ใน **job object ของ task** → task
+  ค้างสถานะ "Running" และ ExecutionTimeLimit (5 นาที) ฆ่าแอปที่เพิ่ง restart
+  → spawn ผ่าน WMI แทน (parent = WmiPrvSE, อยู่นอก job) (2) กด Exit จากเมนู
+  ตอนนี้เขียน marker `watchdog_skip.flag` — watchdog จะไม่ปลุกจนกว่าผู้ใช้
+  จะเปิดแอปเอง (marker ถูกลบเมื่อเริ่มแอปสำเร็จ)
+
+### Added
+
+- 🧩 **Installer ติดตั้ง watchdog ให้อัตโนมัติ** — stage launcher/script ไป
+  `{app}\watchdog` + register task ตอนติดตั้ง + ลบ task ตอน uninstall —
+  task ไม่ผูกกับ repo checkout อีกต่อไป (watchdog หา exe จากตำแหน่งของตัวเอง)
+- 📄 **เอกสาร watchdog** — README (EN) + FAQ (TH): หลักการทำงาน + วิธีปิด/ลบ
+
 ## [1.24.5] — 2026-09-24
 
 ### Fixed

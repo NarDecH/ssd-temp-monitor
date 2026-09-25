@@ -75,7 +75,21 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
-  <h2><span class="ver-badge">v1.24.5</span> <span class="date">24 กันยายน 2026</span></h2>
+  <h2><span class="ver-badge">v1.24.6</span> <span class="date">25 กันยายน 2026</span></h2>
+
+  <h3><span class="pill fix-pill">Fixed</span></h3>
+  <ul>
+    <li>🪟 <strong>หน้าต่าง PowerShell กระพริบทุกนาที</strong> — watchdog task เคยรัน <code>powershell.exe</code> (console subsystem) ตรง ๆ → Windows สร้างหน้าต่างก่อน <code>-WindowStyle Hidden</code> ทำงาน — task ใหม่รันผ่าน <code>wscript.exe</code> (GUI subsystem) + VBS launcher: ไม่มี console เกิดขึ้นเลย</li>
+    <li>🧟 <strong>Watchdog ปลุกแอปหลังผู้ใช้กด Exit + วงจร kill/restart เงียบ ๆ</strong> — (1) แอปที่เปิดด้วย <code>Start-Process</code> ตกอยู่ใน job object ของ task → task ค้าง "Running" และ ExecutionTimeLimit 5 นาที<em>ฆ่า</em>แอปที่เพิ่ง restart — spawn ผ่าน WMI แทน (parent = WmiPrvSE, อยู่นอก job) (2) กด Exit จากเมนูตอนนี้เขียน marker <code>watchdog_skip.flag</code> — watchdog จะไม่ปลุกจนกว่าผู้ใช้จะเปิดแอปเอง (marker ถูกลบเมื่อเริ่มแอปสำเร็จ)</li>
+  </ul>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>🧩 <strong>Installer ติดตั้ง watchdog ให้อัตโนมัติ</strong> — stage launcher/script ไป <code>{app}\watchdog</code> + register task ตอนติดตั้ง + ลบ task ตอน uninstall — task ไม่ผูกกับ repo checkout อีกต่อไป (watchdog หา exe จากตำแหน่งของตัวเอง)</li>
+    <li>📄 <strong>เอกสาร watchdog</strong> — README (EN) + <a href="faq.html">FAQ</a> (TH): หลักการทำงาน + วิธีปิด/ลบ</li>
+  </ul>
+
+  <h2><span class="ver-badge old">v1.24.5</span> <span class="date">24 กันยายน 2026</span></h2>
 
   <h3><span class="pill fix-pill">Fixed</span></h3>
   <ul>
