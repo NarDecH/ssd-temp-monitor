@@ -3,6 +3,21 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.24.7] — 2026-09-25
+
+### Added
+
+- 🎛️ **เปิด/ปิด Watchdog จากเมนู tray** — รายการใหม่ "Watchdog กัน crash
+  (เปิดอัตโนมัติ)" พร้อมเครื่องหมายถูก (ครบ 4 ภาษา) — ใช้
+  `schtasks /Change /ENABLE|/DISABLE` ผ่านเธรด worker (ไม่บล็อกเมนู) ปิดแล้ว
+  task ยังอยู่ เปิดกลับได้ทันที uninstall ยังลบได้ปกติ
+
+### Fixed
+
+- 🔍 **Probe สถานะ task ผิดตอน disabled** — `schtasks /Query` คืน exit 0
+  แม้ task ถูก DISABLE (เช็คแค่ว่ามีอยู่) — อ่าน enum `State` จาก
+  `Get-ScheduledTask` แทน (ไม่ขึ้นกับ locale)
+
 ## [1.24.6] — 2026-09-25
 
 ### Fixed

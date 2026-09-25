@@ -46,7 +46,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.24.6"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.24.7"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -86,6 +86,40 @@ GEOMETRY_FILE = os.path.join(DATA_DIR, "window_geometry.json")
 # marker and does NOT restart the app - a deliberate exit is not a crash.
 # Removed on every successful start so the watchdog resumes watching.
 WATCHDOG_SUPPRESS_FILE = os.path.join(DATA_DIR, "watchdog_skip.flag")
+WATCHDOG_TASK_NAME = "SSDTempMonitor Watchdog"
+
+
+def _watchdog_task_state():
+    """True if the crash-watchdog scheduled task exists and is enabled.
+    NOTE: schtasks /Query returns 0 for DISABLED tasks too (it only checks
+    existence) - the State enum from Get-ScheduledTask is the reliable,
+    locale-independent source."""
+    try:
+        proc = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "(Get-ScheduledTask -TaskName '%s' -ErrorAction Stop).State"
+             % WATCHDOG_TASK_NAME],
+            capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW,
+            timeout=15)
+        if proc.returncode != 0:
+            return False                      # task does not exist
+        return proc.stdout.decode(errors="replace").strip() != "Disabled"
+    except Exception:
+        return False
+
+
+def _watchdog_task_set(enable):
+    """Enable/disable the watchdog task; returns the new verified state.
+    Disabling (not deleting) keeps the task definition so re-enabling is
+    instant and uninstall still removes the task cleanly."""
+    try:
+        cmd = ["schtasks", "/Change", "/TN", WATCHDOG_TASK_NAME]
+        cmd.append("/ENABLE" if enable else "/DISABLE")
+        subprocess.run(cmd, capture_output=True,
+                       creationflags=subprocess.CREATE_NO_WINDOW, timeout=15)
+    except Exception:
+        pass  # re-probe below reports the real state either way
+    return _watchdog_task_state()
 # Digit fonts offered in Settings: {family: {style -> (ttf file, tk name)}}.
 # Every family below ships with Windows 10/11; a missing .ttf file or an
 # unknown family gracefully falls back to Arial (bold).
@@ -537,6 +571,7 @@ STRINGS = {
                           "has been restored and the failed release will be "
                           "skipped."),
         "menu.restore": "Restore previous version...",
+        "menu.watchdog": "Crash watchdog (auto-restart)",
         "restore.confirm": ("Put the backed-up previous version back and "
                             "restart the app now?"),
         "restore.none": ("No pre-update backup was found on this machine. "
@@ -712,6 +747,7 @@ STRINGS = {
         "rollback.body": ("การอัปเดตไม่สามารถเริ่มทำงานได้ ระบบจึงกลับไปใช้เวอร์ชันเดิม"
                           "และจะข้ามเวอร์ชันที่มีปัญหานี้ในการตรวจสอบครั้งถัดไป"),
         "menu.restore": "คืนเวอร์ชันก่อนหน้า...",
+        "menu.watchdog": "Watchdog กัน crash (เปิดอัตโนมัติ)",
         "restore.confirm": ("ต้องการคืนเวอร์ชันสำรองก่อนหน้าและเริ่มโปรแกรมใหม่"
                             "ทันทีหรือไม่?"),
         "restore.none": ("ไม่พบไฟล์สำรองก่อนอัปเดตบนเครื่องนี้ ไฟล์สำรองจะเกิดขึ้น"
@@ -886,6 +922,7 @@ STRINGS = {
         "rollback.body": ("アップデートを開始できませんでした。以前のバージョンを復元し、"
                           "問題のあるリリースは今後スキップされます。"),
         "menu.restore": "前のバージョンに戻す...",
+        "menu.watchdog": "クラッシュ監視 (自動再起動)",
         "restore.confirm": ("バックアップされた以前のバージョンを戻して、"
                             "今すぐアプリを再起動しますか？"),
         "restore.none": ("このマシンにアップデート前のバックアップが見つかりません。"
@@ -1058,6 +1095,7 @@ STRINGS = {
         "rollback.body": ("无法启动更新。已恢复之前的版本，后续检查将跳过"
                           "这个有问题的版本。"),
         "menu.restore": "恢复上一个版本...",
+        "menu.watchdog": "崩溃看护 (自动重启)",
         "restore.confirm": ("恢复备份的上一版本并立即重新启动应用吗？"),
         "restore.none": ("在这台电脑上找不到更新前的备份。备份只会在安装"
                          "更新之后才会出现。"),
@@ -3252,6 +3290,7 @@ class App:
         self._nagged_version = None      # nag once per (version, session)
         self._last_update_check = 0.0
         self._last_weekly_report = 0.0   # weekly auto-report timer
+        self._watchdog_enabled = _watchdog_task_state()  # menu check state
         # restore the 24 h minute store; a fresh install backfills it from
         # the fine history (the v1.21.0 store file was only written on a
         # clean quit, so it stayed empty for most users) and writes it out
@@ -3337,6 +3376,8 @@ class App:
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(tr("menu.history"), self.toggle_history,
                              checked=lambda item: KEEP_HISTORY),
+            pystray.MenuItem(tr("menu.watchdog"), self.toggle_watchdog,
+                             checked=lambda item: self._watchdog_enabled),
             pystray.MenuItem(
                 tr("menu.language"),
                 pystray.Menu(
@@ -3357,6 +3398,18 @@ class App:
     def refresh(self, *_):
         # run off the menu-callback thread so the tray stays responsive
         threading.Thread(target=self.update, daemon=True).start()
+
+    def toggle_watchdog(self, *_):
+        """Enable/disable the crash-watchdog scheduled task from the menu.
+        schtasks can hang on DNS/rpc delays, so this runs on a worker thread
+        (same pattern as every other menu action); the checkbox state comes
+        from a cached probe refreshed on each toggle."""
+        def _work():
+            target = not self._watchdog_enabled
+            new_state = _watchdog_task_set(target)
+            with self._lock:
+                self._watchdog_enabled = new_state
+        threading.Thread(target=_work, daemon=True).start()
 
     def toggle_history(self, *_):
         global KEEP_HISTORY

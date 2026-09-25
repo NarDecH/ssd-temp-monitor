@@ -75,7 +75,19 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
-  <h2><span class="ver-badge">v1.24.6</span> <span class="date">25 กันยายน 2026</span></h2>
+  <h2><span class="ver-badge">v1.24.7</span> <span class="date">25 กันยายน 2026</span></h2>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>🎛️ <strong>เปิด/ปิด Watchdog จากเมนู tray</strong> — รายการใหม่ "Watchdog กัน crash (เปิดอัตโนมัติ)" พร้อมเครื่องหมายถูก (ครบ 4 ภาษา) — ใช้ <code>schtasks /Change /ENABLE|/DISABLE</code> ผ่านเธรด worker (ไม่บล็อกเมนู) ปิดแล้ว task ยังอยู่ เปิดกลับได้ทันที uninstall ยังลบได้ปกติ</li>
+  </ul>
+
+  <h3><span class="pill fix-pill">Fixed</span></h3>
+  <ul>
+    <li>🔍 <strong>Probe สถานะ task ผิดตอน disabled</strong> — <code>schtasks /Query</code> คืน exit 0 แม้ task ถูก DISABLE (เช็คแค่ว่ามีอยู่) — อ่าน enum <code>State</code> จาก <code>Get-ScheduledTask</code> แทน (ไม่ขึ้นกับ locale)</li>
+  </ul>
+
+  <h2><span class="ver-badge old">v1.24.6</span> <span class="date">25 กันยายน 2026</span></h2>
 
   <h3><span class="pill fix-pill">Fixed</span></h3>
   <ul>

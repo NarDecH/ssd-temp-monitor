@@ -3270,3 +3270,69 @@ class TestInstallerWatchdogWiring:
         loop_idx = app_src.index("_watch_icon_loop(App())")
         remove_idx = app_src.index("os.remove(WATCHDOG_SUPPRESS_FILE)")
         assert start_idx < remove_idx < loop_idx
+
+
+# ---------------------------------------------------------------------------
+# tray-menu watchdog toggle
+# ---------------------------------------------------------------------------
+class TestWatchdogMenuToggle:
+    """The tray menu exposes the crash-watchdog scheduled task as a checked
+    item (schtasks /Change /ENABLE|/DISABLE - never /Delete, so uninstall
+    still removes the task definition)."""
+
+    def test_state_probe_uses_task_state_enum(self):
+        """schtasks /Query returns 0 even for DISABLED tasks (existence
+        only) - the probe must read the State enum instead."""
+        import inspect
+        assert hasattr(m, "_watchdog_task_state")
+        assert hasattr(m, "_watchdog_task_set")
+        src = inspect.getsource(m._watchdog_task_state)
+        assert "Get-ScheduledTask" in src
+        assert "Disabled" in src
+        assert "CREATE_NO_WINDOW" in src            # no console flash
+
+    def test_toggle_uses_change_not_delete(self):
+        import inspect
+        src = inspect.getsource(m._watchdog_task_set)
+        assert "/Change" in src
+        assert "/ENABLE" in src and "/DISABLE" in src
+        assert "/Delete" not in src
+
+    def test_toggle_returns_verified_state(self, app, monkeypatch):
+        calls = []
+        monkeypatch.setattr(m, "_watchdog_task_state",
+                            lambda: calls.append(1) or True)
+        run = []
+        monkeypatch.setattr(m.subprocess, "run",
+                            lambda *a, **k: run.append(a))
+        app._watchdog_enabled = False
+        app.toggle_watchdog()
+        deadline = time.time() + 2.0
+        while time.time() < deadline and not app._watchdog_enabled:
+            time.sleep(0.02)
+        assert app._watchdog_enabled is True        # re-probed, not assumed
+        assert run, "schtasks /Change must be invoked"
+
+    def test_menu_has_checked_watchdog_item(self):
+        src = (PROJECT_ROOT / "ssd_temp_tray.py").read_text(encoding="utf-8")
+        assert 'tr("menu.watchdog")' in src
+        assert "self.toggle_watchdog" in src
+        # inside the main menu build, right after the history toggle and
+        # before the language submenu
+        menu_idx = src.index("def _build_menu") if "def _build_menu" in src \
+            else src.index("pystray.Menu("
+                           )
+        watchdog_idx = src.index('tr("menu.watchdog")', menu_idx)
+        history_idx = src.index('tr("menu.history")', menu_idx)
+        language_idx = src.index('tr("menu.language")', menu_idx)
+        assert history_idx < watchdog_idx < language_idx
+
+    def test_watchdog_menu_key_all_languages(self):
+        old = m.SETTINGS.get("language")
+        try:
+            for lang in ("en", "th", "ja", "zh"):
+                m.SETTINGS["language"] = lang
+                text = m.tr("menu.watchdog")
+                assert text and text != "menu.watchdog"
+        finally:
+            m.SETTINGS["language"] = old

@@ -121,9 +121,10 @@
       ไว้ให้ watchdog รู้ว่าไม่ใช่ crash — จะไม่ถูกเปิดกลับจนกว่าคุณจะเปิดแอปเอง
       — ไฟล์ที่ใช้อยู่ในโฟลเดอร์
       <code>&lt;ตำแหน่งติดตั้ง&gt;\watchdog\</code> และ task จะถูกลบตอน uninstall</p>
-      <p>ถ้าไม่ต้องการ ลบได้เลย (ไม่มีอะไรผูกกับมัน):</p>
-      <pre>schtasks /Delete /TN "SSDTempMonitor Watchdog" /F</pre>
-      <p>หรือปิดผ่าน Task Scheduler GUI สำหรับโหมด portable ให้รัน
+      <p>เปิด/ปิดได้จากในแอปเลย: เมนู tray → <b>Watchdog กัน crash</b>
+      (ติ๊ก = เปิด) — ปิดแล้ว task ยังอยู่แต่ไม่ทำงาน เปิดกลับได้ทันที
+      ถ้าจะลบถาวร: <pre>schtasks /Delete /TN "SSDTempMonitor Watchdog" /F</pre>
+      สำหรับโหมด portable ให้รัน
       <code>tools\install_watchdog.ps1</code> ครั้งเดียวจากคอนโซลแอดมิน</p>
     </div>
   </details>
