@@ -324,9 +324,16 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
 - **scheduled task สำหรับแอป tray ต้องเป็น interactive session เท่านั้น** —
   v1.24.5: watchdog task แบบ SYSTEM เปิดแอปใน session 0 → tray icon
   มองไม่เห็น แม้โปรเซสยังรัน (เช็คจาก `tasklist` คอลัมน์ Session =
-  `Services`) กฎ: task ที่สตาร์ท GUI ต้องใช้ `LogonType Interactive`
+  `Services`)  กฎ: task ที่สตาร์ท GUI ต้องใช้ `LogonType Interactive`
   กับ user ที่ล็อกอิน และหลังติดตั้ง task ต้องเช็ค Session ของโปรเซส
   ที่ task เปิดด้วย ไม่ใช่แค่ "โปรเซสมีอยู่"
+- **task ที่รันถี่ (ทุกนาที) ต้องไม่ execute console-subsystem exe ตรง ๆ** —
+  v1.24.5: watchdog task รัน `powershell.exe -WindowStyle Hidden` แต่
+  PowerShell เป็น console app → Windows สร้าง+ปิดหน้าต่าง conhost ก่อน
+  flag ทำงาน → หน้าต่าง PowerShell กระพริบทุกนาที (ผู้ใช้รายงานว่ารบกวน)
+  แก้: ให้ task รัน `wscript.exe` (GUI subsystem — ไม่มี console เกิดเลย)
+  + VBS launcher (`sh.Run ..., 0, False`) เรียก PowerShell แบบซ่อน
+  กฎ: scheduled task ที่รันประจำควร launch ผ่าน GUI-subsystem host เสมอ
 
 ## สไตล์โค้ด
 

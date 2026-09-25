@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/ci.yml)
 [![Release](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/release.yml/badge.svg)](https://github.com/NarDecH/ssd-temp-monitor/releases)
+[![Project Health](https://img.shields.io/badge/project%20health-live%20dashboard-38bdf8)](https://nardech.github.io/ssd-temp-monitor/health.html)
 ![Version](https://img.shields.io/badge/version-1.24.5-orange)
 ![Tests](https://img.shields.io/badge/tests-314%20passing-brightgreen)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey)
