@@ -334,6 +334,15 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   แก้: ให้ task รัน `wscript.exe` (GUI subsystem — ไม่มี console เกิดเลย)
   + VBS launcher (`sh.Run ..., 0, False`) เรียก PowerShell แบบซ่อน
   กฎ: scheduled task ที่รันประจำควร launch ผ่าน GUI-subsystem host เสมอ
+- **โปรเซสที่ scheduled task เปิดตกอยู่ใน job object ของ task** — v1.24.5:
+  watchdog ใช้ Start-Process เปิดแอป → แอป join job ของ task → task สถานะ
+  "Running" ตลอด (trigger ถัดไปโดน MultipleInstances IgnoreNew = error
+  0x800710E0) และ ExecutionTimeLimit (5 นาที) ฆ่าแอปที่เพิ่ง restart →
+  วงจร kill/restart เงียบ ๆ ทุก 5 นาที แก้: spawn ผ่าน WMI
+  (`Invoke-CimMethod Win32_Process Create`) → parent กลายเป็น WmiPrvSE
+  ไม่อยู่ใน job กฎ: task ที่เปิดโปรเซสระยะยาวต้อง spawn นอก job (WMI)
+  และหลังติดตั้งต้องเช็คว่า task กลับมา "Ready / Last Result 0" ไม่ใช่แค่
+  "แอปถูกเปิด"
 
 ## สไตล์โค้ด
 

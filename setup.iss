@@ -37,6 +37,12 @@ Name: "autostart"; Description: "Start automatically at Windows login"; \
 
 [Files]
 Source: "dist\ssd_temp_monitor.exe"; DestDir: "{app}"; Flags: ignoreversion
+; crash watchdog: copied into {app}\watchdog so the scheduled task never
+; depends on a repo checkout; registered right after files are copied and
+; removed again on uninstall
+Source: "tools\watchdog.ps1"; DestDir: "{app}\watchdog"; Flags: ignoreversion
+Source: "tools\watchdog_launcher.vbs"; DestDir: "{app}\watchdog"; Flags: ignoreversion
+Source: "tools\register_watchdog_task.ps1"; DestDir: "{app}\watchdog"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -48,10 +54,22 @@ Name: "{commonstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; \
     Tasks: autostart
 
 [Run]
+; register the 1-minute crash watchdog (invisible wscript launcher,
+; interactive session - see AGENT.md lessons); {app} resolves with 32-bit
+; quirks disabled so the path matches the real 64-bit install dir
+Filename: "powershell.exe"; \
+    Parameters: "-NoProfile -ExecutionPolicy Bypass -File """{app}\watchdog\register_watchdog_task.ps1""" -AppDir """{app}""""; \
+    Flags: runhidden waituntilterminated; \
+    Check: IsAdminLoggedOn
 ; runasoriginaluser: after a silent auto-update (elevated) the app must come
 ; back on the original user's desktop, not in the admin context
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; \
     Flags: nowait postinstall skipifsilent runasoriginaluser
+
+[UninstallRun]
+; remove the watchdog task before the files it points to disappear
+Filename: "schtasks.exe"; Parameters: "/Delete /TN ""SSDTempMonitor Watchdog"" /F"; \
+    Flags: runhidden; RunOnceId: "DelWatchdogTask"
 
 [UninstallDelete]
 ; remove the CSV history and the saved settings on uninstall

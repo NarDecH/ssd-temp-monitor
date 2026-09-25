@@ -1,14 +1,25 @@
 # SSD Temp Monitor - crash watchdog.
-# Installed by tools/install_watchdog.ps1 as a 1-minute scheduled task
-# (highest privileges). Restarts the installed main app when its process
-# is gone - the last line of defense when a native fault kills it.
-# Never touches an already-running instance and never starts a second one
-# (the app itself has a single-instance mutex as the second net).
+# Copied next to the installed app by the Inno Setup installer
+# ({app}\watchdog\watchdog.ps1) or by tools\install_watchdog.ps1, and run
+# every minute by the "SSDTempMonitor Watchdog" scheduled task (via the
+# invisible wscript VBS launcher).
+# Locates the app exe relative to ITSELF: works from the install dir, a
+# portable layout, or the repo checkout (tools\..) without hardcoding
+# C:\Program Files.
+# Restarts the app when its process is gone - the last line of defense when
+# a native fault kills it. Never touches an already-running instance and
+# never starts a second one (the app itself has a single-instance mutex as
+# the second net).
 
-$exe = "C:\Program Files\SSD Temp Monitor\ssd_temp_monitor.exe"
+$here = Split-Path -Parent $MyInvocation.MyCommand.Path
+$candidates = @(
+    (Join-Path (Split-Path -Parent $here) "ssd_temp_monitor.exe"),  # {app}\watchdog\..\
+    (Join-Path $here "ssd_temp_monitor.exe"),                        # copy beside the script
+    "C:\Program Files\SSD Temp Monitor\ssd_temp_monitor.exe"         # default install dir
+)
+$exe = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $exe) { exit 0 }                        # not installed
 $procName = "ssd_temp_monitor"
-
-if (-not (Test-Path $exe)) { exit 0 }          # not installed
 
 $running = Get-Process -Name $procName -ErrorAction SilentlyContinue
 if ($running) { exit 0 }                        # healthy - nothing to do
@@ -23,4 +34,11 @@ $updating = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
     }
 if ($updating) { exit 0 }
 
-Start-Process -FilePath $exe | Out-Null
+# Spawn OUTSIDE this process tree: processes started by a scheduled task
+# belong to the task's job object - the task then reports "Running" as long
+# as the app lives (later triggers fail with 0x800710E0) and the 5-minute
+# ExecutionTimeLimit KILLS the restarted app. Creating the process via WMI
+# parents it to WmiPrvSE instead, escaping the task's job entirely.
+Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+    CommandLine = "`"$exe`""
+} | Out-Null

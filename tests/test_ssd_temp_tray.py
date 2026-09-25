@@ -3172,3 +3172,81 @@ class TestResetStatsV124:
         assert "SHA256SUMS.txt" in yml                 # checksummed like others
         # attached to the release asset list
         assert "ssd_temp_lite_v${{ steps.ver.outputs.version }}.exe" in yml
+
+
+# ---------------------------------------------------------------------------
+# installer wires the crash-watchdog scheduled task (wscript launcher)
+# ---------------------------------------------------------------------------
+class TestInstallerWatchdogWiring:
+    """The Inno Setup installer must stage, register and un-register the
+    1-minute crash watchdog automatically (see AGENT.md lessons: the task
+    runs wscript.exe in the interactive session so no console window
+    flashes and the tray app never lands in session 0)."""
+
+    @staticmethod
+    def _read(*parts):
+        from pathlib import Path
+        return (Path(__file__).resolve().parents[1].joinpath(*parts)).read_text(
+            encoding="utf-8")
+
+    def test_installer_stages_watchdog_files(self):
+        iss = self._read("setup.iss")
+        for token in ('Source: "tools\\watchdog.ps1"; DestDir: "{app}\\watchdog"',
+                      'Source: "tools\\watchdog_launcher.vbs";'
+                      ' DestDir: "{app}\\watchdog"',
+                      'Source: "tools\\register_watchdog_task.ps1";'
+                      ' DestDir: "{app}\\watchdog"'):
+            assert token in iss, token
+
+    def test_installer_registers_task_after_copy(self):
+        iss = self._read("setup.iss")
+        run_idx = iss.index("[Run]")
+        uninstall_idx = iss.index("[UninstallRun]")
+        run_block = iss[run_idx:uninstall_idx]
+        assert "register_watchdog_task.ps1" in run_block
+        # the register step must run before the post-install app launch
+        assert run_block.index("register_watchdog_task.ps1") \
+            < run_block.index("postinstall")
+
+    def test_uninstaller_removes_task_before_files(self):
+        iss = self._read("setup.iss")
+        block = iss[iss.index("[UninstallRun]"):iss.index("[UninstallDelete]")]
+        assert "SSDTempMonitor Watchdog" in block
+        assert "/Delete" in block
+
+    def test_register_script_design(self):
+        src = self._read("tools", "register_watchdog_task.ps1")
+        assert "wscript.exe" in src                 # no console flash
+        assert "LogonType Interactive" in src       # session 1, not session 0
+        assert "RunLevel Highest" in src
+        assert "New-TimeSpan -Minutes 1" in src     # 1-minute cadence
+
+    def test_register_script_accepts_appdir_param(self):
+        src = self._read("tools", "register_watchdog_task.ps1")
+        assert 'param(' in src and "$AppDir" in src
+
+    def test_manual_installer_delegates_to_register_script(self):
+        src = self._read("tools", "install_watchdog.ps1")
+        assert "register_watchdog_task.ps1" in src
+
+    def test_watchdog_locates_exe_relative_to_script(self):
+        src = self._read("tools", "watchdog.ps1")
+        assert "MyInvocation.MyCommand.Path" in src
+        # relative probe first, default install dir as the fallback
+        assert "ssd_temp_monitor.exe" in src
+        assert "C:\\Program Files\\SSD Temp Monitor" in src
+
+    def test_watchdog_spawns_app_outside_task_job(self):
+        """The watchdog runs inside the scheduled task's job object: an app
+        started with Start-Process joins that job, the task stays 'Running'
+        forever (later triggers: 0x800710E0) and the ExecutionTimeLimit then
+        kills the restarted app. WMI spawn escapes the job (v1.24.5 bug)."""
+        src = self._read("tools", "watchdog.ps1")
+        assert "Win32_Process" in src and "Invoke-CimMethod" in src
+        assert "Start-Process" not in src
+
+    def test_launcher_runs_powershell_hidden(self):
+        src = self._read("tools", "watchdog_launcher.vbs")
+        assert "watchdog.ps1" in src
+        assert "-WindowStyle Hidden" in src
+        assert ", 0, False" in src                  # hidden window, no wait
