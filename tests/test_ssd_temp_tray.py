@@ -3266,9 +3266,12 @@ class TestInstallerWatchdogWiring:
         assert app_src.index("WATCHDOG_SUPPRESS_FILE, \"w\""
                              ) > quit_idx
         # ...and removed during startup, before the tray loop starts
+        # (search AFTER main(): quit() also removes a stale marker when the
+        # marker setting is off)
         start_idx = app_src.index("def main():")
         loop_idx = app_src.index("_watch_icon_loop(App())")
-        remove_idx = app_src.index("os.remove(WATCHDOG_SUPPRESS_FILE)")
+        remove_idx = app_src.index("os.remove(WATCHDOG_SUPPRESS_FILE)",
+                                   start_idx)
         assert start_idx < remove_idx < loop_idx
 
 
@@ -3282,14 +3285,19 @@ class TestWatchdogMenuToggle:
 
     def test_state_probe_uses_task_state_enum(self):
         """schtasks /Query returns 0 even for DISABLED tasks (existence
-        only) - the probe must read the State enum instead."""
+        only) - the probe must read the State enum instead, and tell
+        "absent" apart from "disabled"."""
         import inspect
+        assert hasattr(m, "_watchdog_task_detail")
         assert hasattr(m, "_watchdog_task_state")
         assert hasattr(m, "_watchdog_task_set")
-        src = inspect.getsource(m._watchdog_task_state)
+        src = inspect.getsource(m._watchdog_task_detail)
         assert "Get-ScheduledTask" in src
-        assert "Disabled" in src
+        assert "Disabled" in src and "absent" in src
         assert "CREATE_NO_WINDOW" in src            # no console flash
+        # the bool probe and the menu cache both build on the detail probe
+        assert inspect.getsource(m._watchdog_task_state).strip().endswith(
+            '_watchdog_task_detail() == "enabled"')
 
     def test_toggle_uses_change_not_delete(self):
         import inspect
@@ -3334,5 +3342,55 @@ class TestWatchdogMenuToggle:
                 m.SETTINGS["language"] = lang
                 text = m.tr("menu.watchdog")
                 assert text and text != "menu.watchdog"
+        finally:
+            m.SETTINGS["language"] = old
+
+
+class TestWatchdogExitMarkerSetting:
+    """Settings - Watchdog: the Exit marker is a user choice (on by
+    default), and the Settings dialog shows the live task state."""
+
+    def test_setting_defaults_on_and_survives_validation(self):
+        assert m.DEFAULT_SETTINGS["watchdog_skip_on_exit"] is True
+        out = m._validate_settings({"watchdog_skip_on_exit": False})
+        assert out["watchdog_skip_on_exit"] is False
+        out = m._validate_settings({})
+        assert out["watchdog_skip_on_exit"] is True
+
+    def test_quit_writes_marker_only_when_enabled(self, app, monkeypatch,
+                                                  tmp_path):
+        app.icon = types.SimpleNamespace(remove_notification=lambda: None,
+                                         stop=lambda: None)
+        monkeypatch.setattr(m, "WATCHDOG_SUPPRESS_FILE",
+                            str(tmp_path / "marker.flag"))
+        marker = tmp_path / "marker.flag"
+        # enabled (default): quit writes the marker
+        m.SETTINGS["watchdog_skip_on_exit"] = True
+        app.quit()
+        assert marker.is_file()
+        # disabled: quit REMOVES any existing marker instead
+        m.SETTINGS["watchdog_skip_on_exit"] = False
+        marker.write_text("stale", encoding="utf-8")
+        app.quit()
+        assert not marker.exists()
+
+    def test_settings_dialog_shows_state_and_saves_choice(self):
+        src = (PROJECT_ROOT / "ssd_temp_tray.py").read_text(encoding="utf-8")
+        assert 'tr("settings.watchdog_marker")' in src
+        assert 'tr("settings.watchdog_status")' in src
+        assert "_refresh_watchdog_state" in src
+        assert '"watchdog_skip_on_exit"] = bool(watchdog_var.get())' in src
+
+    def test_status_keys_all_languages(self):
+        old = m.SETTINGS.get("language")
+        try:
+            for lang in ("en", "th", "ja", "zh"):
+                m.SETTINGS["language"] = lang
+                for key in ("settings.watchdog_marker",
+                            "settings.watchdog_status",
+                            "watchdog.state.enabled",
+                            "watchdog.state.disabled",
+                            "watchdog.state.absent"):
+                    assert m.tr(key) != key, (lang, key)
         finally:
             m.SETTINGS["language"] = old

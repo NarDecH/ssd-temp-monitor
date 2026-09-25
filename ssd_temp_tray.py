@@ -46,7 +46,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.24.7"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.24.8"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -89,11 +89,12 @@ WATCHDOG_SUPPRESS_FILE = os.path.join(DATA_DIR, "watchdog_skip.flag")
 WATCHDOG_TASK_NAME = "SSDTempMonitor Watchdog"
 
 
-def _watchdog_task_state():
-    """True if the crash-watchdog scheduled task exists and is enabled.
+def _watchdog_task_detail():
+    """"enabled" / "disabled" / "absent" for the watchdog task.
     NOTE: schtasks /Query returns 0 for DISABLED tasks too (it only checks
     existence) - the State enum from Get-ScheduledTask is the reliable,
-    locale-independent source."""
+    locale-independent source (and its failure tells "absent" apart from
+    "disabled")."""
     try:
         proc = subprocess.run(
             ["powershell", "-NoProfile", "-Command",
@@ -102,10 +103,16 @@ def _watchdog_task_state():
             capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW,
             timeout=15)
         if proc.returncode != 0:
-            return False                      # task does not exist
-        return proc.stdout.decode(errors="replace").strip() != "Disabled"
+            return "absent"                   # task does not exist
+        state = proc.stdout.decode(errors="replace").strip()
+        return "disabled" if state == "Disabled" else "enabled"
     except Exception:
-        return False
+        return "absent"
+
+
+def _watchdog_task_state():
+    """True if the crash-watchdog scheduled task exists and is enabled."""
+    return _watchdog_task_detail() == "enabled"
 
 
 def _watchdog_task_set(enable):
@@ -286,6 +293,7 @@ DEFAULT_SETTINGS = {
     "update_channel": "stable",              # or "pre-release"
     "weekly_report_enabled": False,          # auto-save the weekly report
     "weekly_report_dir": "",                 # where; empty = app data dir
+    "watchdog_skip_on_exit": True,           # Exit writes the skip marker
     "ui_theme": "auto",                      # auto|dark|light (windows/report)
     "update_check_interval_minutes": 360,     # auto-check every N minutes
     "icon_size": 64,                          # tray icon edge in px
@@ -328,6 +336,7 @@ def _validate_settings(cfg):
     out["compact_tooltip"] = bool(out["compact_tooltip"])
     out["weekly_report_enabled"] = bool(out["weekly_report_enabled"])
     out["weekly_report_dir"] = str(out["weekly_report_dir"] or "").strip()
+    out["watchdog_skip_on_exit"] = bool(out["watchdog_skip_on_exit"])
     out["ui_theme"] = (out["ui_theme"] if out["ui_theme"] in
                        ("auto", "dark", "light") else "auto")
     out["language"] = (out["language"] if out["language"] in UI_LANGUAGES
@@ -485,6 +494,12 @@ STRINGS = {
         "health.read_errors": "Read errors",
         "health.unfixed": "uncorrected",
         "settings.smart_alerts": "Alert on SMART problems (new errors, wear)",
+        "settings.watchdog_marker": ("Write crash-watchdog marker on Exit "
+                                     "(app stays closed)"),
+        "settings.watchdog_status": "Watchdog task:",
+        "watchdog.state.enabled": "enabled",
+        "watchdog.state.disabled": "disabled",
+        "watchdog.state.absent": "not installed",
         "smart.title": "SSD health notice",
         "smart.new_errors": ("{model}: {n} new uncorrected read error(s) - "
                              "back up your data."),
@@ -666,6 +681,12 @@ STRINGS = {
         "health.read_errors": "ข้อผิดพลาดการอ่าน",
         "health.unfixed": "แก้ไขไม่สำเร็จ",
         "settings.smart_alerts": "แจ้งเตือนเมื่อ SMART มีปัญหา (error ใหม่ / การสึก)",
+        "settings.watchdog_marker": ("เขียน marker กัน watchdog เมื่อกด Exit "
+                                     "(แอปจะยังปิดค้าง)"),
+        "settings.watchdog_status": "สถานะ Watchdog:",
+        "watchdog.state.enabled": "เปิดอยู่",
+        "watchdog.state.disabled": "ปิดอยู่",
+        "watchdog.state.absent": "ไม่ได้ติดตั้ง",
         "smart.title": "แจ้งเตือนสุขภาพ SSD",
         "smart.new_errors": "{model}: พบข้อผิดพลาดการอ่านแก้ไม่สำเร็จใหม่ {n} รายการ - ควรสำรองข้อมูล",
         "smart.wear_band": "{model}: การสึกถึง {wear}% แล้ว",
@@ -841,6 +862,12 @@ STRINGS = {
         "health.read_errors": "読み取りエラー",
         "health.unfixed": "訂正不能",
         "settings.smart_alerts": "SMART 異常を通知 (新規エラー / 劣化)",
+        "settings.watchdog_marker": ("終了時にクラッシュ監視マーカーを書き込む "
+                                     "(アプリは閉じたまま)"),
+        "settings.watchdog_status": "監視タスク:",
+        "watchdog.state.enabled": "有効",
+        "watchdog.state.disabled": "無効",
+        "watchdog.state.absent": "未インストール",
         "smart.title": "SSD 健康のお知らせ",
         "smart.new_errors": "{model}: 新しい訂正不能読み取りエラーが {n} 件 - データをバックアップしてください。",
         "smart.wear_band": "{model}: ドライブの劣化が {wear}% に到達しました。",
@@ -1015,6 +1042,12 @@ STRINGS = {
         "health.read_errors": "读取错误",
         "health.unfixed": "无法纠正",
         "settings.smart_alerts": "SMART 异常提醒 (新错误 / 磨损)",
+        "settings.watchdog_marker": ("退出时写入崩溃看护标记 "
+                                     "(应用保持关闭)"),
+        "settings.watchdog_status": "看护任务状态:",
+        "watchdog.state.enabled": "已启用",
+        "watchdog.state.disabled": "已禁用",
+        "watchdog.state.absent": "未安装",
         "smart.title": "SSD 健康提醒",
         "smart.new_errors": "{model}: 新增 {n} 个无法纠正的读取错误 - 请备份数据。",
         "smart.wear_band": "{model}: 磨损已达 {wear}%。",
@@ -4284,6 +4317,49 @@ class App:
                         variable=smart_var).grid(
             row=8, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
+        # ---- watchdog: exit marker choice + live task state -----------
+        watchdog_var = tk.BooleanVar(
+            value=current.get("watchdog_skip_on_exit", True))
+        ttk.Checkbutton(tab_general, text=tr("settings.watchdog_marker"),
+                        variable=watchdog_var).grid(
+            row=12, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        tk.Label(tab_general, text=tr("settings.watchdog_status"),
+                 font=("Segoe UI", 10), anchor="w").grid(
+            row=13, column=0, sticky="w", pady=3)
+        wd_state_lbl = tk.Label(tab_general, font=("Segoe UI", 10, "bold"),
+                                anchor="w", text="...")
+        wd_state_lbl.grid(row=13, column=1, sticky="w", padx=(14, 0), pady=3)
+
+        def _refresh_watchdog_state():
+            """Probe the scheduled task off the tk thread, show the result."""
+            wd_state_lbl.config(text="...", fg=UNKNOWN)
+
+            def work():
+                state = _watchdog_task_detail()
+
+                def done():
+                    try:
+                        if state == "enabled":
+                            wd_state_lbl.config(
+                                text=tr("watchdog.state.enabled"),
+                                fg=GREEN)
+                        elif state == "disabled":
+                            wd_state_lbl.config(
+                                text=tr("watchdog.state.disabled"),
+                                fg=ORANGE)
+                        else:
+                            wd_state_lbl.config(
+                                text=tr("watchdog.state.absent"),
+                                fg=UNKNOWN)
+                    except tk.TclError:
+                        pass  # window closed while probing
+
+                self.tk_after(root, 0, done)
+
+            threading.Thread(target=work, daemon=True).start()
+
+        _refresh_watchdog_state()
+
         # UI theme (dark/light) for windows and reports
         tk.Label(tab_general, text=tr("settings.ui_theme"),
                  font=("Segoe UI", 10), anchor="w").grid(
@@ -4712,6 +4788,7 @@ class App:
                 vals["compact_tooltip"] = bool(compact_var.get())
                 vals["weekly_report_enabled"] = bool(weekly_var.get())
                 vals["weekly_report_dir"] = weekly_dir_var.get().strip()
+                vals["watchdog_skip_on_exit"] = bool(watchdog_var.get())
                 vals["ui_theme"] = uitheme_var.get()
                 vals["high_contrast_icon"] = bool(hc_var.get())
                 vals["icon_font"] = font_var.get()
@@ -5179,11 +5256,20 @@ class App:
             pass
         # tell the external crash watchdog this was a deliberate quit -
         # without the marker it would resurrect the app within a minute
-        try:
-            with open(WATCHDOG_SUPPRESS_FILE, "w", encoding="utf-8") as f:
-                f.write("user quit at %s\n" % time.strftime("%Y-%m-%d %H:%M:%S"))
-        except OSError:
-            pass
+        # (Settings can turn the marker off: "restart me even after Exit")
+        if SETTINGS.get("watchdog_skip_on_exit", True):
+            try:
+                with open(WATCHDOG_SUPPRESS_FILE, "w", encoding="utf-8") as f:
+                    f.write("user quit at %s\n"
+                            % time.strftime("%Y-%m-%d %H:%M:%S"))
+            except OSError:
+                pass
+        else:
+            try:
+                if os.path.isfile(WATCHDOG_SUPPRESS_FILE):
+                    os.remove(WATCHDOG_SUPPRESS_FILE)
+            except OSError:
+                pass
         self.icon.stop()
 
     # ---- history recording ----
