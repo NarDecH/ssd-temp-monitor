@@ -3,6 +3,25 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.24.9] — 2026-09-25
+
+### Added
+
+- 🧪 **E2E test อัตโนมัติของ watchdog** — `tools\e2e_watchdog_test.ps1`
+  ทดสอบห่วงโซ่จริงก่อน release ทุกครั้ง: kill แอป → task ต้องปลุกกลับ,
+  เขียน marker → ต้องเงียบ โดย clone task จริงเป็นชื่อทดสอบ
+  (task จริงเปิดค้างตลอด — ไม่มีช่วงเสี่ยง) และเก็บกวาดเองไม่ว่าผล pass/fail
+- 📜 **watchdog decision log** — การปลุกกลับ, การข้ามงาน (marker /
+  ตัวอัปเดตกำลังรัน) และความล้มเหลวของ WMI spawn ถูกบันทึกที่
+  `%APPDATA%\SSDTempMonitor\watchdog.log` (นาทีที่แอปปกติเงียบ —
+  ทุกบรรทัดมีความหมาย) ทำให้ "ทำไม watchdog ไม่ปลุก" ตอบได้เสมอ
+
+### Fixed
+
+- 🔇 **WMI spawn ล้มเหลวเงียบ** — ผล `Invoke-CimMethod` ถูก `| Out-Null`
+  ทิ้ง ทำให้ spawn ที่ fail (rc ≠ 0) วินิจฉัยไม่ได้ — ตรวจ `ReturnValue`
+  แล้วบันทึก rc พร้อมความหมาย (access denied / path not found ฯลฯ)
+
 ## [1.24.8] — 2026-09-25
 
 ### Added

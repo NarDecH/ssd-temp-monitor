@@ -125,8 +125,13 @@
       (ติ๊ก = เปิด) — ปิดแล้ว task ยังอยู่แต่ไม่ทำงาน เปิดกลับได้ทันที
       ในหน้า <b>Settings → General</b> ยังเลือกได้ว่าเมื่อกด Exit จะเขียน
       marker กัน watchdog หรือไม่ (ปล่อยไว้ = แอปอยู่ปิดตามที่คุณสั่ง)
-      พร้อมช่องแสดงสถานะ task ปัจจุบัน
-      ถ้าจะลบถาวร: <pre>schtasks /Delete /TN "SSDTempMonitor Watchdog" /F</pre>
+      พร้อมช่องแสดงสถานะ task ปัจจุบัน</p>
+      <p>ทุกครั้งที่ watchdog ปลุกแอปกลับ (หรือข้ามงานเพราะ marker/ตัวอัปเดต)
+      จะบันทึกเหตุการณ์ไว้ที่ <code>%APPDATA%\SSDTempMonitor\watchdog.log</code>
+      — นาทีที่แอปรันปกติจะไม่มีบรรทัดใหม่ ถ้าอยากลองกลไกเอง รัน
+      <code>tools\e2e_watchdog_test.ps1</code> (คอนโซลแอดมิน) มันจะ kill แอป
+      ให้ task ปลุกกลับ ทดสอบ marker แล้วเก็บกวาดเอง</p>
+      <p>ถ้าจะลบถาวร: <pre>schtasks /Delete /TN "SSDTempMonitor Watchdog" /F</pre>
       สำหรับโหมด portable ให้รัน
       <code>tools\install_watchdog.ps1</code> ครั้งเดียวจากคอนโซลแอดมิน</p>
     </div>

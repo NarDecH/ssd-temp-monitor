@@ -340,9 +340,17 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   0x800710E0) และ ExecutionTimeLimit (5 นาที) ฆ่าแอปที่เพิ่ง restart →
   วงจร kill/restart เงียบ ๆ ทุก 5 นาที แก้: spawn ผ่าน WMI
   (`Invoke-CimMethod Win32_Process Create`) → parent กลายเป็น WmiPrvSE
-  ไม่อยู่ใน job กฎ: task ที่เปิดโปรเซสระยะยาวต้อง spawn นอก job (WMI)
+  ไม่อยู่ใน job  กฎ: task ที่เปิดโปรเซสระยะยาวต้อง spawn นอก job (WMI)
   และหลังติดตั้งต้องเช็คว่า task กลับมา "Ready / Last Result 0" ไม่ใช่แค่
   "แอปถูกเปิด"
+- **script ที่รันเงียบ ๆ เป็นประจำต้อง log "ทำไมไม่ทำอะไร"** — E2E watchdog
+  รอบแรกล้ม (kill แอปแล้วไม่มีใครปลุก) ทั้งที่ task tick ปกติ (Last Result 0)
+  แต่ watchdog.ps1 จบที่ guard ไหน หรือ WMI spawn fail (rc ถูก `| Out-Null`
+  ทิ้ง) ไม่มีทางรู้เลย แก้: decision log (`watchdog.log` ใน APPDATA)
+  บันทึกเฉพาะเหตุการณ์ผิดปกติ — แอปหาย, guard ข้าม (marker/update shim),
+  ผล spawn rc; นาทีที่แอปรันปกติเงียบ ทุกบรรทัดใน log จึงมีความหมาย
+  และ tools\e2e_watchdog_test.ps1 (clone task ชื่อทดสอบ ไม่แตะ task จริง)
+  ใช้เป็น gate ก่อน release ทุกครั้ง
 
 ## สไตล์โค้ด
 

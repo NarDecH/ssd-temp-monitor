@@ -75,7 +75,20 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
-  <h2><span class="ver-badge">v1.24.8</span> <span class="date">25 กันยายน 2026</span></h2>
+  <h2><span class="ver-badge">v1.24.9</span> <span class="date">25 กันยายน 2026</span></h2>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>🧪 <strong>E2E test อัตโนมัติของ watchdog</strong> — <code>tools\e2e_watchdog_test.ps1</code> ทดสอบห่วงโซ่จริงก่อน release ทุกครั้ง: kill แอป → task ต้องปลุกกลับ, เขียน marker → ต้องเงียบ โดย clone task จริงเป็นชื่อทดสอบ (task จริงเปิดค้างตลอด — ไม่มีช่วงเสี่ยง) และเก็บกวาดเองไม่ว่าผล pass/fail</li>
+    <li>📜 <strong>watchdog decision log</strong> — การปลุกกลับ, การข้ามงาน (marker / ตัวอัปเดตกำลังรัน) และความล้มเหลวของ WMI spawn ถูกบันทึกที่ <code>%APPDATA%\SSDTempMonitor\watchdog.log</code> (นาทีที่แอปปกติเงียบ — ทุกบรรทัดมีความหมาย)</li>
+  </ul>
+
+  <h3><span class="pill fix-pill">Fixed</span></h3>
+  <ul>
+    <li>🔇 <strong>WMI spawn ล้มเหลวเงียบ</strong> — ผล <code>Invoke-CimMethod</code> ถูก <code>| Out-Null</code> ทิ้ง ทำให้ spawn ที่ fail วินิจฉัยไม่ได้ — ตรวจ <code>ReturnValue</code> แล้วบันทึก rc พร้อมความหมาย</li>
+  </ul>
+
+  <h2><span class="ver-badge old">v1.24.8</span> <span class="date">25 กันยายน 2026</span></h2>
 
   <h3><span class="pill add-pill">Added</span></h3>
   <ul>

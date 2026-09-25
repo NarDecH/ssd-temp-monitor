@@ -3394,3 +3394,65 @@ class TestWatchdogExitMarkerSetting:
                     assert m.tr(key) != key, (lang, key)
         finally:
             m.SETTINGS["language"] = old
+
+
+# ---------------------------------------------------------------------------
+# automated end-to-end watchdog test (release gate)
+# ---------------------------------------------------------------------------
+class TestE2EWatchdogScript:
+    """tools/e2e_watchdog_test.ps1 exercises the real watchdog chain before
+    every release: kill the app and a task restarts it, write the quit
+    marker and no task does. It clones the real task under a test name so
+    the real watchdog stays enabled the whole time, and always cleans up."""
+
+    @staticmethod
+    def _read(*parts):
+        from pathlib import Path
+        return (Path(__file__).resolve().parents[1].joinpath(*parts)).read_text(
+            encoding="utf-8")
+
+    def test_script_covers_both_cases_and_reports_pass_fail(self):
+        src = self._read("tools", "e2e_watchdog_test.ps1")
+        # case 1: crash -> restarted; case 2: marker -> not restarted
+        assert "Stop-Process -Name $procName -Force" in src
+        assert "Wait-AppCount" in src
+        assert "marker-suppresses-restart" in src
+        # machine-readable verdict for a release gate
+        assert "exit 0" in src and "exit 1" in src
+        assert "passed" in src
+
+    def test_script_clones_task_and_never_touches_the_real_one(self):
+        src = self._read("tools", "e2e_watchdog_test.ps1")
+        assert "Export-ScheduledTask" in src
+        assert "Register-ScheduledTask" in src
+        assert "SSDTempMonitor Watchdog E2E" in src
+        # no /DISABLE anywhere and the real task name is never passed to
+        # Register/Unregister - only the clone is (real task stays enabled)
+        assert "/DISABLE" not in src
+        reg_idx = src.index("Register-ScheduledTask")
+        assert "-TaskName $e2eTask" in src[reg_idx:reg_idx + 80]
+        assert "-TaskName $realTask" not in src[reg_idx:]
+
+    def test_script_cleans_up_even_on_failure(self):
+        src = self._read("tools", "e2e_watchdog_test.ps1")
+        # cleanup lives in finally: clone task, marker, app state
+        try_idx = src.index("try {")
+        finally_idx = src.index("finally {", try_idx)
+        finally_block = src[finally_idx:]
+        assert "Unregister-ScheduledTask" in finally_block
+        assert "Remove-Item -Path $marker" in finally_block
+        # leaves the machine as found: app running again
+        assert "Start-AppViaWmi" in finally_block
+
+    def test_script_spawn_matches_watchdog_method(self):
+        """Same WMI spawn as watchdog.ps1 so the baseline app behaves like
+        a watchdog-started one (outside any job object)."""
+        src = self._read("tools", "e2e_watchdog_test.ps1")
+        assert "Win32_Process" in src
+        assert "Start-Process" not in src
+
+    def test_script_requires_admin_and_installed_task(self):
+        src = self._read("tools", "e2e_watchdog_test.ps1")
+        assert "IsInRole" in src                        # elevated only
+        assert "SSDTempMonitor Watchdog" in src         # real task preflight
+        assert "not installed" in src                   # helpful failure

@@ -3,7 +3,7 @@
 [![CI](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/ci.yml)
 [![Release](https://github.com/NarDecH/ssd-temp-monitor/actions/workflows/release.yml/badge.svg)](https://github.com/NarDecH/ssd-temp-monitor/releases)
 [![Project Health](https://img.shields.io/badge/project%20health-live%20dashboard-38bdf8)](https://nardech.github.io/ssd-temp-monitor/health.html)
-![Version](https://img.shields.io/badge/version-1.24.8-orange)
+![Version](https://img.shields.io/badge/version-1.24.9-orange)
 ![Tests](https://img.shields.io/badge/tests-314%20passing-brightgreen)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey)
 
@@ -120,6 +120,17 @@ How it behaves:
 - **Self-contained** — the launcher and script live in
   `<install dir>\watchdog\` (staged by the installer) and the task is
   removed again on uninstall.
+- **Auditable** — every restart, guard skip and spawn failure is written
+  to `%APPDATA%\SSDTempMonitor\watchdog.log` (healthy minutes stay
+  silent), so a missed restart is always explainable.
+
+Before every release an automated end-to-end test
+(`tools\e2e_watchdog_test.ps1`) exercises the real chain on the build
+machine: it kills the running app and requires a scheduled task to bring
+it back, then verifies the quit marker keeps it down. It registers a
+clone of the task under a test name (`SSDTempMonitor Watchdog E2E`) so
+the real watchdog stays enabled the whole time, and cleans up after
+itself whether it passes or fails.
 
 Remove or disable it any time — easiest from the app itself: the tray
 menu has a checked **Crash watchdog (auto-restart)** item. To delete it
