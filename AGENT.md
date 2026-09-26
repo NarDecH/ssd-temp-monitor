@@ -363,6 +363,18 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   อีกไม่กี่วินาที → instance ที่ watchdog ปลุกใหม่แพ้ mutex → dialog
   "already running" เด้งใส่ผู้ใช้ทุกรอบที่ปลุก ให้ spawn เงียบเสมอ
   (เปิดปกติไม่ได้รับผลกระทบเพราะ mutex ว่าง)
+- **source-run (pythonw) ค้างถือ AppMutex มองไม่เห็นจาก process list ของแอป** —
+  v1.25.2: เครื่อง dev ติด 1.24.9 ไม่ได้เป็นชั่วโมง เพราะมีโปรเซส pythonw
+  (รันแอปจากซอร์สค้าง) ถือ `Local\SSDTempMonitor_SingleInstance` อยู่เงียบ ๆ
+  → installer abort "currently running" ทั้งที่ procs=0 (OpenMutexW เห็น,
+  แอปไม่เห็นตัวเองใน process list ของชื่อ exe) วิธีจับ: Sysinternals
+  `handle64 -a <mutex_name>` (ลงท้ายชื่อ mutex พอ) จะชี้ pid ผู้ถือตรง ๆ
+  บทเรียน: (1) ก่อน blame installer/updater ให้พิสูจน์ว่า "ใครถือ mutex"
+  ด้วย handle enumeration — OpenMutexW บอกได้แค่ว่าถูกถือ ไม่บอกว่าใคร
+  (2) เขียน enum handle table เองผ่าน ctypes พังง่าย (SeDebugPrivilege
+  ต้อง enable ด้วย argtypes ที่ประกาศถูก, OpenProcess ยังล้มเหลวกับ
+  SYSTEM procs) — handle64 ปลอดภัยกว่า (3) ตอนติดตั้ง: kill holder ที่
+  ล่าเจอก่อนแล้วค่อยรัน setup ไม่ใช่ disable task อย่างเดียว
 - **negative test ต้องรอ "ตัวตายตายจริง" ก่อน sample ครั้งแรก** — E2E เคส
   marker-suppress FAIL บน CI ใน 0 วิ ทั้งที่ watchdog เงียบจริง เพราะ (1)
   `Wait-AppCount 0 15` เป็น no-op (`count >= 0` จริงเสมอ → คืนทันที)
