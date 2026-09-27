@@ -4008,6 +4008,21 @@ class TestReleaseNotesAutomation:
         assert "**Downloads**" in yml
         assert "SHA256SUMS.txt" in yml
 
+    def test_stability_gate_warns_but_never_blocks(self):
+        """The gate reminds about the ~7-day stability window from
+        AGENT.md yet cannot block a hotfix (warning, not error)."""
+        yml = self._read(".github", "workflows", "release.yml")
+        assert "Stability gate" in yml
+        assert "::warning::" in yml          # non-blocking
+        assert "::error::" not in yml.split(
+            "Stability gate")[1].split("Release notes")[0]
+        assert "releases/latest" in yml      # reads the previous release
+        assert "TotalDays" in yml            # age computation
+        # the gate must sit BEFORE the notes step (advice before building)
+        gate_idx = yml.index("Stability gate")
+        notes_idx = yml.index("Release notes from CHANGELOG")
+        assert gate_idx < notes_idx
+
 
 class TestStartupTelemetry:
     """The startup event carries version AND startup_ms (interpreter
@@ -4100,6 +4115,47 @@ class TestStartupLatencyGraph:
                     "details.startup_trend"
         finally:
             m.SETTINGS["language"] = old
+
+
+class TestWeeklyTelemetrySection:
+    """The weekly HTML report gains an update-telemetry section built
+    from the event log (update_check / fetch_retry / fetch_failed /
+    update_backoff counts within the report window)."""
+
+    def test_weekly_report_includes_telemetry_section(self, tmp_path,
+                                                      monkeypatch):
+        log = tmp_path / "ssd_temp_monitor.log"
+        import datetime as dt
+        now = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log.write_text(
+            f"{now},000 INFO update_check outcome=up_to_date ms=500\n"
+            f"{now},001 INFO fetch_failed file=latest used=2 ms=900 "
+            f"err=HTTP 403\n",
+            encoding="utf-8")
+        monkeypatch.setattr(m, "LOG_FILE", str(log))
+        section = m.update_telemetry_section(days=7)
+        assert "Update telemetry" in section
+        assert "<code>update_check</code>" in section and ">1<" in section
+        assert "fetch_failed" in section
+        assert "external network issues" in section
+
+    def test_empty_when_no_telemetry_or_errors(self, tmp_path, monkeypatch):
+        log = tmp_path / "ssd_temp_monitor.log"
+        log.write_text("2026-09-27 10:00:00,000 INFO startup version=x\n",
+                       encoding="utf-8")
+        monkeypatch.setattr(m, "LOG_FILE", str(log))
+        assert m.update_telemetry_section() == ""
+
+        monkeypatch.setattr(m, "LOG_FILE",
+                            str(tmp_path / "does_not_exist.log"))
+        assert m.update_telemetry_section() == ""
+
+    def test_wired_into_weekly_report_html(self):
+        src = (PROJECT_ROOT / "ssd_temp_tray.py").read_text(encoding="utf-8")
+        assert "update_telemetry_section(days=WEEKLY_REPORT_DAYS)" in src
+        # inside the HTML template, after the per-disk sections
+        idx = src.index("{telemetry}")
+        assert idx > src.index("{''.join(sections)}")
 
 
 class TestTokenAndDependabotTooling:

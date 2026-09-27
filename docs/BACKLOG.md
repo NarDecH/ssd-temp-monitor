@@ -17,13 +17,10 @@ TODO/FIXME แล้ว**ไม่มีค้าง** รายการนี�
 
 ## P1 — มูลค่าชัด ทำได้ในรอบสั้น
 
-- **คู่มือ "อ่าน event log เอง" ใน FAQ** — ผู้ใช้รู้จัก key ที่มีอยู่
-  (`update_check`, `fetch_failed`, `mutex_suspect`, `watchdog_selftest`)
-  พร้อมตัวอย่างบรรทัดจริง + ความหมาย ลดภาระ support
-- **stability gate ใน release.yml** — ก่อนสร้าง release รัน
-  `stability_report.ps1` (บนเครื่อง build จะไม่มีข้อมูลจริง จึงต้องเป็น
-  "เตือนแบบไม่บล็อก" หรือย้ายไป workflow ที่มี artifact จากเครื่อง dev)
-  — ป้องกัน tag ทับรุ่นที่ยังไม่พิสูจน์เสถียร
+- ~~คู่มือ "อ่าน event log เอง" ใน FAQ~~ ✅ เสร็จ (v1.25.9: ตาราง 9 keys
+  + watchdog.log + stability_report พร้อม test เฝ้า)
+- ~~stability gate ใน release.yml~~ ✅ เสร็จ (v1.25.10: non-blocking —
+  อายุ release ก่อนหน้า < 7 วัน → ::warning:: hotfix ไม่ถูกบล็อก)
 - **dependabot รอบแรก** — พรุ่งนี้ขึ้นไปจะมี PR อัปเดต action versions
   รีวิวและ merge ให้ CI ยังเขียว (ตารางรายเดือน ไม่รีบ)
 
@@ -31,8 +28,8 @@ TODO/FIXME แล้ว**ไม่มีค้าง** รายการนี�
 
 - **กราฟ startup_ms ในหน้า Details แบบ canvas** — ตอนนี้เป็น ASCII
   sparkline พอใช้ ถ้าอยากได้เส้นจริงค่อยทำ (แรงพอสมควร ผลตอบแทนต่ำ)
-- **telemetry dashboard** — สรุป update_check/fetch_failed รายสัปดาห์
-  ลง weekly report ที่มีอยู่แล้ว (แนบ section ใหม่ได้ง่าย)
+- ~~telemetry สรุปรายสัปดาห์~~ ✅ เสร็จ (v1.25.10: section ใน weekly
+  report นับ update_check/fetch_retry/fetch_failed/update_backoff 7 วัน)
 - **stability_report รู้จัก `startup ms=`** — เพิ่มเกณฑ์ "startup กลาง ๆ
   หลุด p95 เกิน 3 เท่า = เตือน" เมื่อข้อมูลเริ่มเยอะ
 

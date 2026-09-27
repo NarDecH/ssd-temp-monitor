@@ -49,7 +49,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.25.9"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.25.10"       # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -2077,6 +2077,48 @@ def _svg(points, color, label, y_lo, y_hi):
             f'points="{pts}"/>\n</svg>')
 
 
+def update_telemetry_section(days=7):
+    """HTML section summarizing update-check telemetry for the weekly
+    report - counts of update_check outcomes plus fetch_retry/fetch_failed
+    and backoff events within the window. Empty string when the event
+    log has no telemetry at all (or on any error). Never raises.
+    """
+    import datetime as _dt
+    try:
+        cutoff = _dt.datetime.now() - _dt.timedelta(days=days)
+        counts = {}
+        for path in (LOG_FILE, LOG_FILE + ".1"):
+            if not os.path.isfile(path):
+                continue
+            with open(path, encoding="utf-8", errors="replace") as f:
+                for ln in f:
+                    m = LOG_LINE_TS.match(ln)
+                    if not m:
+                        continue
+                    try:
+                        when = _dt.datetime.strptime(
+                            m.group(1).split(",")[0], "%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        continue
+                    if when < cutoff:
+                        continue
+                    for key in ("update_check", "fetch_retry", "fetch_failed",
+                                "update_backoff"):
+                        if f" INFO {key} " in ln:
+                            counts[key] = counts.get(key, 0) + 1
+        if not counts:
+            return ""
+        rows = "".join(
+            f"<tr><td><code>{k}</code></td><td>{v}</td></tr>"
+            for k, v in sorted(counts.items()))
+        return (f"  <section>\n    <h2>Update telemetry (last {days} days)</h2>\n"
+                f"    <table><tr><th>event</th><th>count</th></tr>{rows}</table>\n"
+                f"    <p class=\"muted\">fetch_failed with err=403/DNS are "
+                f"external network issues, not app bugs.</p>\n  </section>")
+    except Exception:
+        return ""
+
+
 def build_weekly_report_html(rows, now=None):
     """Render the last 7 days of health_daily.csv as a standalone HTML.
 
@@ -2141,6 +2183,7 @@ def build_weekly_report_html(rows, now=None):
     if not sections:
         return ""
     comparison = multi_disk_comparison_html(rows)
+    telemetry = update_telemetry_section(days=WEEKLY_REPORT_DAYS)
     stamp = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -2167,6 +2210,7 @@ def build_weekly_report_html(rows, now=None):
 · SSD Temperature Monitor</p>
 {comparison}
 {''.join(sections)}
+{telemetry}
 </body>
 </html>
 """

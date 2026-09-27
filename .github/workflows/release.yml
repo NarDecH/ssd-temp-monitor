@@ -132,6 +132,22 @@ jobs:
           $tag = "${{ github.ref_name }}"
           "version=$($tag.TrimStart('v'))" >> $env:GITHUB_OUTPUT
 
+      - name: Stability gate (non-blocking reminder)
+        shell: pwsh
+        run: |
+          # AGENT.md asks for ~a week of measured stability between
+          # releases. This CANNOT block a hotfix - it prints a warning
+          # when the previous release is younger than 7 days so the
+          # human pushing the tag makes the trade-off consciously.
+          $prev = Invoke-RestMethod -Uri `
+            'https://api.github.com/repos/${{ github.repository }}/releases/latest'
+          $published = [datetime]::Parse($prev.published_at).ToUniversalTime()
+          $ageDays = [int]((Get-Date).ToUniversalTime() - $published).TotalDays
+          Write-Output "previous release $($prev.tag_name) is $ageDays day(s) old"
+          if ($ageDays -lt 7) {
+            Write-Output "::warning::previous release is only $ageDays day(s) old - AGENT.md asks for ~7 days of stability between releases unless this is a hotfix"
+          }
+
       - name: Release notes from CHANGELOG (and tag sanity check)
         id: notes
         shell: pwsh

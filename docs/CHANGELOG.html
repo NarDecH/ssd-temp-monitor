@@ -76,7 +76,20 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
-  <h2><span class="ver-badge">v1.25.9</span> <span class="date">27 กันยายน 2026</span></h2>
+  <h2><span class="ver-badge">v1.25.10</span> <span class="date">27 กันยายน 2026</span></h2>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>🚦 <strong>stability gate (non-blocking) ใน release.yml</strong> — อายุ release ก่อนหน้า &lt; 7 วัน → <code>::warning::</code> เตือนให้ push tag โดยรู้ตัว (hotfix ไม่ถูกบล็อก)</li>
+    <li>📊 <strong>telemetry section ใน weekly report</strong> — ตารางสรุป <code>update_check</code>/<code>fetch_retry</code>/<code>fetch_failed</code>/<code>update_backoff</code> ย้อนหลัง 7 วัน จาก event log อัตโนมัติ</li>
+  </ul>
+
+  <h3><span class="pill fix-pill">Fixed</span></h3>
+  <ul>
+    <li>🐛 parsing timestamp ใน telemetry section: ตัดเสี้ยววินาทีก่อน <code>strptime</code></li>
+  </ul>
+
+  <h2><span class="ver-badge old">v1.25.9</span> <span class="date">27 กันยายน 2026</span></h2>
 
   <h3><span class="pill add-pill">Added</span></h3>
   <ul>

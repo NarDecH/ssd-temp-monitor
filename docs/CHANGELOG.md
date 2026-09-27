@@ -3,6 +3,24 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.25.10] — 2026-09-27
+
+### Added
+
+- 🚦 **stability gate (non-blocking) ใน release.yml** — ก่อนสร้าง release
+  อ่านอายุ release ก่อนหน้า: ถ้าน้อยกว่า 7 วัน จะพิมพ์ `::warning::` เตือน
+  ให้คน push tag ตัดสินใจโดยรู้ตัว (hotfix ไม่ถูกบล็อก) — ตามนโยบายใน
+  AGENT.md
+- 📊 **telemetry section ใน weekly report** — รายงานรายสัปดาห์แนบตาราง
+  สรุป `update_check` / `fetch_retry` / `fetch_failed` / `update_backoff`
+  ย้อนหลัง 7 วัน พร้อมหมายเหตุว่า 403/DNS เป็นปัญหาภายนอก (สร้างจาก
+  event log อัตโนมัติ — ไม่มีข้อมูล = ไม่มี section)
+
+### Fixed
+
+- 🐛 parsing timestamp ใน telemetry section: ตัดเสี้ยววินาที (`,NNN`)
+  ก่อน `strptime` (รอบแรก section ว่างเงียบ ๆ เพราะ ValueError ถูกกลืน)
+
 ## [1.25.9] — 2026-09-27
 
 ### Added
