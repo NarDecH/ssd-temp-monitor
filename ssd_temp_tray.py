@@ -46,7 +46,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.25.5"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.25.6"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -2418,6 +2418,16 @@ def select_release_asset(release, prefer_prerelease=False):
     return chosen.get("browser_download_url"), str(version)
 
 
+class RateLimitedError(RuntimeError):
+    """GitHub API answered 403 rate-limit - the caller must back off."""
+
+
+# rate-limit backoff: after a 403 the next AUTO check waits this long
+# (minutes); manual checks stay immediate. Reset to 0 on any success.
+UPDATE_RATELIMIT_BACKOFF_MIN = 30
+_update_backoff_until = 0.0  # epoch seconds
+
+
 def fetch_with_retry(url, timeout=15, attempts=3, delay=2.0):
     """GET a URL with short retries; return bytes or raise the last error.
 
@@ -2455,6 +2465,8 @@ def fetch_with_retry(url, timeout=15, attempts=3, delay=2.0):
     log_event("fetch_failed", file=url.rsplit("/", 1)[-1][:60],
               used=used, ms=int((time.time() - t0) * 1000),
               err=str(last_exc)[:80])
+    if "403" in str(last_exc) and "rate limit" in str(last_exc).lower():
+        raise RateLimitedError(str(last_exc))
     raise last_exc
 
 
@@ -5136,10 +5148,23 @@ class App:
         Runs on a worker thread; never raises. With no update available the
         user only sees a message when the check was manual.
         """
+        global _update_backoff_until
         repo = SETTINGS.get("github_repo") or DEFAULT_SETTINGS["github_repo"]
         prerelease = bool(SETTINGS.get("update_channel") == "pre-release")
         t0 = time.time()
-        release = fetch_latest_release(repo, include_prereleases=prerelease)
+        release = None
+        try:
+            release = fetch_latest_release(repo,
+                                           include_prereleases=prerelease)
+            # any successful API contact clears the rate-limit backoff
+            _update_backoff_until = 0.0
+        except RateLimitedError:
+            if not manual:
+                _update_backoff_until = (time.time()
+                                         + UPDATE_RATELIMIT_BACKOFF_MIN * 60)
+            log_event("update_backoff",
+                      minutes=UPDATE_RATELIMIT_BACKOFF_MIN if not manual
+                      else 0, manual=manual)
         # telemetry: one event per completed check with its outcome
         log_event("update_check", outcome="no_release", manual=manual,
                   ms=int((time.time() - t0) * 1000))
@@ -5616,6 +5641,12 @@ class App:
                 log_event("poll_error")
             # auto-update: check right after start, then every N minutes
             interval = SETTINGS.get("update_check_interval_minutes", 360) * 60
+            # rate-limit backoff: after a 403 skip auto checks until the
+            # backoff window passes (manual checks are never suppressed)
+            if time.time() < _update_backoff_until:
+                interval = max(interval,
+                               _update_backoff_until - time.time()
+                               + 60 * 5)
             if (SETTINGS.get("check_updates")
                     and time.time() - self._last_update_check >= interval):
                 self._last_update_check = time.time()

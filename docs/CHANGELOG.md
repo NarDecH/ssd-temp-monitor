@@ -3,6 +3,24 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.25.6] — 2026-09-27
+
+### Added
+
+- 🛑 **backoff อัตโนมัติเมื่อโดน rate limit** — ถ้า GitHub API ตอบ 403
+  rate limit ระหว่าง auto-check แอปจะเลื่อน update check ถัดไปออกไป 30
+  นาที (บันทึก event `update_backoff`) และคืนปกติทันทีที่ติดต่อสำเร็จ —
+  ไม่เปลือง quota ไม่เตือนผู้ใช้ (เช็คเองได้ตลอดจากเมนู)
+- 📋 **`tools/stability_report.ps1`** — รายงานเสถียรภาพย้อนหลัง N ชม.
+  (default 24): เช็คเกณฑ์แผนเฝ้าเสถียรภาพใน AGENT.md ครบทั้ง 4 ข้อ
+  (event ผิดปกติ / spawn storm / update telemetry / ความต่อเนื่องของ
+  ประวัติ 24 ชม.) — exit code 0 = เขียวทั้งหมด ใช้เป็น gate ได้
+
+### Tests
+
+- +1 test: คำแปลทุก key ใหม่ต้องเป็นคำแปลแท้ (ต่างจาก EN อย่างน้อยหนึ่ง
+  ภาษา) — กัน copy-paste อังกฤษทิ้งไว้
+
 ## [1.25.5] — 2026-09-27
 
 ### Added

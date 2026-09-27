@@ -76,7 +76,20 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
-  <h2><span class="ver-badge">v1.25.5</span> <span class="date">27 กันยายน 2026</span></h2>
+  <h2><span class="ver-badge">v1.25.6</span> <span class="date">27 กันยายน 2026</span></h2>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>🛑 <strong>backoff อัตโนมัติเมื่อโดน rate limit</strong> — auto-check ที่เจอ 403 rate limit จะเลื่อนรอบถัดไปออกไป 30 นาที (event <code>update_backoff</code>) และคืนปกติทันทีที่ติดต่อสำเร็จ — ไม่เปลือง quota ไม่รบกวนผู้ใช้</li>
+    <li>📋 <strong><code>tools/stability_report.ps1</code></strong> — รายงานเสถียรภาพย้อนหลัง N ชม. ตามเกณฑ์แผนเฝ้าเสถียรภาพ 4 ข้อ (event ผิดปกติ / spawn storm / telemetry / ความต่อเนื่องของประวัติ) — exit 0 = เขียวทั้งหมด</li>
+  </ul>
+
+  <h3><span class="pill test-pill">Tests</span></h3>
+  <ul>
+    <li>+1 test — คำแปลทุก key ใหม่ต้องต่างจากอังกฤษในภาษาอื่นอย่างน้อยหนึ่งภาษา (กัน copy-paste)</li>
+  </ul>
+
+  <h2><span class="ver-badge old">v1.25.5</span> <span class="date">27 กันยายน 2026</span></h2>
 
   <h3><span class="pill add-pill">Added</span></h3>
   <ul>

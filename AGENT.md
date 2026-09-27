@@ -398,6 +398,10 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   (3) event `update_check` ตัวใหม่มาครบทุก 6 ชม. (ตรง interval) ไม่มี
   `fetch_failed` ยกเว้น DNS flake ชัดเจน — เกณฑ์ผ่าน = 24 ชม. เต็มโดยไม่
   มี event สถานะผิดปกติใด ๆ และประวัติ 24 ชม. เขียนต่อเนื่องไม่มีช่องว่าง
+  — ตรวจอัตโนมัติด้วย `tools/stability_report.ps1 -Hours 24`
+  (exit 0 = เขียว) — และ v1.25.6 ต่อยอด: โดน 403 rate limit →
+  auto-check ถูกเลื่อน 30 นาที (event `update_backoff`) คืนปกติเมื่อ
+  ติดต่อสำเร็จ
 - **negative test ต้องรอ "ตัวตายตายจริง" ก่อน sample ครั้งแรก** — E2E เคส
   marker-suppress FAIL บน CI ใน 0 วิ ทั้งที่ watchdog เงียบจริง เพราะ (1)
   `Wait-AppCount 0 15` เป็น no-op (`count >= 0` จริงเสมอ → คืนทันที)

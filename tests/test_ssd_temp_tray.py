@@ -3850,6 +3850,25 @@ class TestWatchdogSelfTestButton:
         finally:
             m.SETTINGS["language"] = old
 
+    def test_ui_strings_differ_across_languages(self):
+        """Translations must be real translations, not copies of English.
+        Every new v1.25.5 key must differ from its English text in at
+        least one non-English language."""
+        new_keys = ("menu.wdtest", "settings.mutex_suspect",
+                    "settings.mutex_open_log", "mutex.suspect.none",
+                    "mutex.suspect.found", "wdtest.title", "wdtest.pass",
+                    "wdtest.fail")
+        old = m.SETTINGS.get("language")
+        try:
+            m.SETTINGS["language"] = "en"
+            en = {k: m.tr(k) for k in new_keys}
+            for lang in ("th", "ja", "zh"):
+                m.SETTINGS["language"] = lang
+                for k in new_keys:
+                    assert m.tr(k) != en[k], (lang, k, "identical to EN")
+        finally:
+            m.SETTINGS["language"] = old
+
 
 class TestUpdateCheckTelemetry:
     """Every completed update check logs one event with its outcome and
