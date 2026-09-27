@@ -76,7 +76,20 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
-  <h2><span class="ver-badge">v1.25.7</span> <span class="date">27 กันยายน 2026</span></h2>
+  <h2><span class="ver-badge">v1.25.8</span> <span class="date">27 กันยายน 2026</span></h2>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>⏱️ <strong>startup event มี <code>ms</code></strong> — event <code>startup</code> บันทึก startup_ms (interpreter start → tray object construction) — วัด cold-start latency ได้จาก event log โดยตรง (<code>_T0</code> จับก่อน import หนักทุกตัว)</li>
+    <li>📌 <strong>test เฝ้า release notes automation</strong> — release.yml ดึง body จาก CHANGELOG ตาม tag (มี date check + Downloads) อยู่แล้ว — ตอนนี้มี test กันมันพังเงียบ ๆ</li>
+  </ul>
+
+  <h3><span class="pill fix-pill">Docs</span></h3>
+  <ul>
+    <li>📖 คู่มือตั้ง <code>github_token</code>: สร้าง PAT (Fine-grained, Public repos → read-only) แล้วเพิ่ม <code>"github_token": "github_pat_…"</code> ใน <code>config.json</code> แล้วรีสตาร์ทแอป</li>
+  </ul>
+
+  <h2><span class="ver-badge old">v1.25.7</span> <span class="date">27 กันยายน 2026</span></h2>
 
   <h3><span class="pill add-pill">Added</span></h3>
   <ul>

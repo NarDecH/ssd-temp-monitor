@@ -3,6 +3,24 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.25.8] — 2026-09-27
+
+### Added
+
+- ⏱️ **startup event มี `ms`** — event `startup` บันทึก startup_ms
+  (interpreter start → tray object construction) ทำให้วัด cold-start
+  latency ได้จาก event log โดยตรง (จับคู่กับบรรทัด spawn ของ watchdog
+  หรือเวลา launch ของผู้เรียก) — `_T0` ถูกจับก่อน import หนักทุกตัว
+- 📌 **test เฝ้า release notes automation** — release.yml ดึง body จาก
+  section ของ CHANGELOG ตาม tag (มี date sanity check + Downloads list)
+  อยู่แล้ว — ตอนนี้มี test กันมันเงียบ ๆ พังโดยไม่มีใครรู้
+
+### Docs
+
+- 📖 คู่มือตั้ง `github_token` (read-only) ใน CHANGELOG รุ่น 1.25.7:
+  สร้าง PAT (Fine-grained, Public repos → read-only) แล้วเพิ่ม
+  `"github_token": "github_pat_…"` ใน `config.json` แล้วรีสตาร์ทแอป
+
 ## [1.25.7] — 2026-09-27
 
 ### Added

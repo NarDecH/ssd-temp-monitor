@@ -21,6 +21,9 @@ Extras:
       "Show temperature graph" window covering the last 30 minutes.
 """
 
+import time as _time_mod
+_T0 = _time_mod.time()   # interpreter start - used by the startup event
+
 import base64
 import csv
 import ctypes
@@ -46,7 +49,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.25.7"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.25.8"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -3528,7 +3531,12 @@ def export_canvas_png(canvas, parent=None):
 
 class App:
     def __init__(self):
-        log_event("startup", version=effective_version())
+        # T0 = interpreter start (before any import work), so
+        # startup_ms measures process start -> tray object construction
+        # (the event log writes it with millisecond timestamps; pair it
+        # with the watchdog spawn line or the parent's launch time)
+        log_event("startup", version=effective_version(),
+                  ms=int((time.time() - _T0) * 1000))
         self.temps = []
         self.history = load_history() if KEEP_HISTORY else []
         self._last_save = 0.0

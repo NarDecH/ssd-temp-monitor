@@ -3922,32 +3922,6 @@ class TestUpdateCheckTelemetry:
     def test_default_settings_have_empty_token(self):
         assert m.DEFAULT_SETTINGS.get("github_token") == ""
 
-
-class TestDailyStabilityWorkflow:
-    """The scheduled daily workflow keeps the suite green and the latest
-    release complete; a failure opens an issue so it cannot rot quietly.
-    On-machine 24h criteria live in tools/stability_report.ps1 instead."""
-
-    @staticmethod
-    def _read(*parts):
-        from pathlib import Path
-        return (Path(__file__).resolve().parents[1].joinpath(*parts)).read_text(
-            encoding="utf-8")
-
-    def test_workflow_is_scheduled_and_checks_release(self):
-        yml = self._read(".github", "workflows", "stability.yml")
-        assert "schedule:" in yml and "cron:" in yml
-        assert "python -m pytest tests/" in yml
-        assert "releases/latest" in yml
-        assert "assets" in yml  # release completeness check
-
-    def test_failure_opens_a_deduped_issue(self):
-        yml = self._read(".github", "workflows", "stability.yml")
-        assert "issues: write" in yml
-        assert "issues.create" in yml  # create (after listForRepo dedupe)
-        assert "listForRepo" in yml
-        assert "if: failure()" in yml
-
     def test_telemetry_events_flow(self, monkeypatch, caplog):
         """A failing fetch logs fetch_failed; one that needs a retry
         before succeeding logs fetch_retry."""
@@ -3981,3 +3955,91 @@ class TestDailyStabilityWorkflow:
                 m.fetch_with_retry("https://x/SHA256SUMS.txt", attempts=3,
                                    delay=0)
         assert "fetch_failed" in caplog.text
+
+
+class TestDailyStabilityWorkflow:
+    """The scheduled daily workflow keeps the suite green and the latest
+    release complete; a failure opens an issue so it cannot rot quietly.
+    On-machine 24h criteria live in tools/stability_report.ps1 instead."""
+
+    @staticmethod
+    def _read(*parts):
+        from pathlib import Path
+        return (Path(__file__).resolve().parents[1].joinpath(*parts)).read_text(
+            encoding="utf-8")
+
+    def test_workflow_is_scheduled_and_checks_release(self):
+        yml = self._read(".github", "workflows", "stability.yml")
+        assert "schedule:" in yml and "cron:" in yml
+        assert "python -m pytest tests/" in yml
+        assert "releases/latest" in yml
+        assert "assets" in yml  # release completeness check
+
+    def test_failure_opens_a_deduped_issue(self):
+        yml = self._read(".github", "workflows", "stability.yml")
+        assert "issues: write" in yml
+        assert "issues.create" in yml  # create (after listForRepo dedupe)
+        assert "listForRepo" in yml
+        assert "if: failure()" in yml
+
+
+class TestReleaseNotesAutomation:
+    """The release workflow already derives its body from the matching
+    CHANGELOG section - pin it so it cannot silently rot."""
+
+    @staticmethod
+    def _read(*parts):
+        from pathlib import Path
+        return (Path(__file__).resolve().parents[1].joinpath(*parts)).read_text(
+            encoding="utf-8")
+
+    def test_release_yml_uses_changelog_section_per_tag(self):
+        yml = self._read(".github", "workflows", "release.yml")
+        assert "docs/CHANGELOG.md" in yml
+        assert "releases/latest" not in yml.split("notes")[1][:2000]
+        # extracts the section for THIS tag, warns on missing section
+        assert "[regex]::Escape($ver)" in yml
+        assert "No changelog entry found" in yml
+        # date sanity check between CHANGELOG and release day
+        assert "CHANGELOG date" in yml
+
+    def test_release_body_includes_download_list(self):
+        yml = self._read(".github", "workflows", "release.yml")
+        assert "**Downloads**" in yml
+        assert "SHA256SUMS.txt" in yml
+
+
+class TestStartupTelemetry:
+    """The startup event carries version AND startup_ms (interpreter
+    start -> tray object construction) so cold-start latency becomes
+    measurable from the event log alone."""
+
+    def test_startup_event_logs_ms_from_module_t0(self):
+        src = (PROJECT_ROOT / "ssd_temp_tray.py").read_text(encoding="utf-8")
+        assert "_T0 = _time_mod.time()" in src
+        assert 'ms=int((time.time() - _T0) * 1000)' in src
+        # _T0 must be set BEFORE the heavy imports (that is the point)
+        t0_idx = src.index("_T0 = _time_mod.time()")
+        pil_idx = src.index("from PIL import")
+        assert t0_idx < pil_idx
+
+    def test_startup_ms_is_a_sane_integer(self):
+        """The startup event's ms must be a small positive integer (a
+        source-run imports in well under 30 s)."""
+        captured = []
+
+        class Cap(logging.Handler):
+            def emit(self, r):
+                captured.append(r.getMessage())
+
+        lg = logging.getLogger("ssd_temp_monitor")
+        h = Cap()
+        lg.addHandler(h)
+        try:
+            m.log_event("startup_probe",
+                        ms=int((m.time.time() - m._T0) * 1000))
+        finally:
+            lg.removeHandler(h)
+        assert captured and "ms=" in captured[0]
+        ms = int(captured[0].split("ms=")[1].split()[0])
+        assert 0 <= ms < 30000
