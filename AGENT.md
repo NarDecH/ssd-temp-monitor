@@ -375,6 +375,16 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   ต้อง enable ด้วย argtypes ที่ประกาศถูก, OpenProcess ยังล้มเหลวกับ
   SYSTEM procs) — handle64 ปลอดภัยกว่า (3) ตอนติดตั้ง: kill holder ที่
   ล่าเจอก่อนแล้วค่อยรัน setup ไม่ใช่ disable task อย่างเดียว
+- **unattended network call ต้องมี retry แบบมีขอบเขต — ห้าม urlopen เดี่ยว ๆ** —
+  v1.25.3: `--update-now` ค้างเงียบ 10+ นาทีตอน DNS flake (urllib คนเดียว
+  timeout ไม่ครอบคลุม resolver hang) และมันถือ AppMutex ระหว่างค้าง →
+  บล็อกทั้ง updater/watchdog ทุกอย่างเดินทับได้ ทุก network step ของ
+  updater ตอนนี้ผ่าน `fetch_with_retry` (3 ครั้งสั้น ๆ + backoff แล้ว
+  รายงาน UPDATE-RESULT และ exit) — ตายต้องตายให้รู้เรื่อง ไม่ใช่ค้างเงียบ
+- **ตัวถือ mutex แปลกปลอมต้องทิ้งหลักฐานอัตโนมัติ** — แอปบันทึก event
+  `mutex_suspect` ทันทีที่ duplicate start เจอ mutex ถูกถือแต่ไม่มี
+  โปรเซสแอปมีชีวิต (พร้อม sample command line ของ python/ssd_temp procs)
+  ครั้งหน้าเจอกรณีนี้ อ่าน event log จบเลย ไม่ต้องล่าด้วย handle64 อีก
 - **negative test ต้องรอ "ตัวตายตายจริง" ก่อน sample ครั้งแรก** — E2E เคส
   marker-suppress FAIL บน CI ใน 0 วิ ทั้งที่ watchdog เงียบจริง เพราะ (1)
   `Wait-AppCount 0 15` เป็น no-op (`count >= 0` จริงเสมอ → คืนทันที)

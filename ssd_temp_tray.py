@@ -46,7 +46,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.25.2"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.25.3"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -1292,6 +1292,66 @@ _ICON_CACHE = {}
 _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
 
+def _app_process_count() -> int:
+    """Count LIVE instances of the installed app exe (0 on any error).
+
+    Used by the foreign-mutex self-check: a taken AppMutex with zero app
+    processes means some non-app process is squatting on the mutex.
+    """
+    try:
+        exe = "ssd_temp_monitor.exe"
+        out = subprocess.run(
+            [os.path.join(os.environ.get("SystemRoot", r"C:\Windows"),
+                          "System32", "tasklist.exe"),
+             "/FI", f"IMAGENAME eq {exe}", "/FO", "CSV", "/NH"],
+            capture_output=True, timeout=20,
+            creationflags=subprocess.CREATE_NO_WINDOW)
+        text = out.stdout.decode("utf-8", "replace").lower()
+        return text.count(exe.lower())
+    except Exception:
+        return 0
+
+
+def log_foreign_mutex_holder() -> None:
+    """Diagnose the invisible 'already running' culprit and log it.
+
+    v1.25.2 lesson: a pythonw running the app FROM SOURCE held the
+    AppMutex while no installed process existed - every installer run
+    aborted with 'currently running' and every duplicate start popped
+    the dialog, yet tasklist showed nothing. When the mutex is taken but
+    no app process is alive, record the fact in the event log (and warn
+    once) so the next occurrence leaves evidence instead of a mystery.
+    """
+    try:
+        h = _kernel32.CreateMutexW(None, False, MUTEX_NAME)
+        taken = ctypes.get_last_error() == 183  # ERROR_ALREADY_EXISTS
+        try:
+            if not taken:
+                return  # mutex free - nothing to diagnose
+            if _app_process_count() > 0:
+                return  # a real instance holds it - normal
+            procs = []
+            try:
+                out = subprocess.run(
+                    ["powershell", "-NoProfile", "-Command",
+                     "Get-CimInstance Win32_Process -Filter \"Name like "
+                     "'%python%' or Name like '%ssd_temp%'\" | "
+                     "Select-Object -ExpandProperty CommandLine"],
+                    capture_output=True, timeout=30,
+                    creationflags=subprocess.CREATE_NO_WINDOW)
+                procs = [ln.strip() for ln in
+                         out.stdout.decode("utf-8", "replace").splitlines()
+                         if ln.strip()][:10]
+            except Exception:
+                pass
+            log_event("mutex_suspect", note="taken with no app process",
+                      samples=" | ".join(procs) or "none")
+        finally:
+            ctypes.windll.kernel32.CloseHandle(h)
+    except Exception:
+        pass  # diagnostics must never break the app
+
+
 def acquire_single_instance() -> bool:
     """Create a named mutex; return False if another instance is running."""
     try:
@@ -2283,6 +2343,31 @@ def select_release_asset(release, prefer_prerelease=False):
     return chosen.get("browser_download_url"), str(version)
 
 
+def fetch_with_retry(url, timeout=15, attempts=3, delay=2.0):
+    """GET a URL with short retries; return bytes or raise the last error.
+
+    ``urlopen`` alone made --update-now hang silently for minutes when
+    DNS flaked (observed 2026-09-26: stuck in the network phase 10+
+    minutes with no output). One unattended attempt must fail fast and
+    loudly instead: a few short tries with a tiny backoff, then give up
+    so the caller can print UPDATE-RESULT and exit.
+    """
+    last_exc = None
+    for attempt in range(attempts):
+        try:
+            req = urllib.request.Request(
+                url, headers={"User-Agent": "ssd-temp-monitor"})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                if getattr(resp, "status", 200) != 200:
+                    raise OSError(f"HTTP {resp.status} from {url}")
+                return resp.read()
+        except Exception as exc:
+            last_exc = exc
+            if attempt < attempts - 1:
+                time.sleep(delay * (attempt + 1))
+    raise last_exc
+
+
 def fetch_latest_release(repo, include_prereleases=False):
     """Query the GitHub Releases API. Returns a release dict or None.
 
@@ -2297,19 +2382,11 @@ def fetch_latest_release(repo, include_prereleases=False):
     else:
         url = f"https://api.github.com/repos/{repo}/releases/latest"
     try:
-        req = urllib.request.Request(
-            url,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "User-Agent": "ssd-temp-monitor",
-            })
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            if resp.status != 200:
-                return None
-            data = json.loads(resp.read().decode("utf-8"))
-            if isinstance(data, list):
-                return data[0] if data else None
-            return data
+        data = json.loads(fetch_with_retry(
+            url, timeout=10, attempts=2, delay=2.0).decode("utf-8"))
+        if isinstance(data, list):
+            return data[0] if data else None
+        return data
     except Exception:
         return None
 
@@ -4946,14 +5023,13 @@ class App:
 
         def worker():
             try:
-                req = urllib.request.Request(url, headers={"User-Agent": "ssd-temp-monitor"})
-                with urllib.request.urlopen(req, timeout=60) as resp:
-                    data = resp.read()
+                data = fetch_with_retry(url, timeout=120, attempts=3,
+                                        delay=3.0)
                 # verify against SHA256SUMS.txt published with the release
                 sums_url = url.rsplit("/", 1)[0] + "/SHA256SUMS.txt"
-                req = urllib.request.Request(sums_url, headers={"User-Agent": "ssd-temp-monitor"})
-                with urllib.request.urlopen(req, timeout=30) as resp:
-                    sums_text = resp.read().decode("utf-8", "replace")
+                sums_text = fetch_with_retry(sums_url, timeout=30, attempts=3,
+                                             delay=3.0).decode("utf-8",
+                                                               "replace")
                 filename = url.rsplit("/", 1)[1]
                 if not verify_asset(data, sums_text, filename):
                     self._notify(tr("notify.bad_checksum"),
@@ -5444,13 +5520,10 @@ def run_unattended_update():
         sys.exit(0)
     print(f"UPDATE-RESULT: update available {version}")
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "ssd-temp-monitor"})
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            data = resp.read()
+        data = fetch_with_retry(url, timeout=120, attempts=3, delay=3.0)
         sums_url = url.rsplit("/", 1)[0] + "/SHA256SUMS.txt"
-        req = urllib.request.Request(sums_url, headers={"User-Agent": "ssd-temp-monitor"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            sums_text = resp.read().decode("utf-8", "replace")
+        sums_text = fetch_with_retry(sums_url, timeout=30, attempts=3,
+                                     delay=3.0).decode("utf-8", "replace")
         if not verify_asset(data, sums_text, url.rsplit("/", 1)[1]):
             print("UPDATE-RESULT: checksum mismatch - aborted")
             sys.exit(1)
@@ -5512,6 +5585,11 @@ def main():
     except Exception:
         pass  # diagnostics must never break the app
     if not acquire_single_instance():
+        # Forensics first: if the mutex is taken but NO app process is
+        # alive, some foreign process is squatting on it (v1.25.2 lesson:
+        # a pythonw running the app from source). Leave evidence in the
+        # event log before the user ever sees the duplicate dialog.
+        log_foreign_mutex_holder()
         # Duplicate start: exit code 2. A message box is shown for human
         # users; the --duplicate-silent flag (or SSD_TEMP_SILENT_DUPLICATE=1)
         # suppresses it for automated tests. NOTE: UAC elevation does NOT

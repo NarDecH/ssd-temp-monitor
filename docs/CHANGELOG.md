@@ -3,6 +3,29 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.25.3] — 2026-09-27
+
+### Fixed
+
+- 🌐 **updater ทนเน็ตวูบ** — `--update-now` เคยค้างเงียบ 10+ นาทีตอน DNS สะดุด
+  (urllib คนเดียว timeout ไม่ครอบคลุม resolver hang) ระหว่างค้างยังถือ
+  AppMutex บล็อกทุกอย่าง ตอนนี้ทุก network step (ตรวจ release, โหลด setup,
+  โหลด SHA256SUMS — ทั้ง unattended และ UI) ผ่าน `fetch_with_retry`:
+  ลองสั้น ๆ 3 ครั้งพร้อม backoff แล้วรายงาน `UPDATE-RESULT: download failed`
+  และออกจากโปรแกรม — ตายต้องตายให้รู้เรื่อง ไม่ใช่ค้างเงียบ
+- 🔍 **forensics จับผู้ถือ mutex แปลกปลอม** — ตอน duplicate start เจอ
+  AppMutex ถูกถือแต่ไม่มีโปรเซสแอปมีชีวิต (เคส pythonw รันจากซอร์สที่
+  หลบซ่อนทั้งคืน) แอปบันทึก event `mutex_suspect` พร้อม sample command
+  line ของโปรเซสต้องสงสัยทันทีที่ก่อนแสดง dialog — ครั้งหน้าเจอปัญหา
+  อ่าน event log จบ ไม่ต้องล่าด้วย handle64
+
+### Tests
+
+- +11 tests: retry helper (สำเร็จหลัง flake, ยอมแพ้ตามขอบ, HTTP 5xx
+  ถูก retry), flow เต็ม `--update-now` รอดจาก connection หลุด 1 ครั้ง,
+  poll loop ยัง non-fatal เมื่อเน็ตดับสนิท, และ wiring ของ self-check
+  (wired ก่อน dialog, เงียบเมื่อ instance จริงถือ / mutex ว่าง)
+
 ## [1.25.2] — 2026-09-26
 
 ### Fixed

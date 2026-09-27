@@ -4,6 +4,7 @@ The PowerShell boundary is always monkeypatched; only pure logic and the
 CSV/Windows-mutex helpers are exercised for real.
 """
 import csv
+import ctypes
 import json
 import logging
 import logging.handlers
@@ -3587,3 +3588,183 @@ class TestWatchdogLogMenu:
         assert "Copy-Item" in ci and "e2e-logs" in ci
         watchdog_idx = ci.index("watchdog-e2e")
         assert ci.index("Copy-Item", watchdog_idx) > watchdog_idx
+
+
+# ---------------------------------------------------------------------------
+# v1.25.3: updater survives flaky DNS; foreign AppMutex holder forensics
+# ---------------------------------------------------------------------------
+class TestUpdateNetworkRetry:
+    """--update-now once hung silently in the network phase when DNS flaked
+    (observed 2026-09-26: stuck 10+ minutes, mutex held, watchdog blocked).
+    fetch_with_retry caps every network step: a few short attempts with a
+    tiny backoff, then a loud UPDATE-RESULT failure and exit."""
+
+    @staticmethod
+    def _read(*parts):
+        from pathlib import Path
+        return (Path(__file__).resolve().parents[1].joinpath(*parts)).read_text(
+            encoding="utf-8")
+
+    def test_all_network_reads_go_through_retry_helper(self):
+        import inspect
+        assert hasattr(m, "fetch_with_retry")
+        src = inspect.getsource(m)
+        # the raw urlopen may appear only inside fetch_with_retry itself
+        assert src.count("urllib.request.urlopen") == 1
+        helper = inspect.getsource(m.fetch_with_retry)
+        assert "urlopen" in helper and "attempts" in helper
+
+    def test_retry_succeeds_after_transient_failure(self, monkeypatch):
+        calls = {"n": 0}
+
+        def flaky(req, timeout=10):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OSError("temporary DNS failure")
+            return type("R", (), {"read": lambda self: b"OK",
+                                  "status": 200,
+                                  "__enter__": lambda self: self,
+                                  "__exit__": lambda self, *a: False})()
+
+        monkeypatch.setattr(m.urllib.request, "urlopen", flaky)
+        monkeypatch.setattr(m.time, "sleep", lambda s: None)
+        assert m.fetch_with_retry("https://x/f", timeout=5, attempts=3,
+                                  delay=0) == b"OK"
+        assert calls["n"] == 2
+
+    def test_retry_gives_up_loudly_after_attempts(self, monkeypatch):
+        calls = {"n": 0}
+
+        def always_down(req, timeout=10):
+            calls["n"] += 1
+            raise OSError("offline")
+
+        monkeypatch.setattr(m.urllib.request, "urlopen", always_down)
+        monkeypatch.setattr(m.time, "sleep", lambda s: None)
+        with pytest.raises(OSError):
+            m.fetch_with_retry("https://x/f", timeout=5, attempts=3, delay=0)
+        assert calls["n"] == 3  # bounded - no infinite silent retry
+
+    def test_non_200_is_retried_then_fails(self, monkeypatch):
+        calls = {"n": 0}
+
+        def server_error(req, timeout=10):
+            calls["n"] += 1
+            return type("R", (), {"read": lambda self: b"{}",
+                                  "status": 500,
+                                  "__enter__": lambda self: self,
+                                  "__exit__": lambda self, *a: False})()
+
+        monkeypatch.setattr(m.urllib.request, "urlopen", server_error)
+        monkeypatch.setattr(m.time, "sleep", lambda s: None)
+        with pytest.raises(OSError):
+            m.fetch_with_retry("https://x/f", timeout=5, attempts=2, delay=0)
+        assert calls["n"] == 2
+
+    def test_update_now_download_retries_and_still_verifies(
+            self, monkeypatch, capsys):
+        """The full --update-now flow survives one dropped connection and
+        still reaches the checksum-verified handoff."""
+        import hashlib
+        body = b"INSTALLER"
+        HEX = hashlib.sha256(body).hexdigest()
+        state = {"exe_tries": 0}
+
+        def fake_urlopen(req, timeout=10):
+            url = str(req.full_url)
+            if url.endswith("SHA256SUMS.txt"):
+                payload = f"{HEX}  setup.exe\n".encode()
+                status = 200
+            else:
+                state["exe_tries"] += 1
+                if state["exe_tries"] == 1:
+                    raise OSError("DNS flake")
+                payload, status = body, 200
+            return type("R", (), {"read": lambda self: payload,
+                                  "status": status,
+                                  "__enter__": lambda self: self,
+                                  "__exit__": lambda self, *a: False})()
+
+        monkeypatch.setattr(m, "fetch_latest_release",
+                            lambda repo, include_prereleases=False: {
+            "tag_name": "v9.0.0",
+            "assets": [{"name": "setup.exe", "state": "uploaded",
+                        "browser_download_url": "https://x/setup.exe"}]})
+        monkeypatch.setattr(m.urllib.request, "urlopen", fake_urlopen)
+        monkeypatch.setattr(m.time, "sleep", lambda s: None)
+        started = []
+        monkeypatch.setattr(m, "build_update_shim",
+                            lambda dest, restart_path=None: "SHIM.cmd")
+        monkeypatch.setattr(m.subprocess, "Popen",
+                            lambda cmd, **k: started.append(cmd))
+        with pytest.raises(SystemExit) as ei:
+            m.run_unattended_update()
+        assert ei.value.code == 0
+        assert state["exe_tries"] == 2
+        assert started == [["cmd", "/c", "SHIM.cmd"]]
+        assert "checksum verified" in capsys.readouterr().out
+
+    def test_release_poll_still_swallows_total_outage(self, monkeypatch):
+        """The periodic update check must stay non-fatal when the network
+        is completely down (fetch_latest_release returns None)."""
+        def down(req, timeout=10):
+            raise OSError("offline")
+
+        monkeypatch.setattr(m.urllib.request, "urlopen", down)
+        monkeypatch.setattr(m.time, "sleep", lambda s: None)
+        assert m.fetch_latest_release("x/y") is None
+
+
+class TestForeignMutexSelfCheck:
+    """v1.25.2 lesson: a foreign process (pythonw running the app from
+    source) held the AppMutex while no installed app existed - installers
+    aborted with 'currently running' and duplicates popped the dialog,
+    leaving zero evidence. When the mutex is taken with no app process
+    alive, the duplicate path must log forensics before anything else."""
+
+    def test_wired_into_duplicate_path_before_dialog(self):
+        import inspect
+        src = inspect.getsource(m.main)
+        assert "log_foreign_mutex_holder()" in src
+        assert src.index("log_foreign_mutex_holder()") < src.index(
+            "MessageBoxW")
+
+    def test_logs_suspect_when_mutex_taken_without_app(self, monkeypatch,
+                                                       caplog):
+        def taken(*a, **k):
+            ctypes.set_last_error(183)  # ERROR_ALREADY_EXISTS
+            return 1234
+
+        monkeypatch.setattr(m._kernel32, "CreateMutexW", taken)
+        monkeypatch.setattr(m, "_app_process_count", lambda: 0)
+        with caplog.at_level(logging.INFO, logger="ssd_temp_monitor"):
+            m.log_foreign_mutex_holder()
+        assert "mutex_suspect" in caplog.text
+
+    def test_silent_when_a_real_instance_holds_it(self, monkeypatch, caplog):
+        def taken(*a, **k):
+            ctypes.set_last_error(183)
+            return 1234
+
+        monkeypatch.setattr(m._kernel32, "CreateMutexW", taken)
+        monkeypatch.setattr(m, "_app_process_count", lambda: 2)
+        with caplog.at_level(logging.INFO, logger="ssd_temp_monitor"):
+            m.log_foreign_mutex_holder()
+        assert "mutex_suspect" not in caplog.text
+
+    def test_silent_when_mutex_is_free(self, monkeypatch, caplog):
+        def free(*a, **k):
+            ctypes.set_last_error(0)
+            return 555
+
+        monkeypatch.setattr(m._kernel32, "CreateMutexW", free)
+        with caplog.at_level(logging.INFO, logger="ssd_temp_monitor"):
+            m.log_foreign_mutex_holder()
+        assert "mutex_suspect" not in caplog.text
+
+    def test_app_process_count_filters_on_bare_exe_name(self):
+        import inspect
+        src = inspect.getsource(m._app_process_count)
+        # tasklist's IMAGENAME filter matches the bare file name only
+        assert "IMAGENAME eq" in src and "ssd_temp_monitor.exe" in src
+        assert "CREATE_NO_WINDOW" in src  # never flash a console window
