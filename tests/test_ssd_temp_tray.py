@@ -4107,3 +4107,47 @@ class TestTokenAndDependabotTooling:
         yml = self._read(".github", "dependabot.yml")
         assert "github-actions" in yml
         assert "monthly" in yml
+
+
+class TestStartupTrendTool:
+    """tools/startup_trend.py reports per-version cold-start stats
+    (n/min/avg/p95/max) from the event log - report-only, exit 0."""
+
+    @staticmethod
+    def _collect(tmp_log, days=14):
+        import importlib.util
+        from pathlib import Path
+        spec = importlib.util.spec_from_file_location(
+            "startup_trend",
+            Path(__file__).resolve().parents[1] / "tools" / "startup_trend.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.collect(days=days, path=str(tmp_log)), mod
+
+    def test_collect_parses_ms_events_and_skips_old_lines(self, tmp_path):
+        import datetime as dt
+        log = tmp_path / "ssd_temp_monitor.log"
+        now = dt.datetime.now()
+        fresh = (now - dt.timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+        old = (now - dt.timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+        log.write_text(
+            f"{fresh},123 INFO startup version=1.25.9 ms=236\n"
+            f"{fresh},999 INFO startup version=1.25.8\n"   # no ms -> skip
+            f"{old},555 INFO startup version=1.25.8 ms=999\n",  # out of window
+            encoding="utf-8")
+        rows, _mod = self._collect(log)
+        assert rows == [("1.25.9", 236, rows[0][2])]
+
+    def test_summarize_stats_are_correct(self, tmp_path):
+        import datetime as dt
+        log = tmp_path / "ssd_temp_monitor.log"
+        now = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log.write_text(
+            f"{now},000 INFO startup version=1.25.9 ms=100\n"
+            f"{now},001 INFO startup version=1.25.9 ms=300\n"
+            f"{now},002 INFO startup version=1.25.9 ms=200\n",
+            encoding="utf-8")
+        rows, mod = self._collect(log)
+        s = mod.summarize(rows)["1.25.9"]
+        assert s["n"] == 3 and s["min"] == 100 and s["max"] == 300
+        assert s["avg"] == 200 and s["p95"] == 300
