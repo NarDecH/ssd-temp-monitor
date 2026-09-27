@@ -159,6 +159,31 @@
   </details>
 
   <details>
+    <summary>อ่าน event log เองได้ไหม? แต่ละบรรทัดแปลว่าอะไร?</summary>
+    <div class="answer">
+      <p>ได้ — event log (<code>%APPDATA%\SSDTempMonitor\ssd_temp_monitor.log</code>,
+      เมนู tray → <b>เปิดบันทึกการทำงาน</b>) เป็นข้อความล้วน รูปแบบ:
+      <code>วันเวลา LEVEL event_name key=value…</code> เหตุการณ์ที่พบบ่อย:</p>
+      <table>
+        <tr><th>event</th><th>ความหมาย / ตัวอย่าง</th></tr>
+        <tr><td><code>startup</code></td><td>แอปเปิดสำเร็จ — <code>startup version=1.25.9 ms=236</code> (ms = เวลาเปิดจนพร้อม)</td></tr>
+        <tr><td><code>update_check</code></td><td>ผลการเช็คอัปเดต ทุกครั้ง — outcome = no_release / up_to_date / broken_skipped / update_available</td></tr>
+        <tr><td><code>fetch_retry</code></td><td>ดาวน์โหลดสำเร็จหลังหลุด 1 ครั้ง — <code>fetch_retry file=latest used=1 ms=850</code></td></tr>
+        <tr><td><code>fetch_failed</code></td><td>เครือข่ายล้มทั้งหมด — ดู <code>err=</code>: 403 rate limit / DNS = ปัญหาภายนอก ไม่ใช่บั๊กแอป</td></tr>
+        <tr><td><code>update_backoff</code></td><td>โดน rate limit → เลื่อนเช็คอัตโนมัติ 30 นาที (กลับปกติเมื่อติดต่อสำเร็จ)</td></tr>
+        <tr><td><code>mutex_suspect</code></td><td>มีโปรเซสแปลกปลอมถือ mutex (ดูคำตอบด้านบน) — samples ท้ายบรรทัดคือผู้ต้องสงสัย</td></tr>
+        <tr><td><code>watchdog_selftest</code></td><td>ผลการทดสอบ watchdog จากเมนู (ok=True/False)</td></tr>
+        <tr><td><code>poll_error</code> / <code>tray_loop_error</code> / <code>menu_error</code></td><td>ข้อผิดพลาดภายในที่ถูกกลืนไว้ — เห็นเป็นระยะ = ควรรายงาน</td></tr>
+      </table>
+      <p>ไฟล์ <code>watchdog.log</code> (เมนู tray → <b>บันทึกการทำงานของ Watchdog</b>)
+      แยกต่างหาก: <code>app not running - checking guards</code> = ตรวจตามปกติ,
+      <code>spawned app (pid N)</code> = ปลุกแอปกลับ, <code>skip (marker)</code> =
+      คุณกด Exit เอง จึงไม่ปลุก — สแกนสุขภาพอัตโนมัติ:
+      <code>tools\stability_report.ps1 -Hours 24</code> (exit 0 = เขียวทั้งหมด)</p>
+    </div>
+  </details>
+
+  <details>
     <summary>ใช้จาก USB stick ได้ไหม (โหมด portable)?</summary>
     <div class="answer">
       <p>ได้ — โหลด <code>portable.zip</code> จากหน้า

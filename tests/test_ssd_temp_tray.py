@@ -4014,6 +4014,12 @@ class TestStartupTelemetry:
     start -> tray object construction) so cold-start latency becomes
     measurable from the event log alone."""
 
+    @staticmethod
+    def _read(*parts):
+        from pathlib import Path
+        return (Path(__file__).resolve().parents[1].joinpath(*parts)).read_text(
+            encoding="utf-8")
+
     def test_startup_event_logs_ms_from_module_t0(self):
         src = (PROJECT_ROOT / "ssd_temp_tray.py").read_text(encoding="utf-8")
         assert "_T0 = _time_mod.time()" in src
@@ -4022,6 +4028,15 @@ class TestStartupTelemetry:
         t0_idx = src.index("_T0 = _time_mod.time()")
         pil_idx = src.index("from PIL import")
         assert t0_idx < pil_idx
+
+    def test_faq_documents_the_event_log_keys(self):
+        """The FAQ 'read the event log yourself' answer must list every
+        key a user may encounter, with the stability-report tool."""
+        faq = self._read("docs", "faq.html")
+        for key in ("startup", "update_check", "fetch_retry",
+                    "fetch_failed", "update_backoff", "mutex_suspect",
+                    "watchdog_selftest", "poll_error", "stability_report"):
+            assert key in faq, f"FAQ is missing event key: {key}"
 
     def test_startup_ms_is_a_sane_integer(self):
         """The startup event's ms must be a small positive integer (a
