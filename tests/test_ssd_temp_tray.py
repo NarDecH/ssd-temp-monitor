@@ -3891,6 +3891,63 @@ class TestUpdateCheckTelemetry:
         assert "fetch_retry" in src
         assert "fetch_failed" in src
 
+    def test_github_token_on_api_only_never_logged(self, monkeypatch,
+                                                   caplog):
+        """A configured github_token rides as a Bearer header on API
+        calls only - never on asset downloads (CDN logs) and never in
+        the event log."""
+        monkeypatch.setattr(m, "SETTINGS",
+                            {**m.SETTINGS, "github_token": "ghp_SECRET"})
+        calls = []
+
+        def probe(req, timeout=10):
+            calls.append({k: v for k, v in req.header_items()})
+            raise OSError("stop")
+
+        monkeypatch.setattr(m.urllib.request, "urlopen", probe)
+        with caplog.at_level(logging.INFO, logger="ssd_temp_monitor"):
+            for url in (
+                    "https://api.github.com/repos/x/y/releases/latest",
+                    "https://github.com/o/r/releases/download/v1/x.exe"):
+                with pytest.raises(OSError):
+                    m.fetch_with_retry(url, attempts=1)
+        api = calls[0]
+        asset = calls[1]
+        assert any(v == "Bearer ghp_SECRET"
+                   for v in api.values()), "API call must carry the token"
+        assert all("ghp_SECRET" not in str(v) for v in asset.values()), \
+            "asset download must NOT carry the token"
+        assert "ghp_SECRET" not in caplog.text, "token must never be logged"
+
+    def test_default_settings_have_empty_token(self):
+        assert m.DEFAULT_SETTINGS.get("github_token") == ""
+
+
+class TestDailyStabilityWorkflow:
+    """The scheduled daily workflow keeps the suite green and the latest
+    release complete; a failure opens an issue so it cannot rot quietly.
+    On-machine 24h criteria live in tools/stability_report.ps1 instead."""
+
+    @staticmethod
+    def _read(*parts):
+        from pathlib import Path
+        return (Path(__file__).resolve().parents[1].joinpath(*parts)).read_text(
+            encoding="utf-8")
+
+    def test_workflow_is_scheduled_and_checks_release(self):
+        yml = self._read(".github", "workflows", "stability.yml")
+        assert "schedule:" in yml and "cron:" in yml
+        assert "python -m pytest tests/" in yml
+        assert "releases/latest" in yml
+        assert "assets" in yml  # release completeness check
+
+    def test_failure_opens_a_deduped_issue(self):
+        yml = self._read(".github", "workflows", "stability.yml")
+        assert "issues: write" in yml
+        assert "issues.create" in yml  # create (after listForRepo dedupe)
+        assert "listForRepo" in yml
+        assert "if: failure()" in yml
+
     def test_telemetry_events_flow(self, monkeypatch, caplog):
         """A failing fetch logs fetch_failed; one that needs a retry
         before succeeding logs fetch_retry."""

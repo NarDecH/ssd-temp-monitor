@@ -46,7 +46,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.25.6"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.25.7"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -332,6 +332,7 @@ DEFAULT_SETTINGS = {
     "multi_disk_icons": True,
     "check_updates": True,
     "github_repo": "NarDech/ssd-temp-monitor",
+    "github_token": "",                       # optional; raises API rate limits
     "update_channel": "stable",              # or "pre-release"
     "weekly_report_enabled": False,          # auto-save the weekly report
     "weekly_report_dir": "",                 # where; empty = app data dir
@@ -2428,6 +2429,15 @@ UPDATE_RATELIMIT_BACKOFF_MIN = 30
 _update_backoff_until = 0.0  # epoch seconds
 
 
+def _github_token():
+    """Optional GitHub token from settings (empty string = anonymous).
+
+    Raises the anonymous API limit from ~60 to 5000 req/h. The token is
+    NEVER logged: log lines carry only file names and counts.
+    """
+    return str(SETTINGS.get("github_token") or "").strip()
+
+
 def fetch_with_retry(url, timeout=15, attempts=3, delay=2.0):
     """GET a URL with short retries; return bytes or raise the last error.
 
@@ -2439,15 +2449,20 @@ def fetch_with_retry(url, timeout=15, attempts=3, delay=2.0):
 
     Telemetry: every retry consumed and every total failure is logged
     (``fetch_retry`` / ``fetch_failed``) so DNS-flake trends are visible
-    in the event log afterwards.
+    in the event log afterwards. A configured github_token is sent as a
+    Bearer header on API calls (never on asset downloads) and is never
+    written to the log.
     """
     last_exc = None
     used = 0
     t0 = time.time()
+    token = _github_token()
+    headers = {"User-Agent": "ssd-temp-monitor"}
+    if token and "//api.github.com/" in url + "/":
+        headers["Authorization"] = f"Bearer {token}"
     for attempt in range(attempts):
         try:
-            req = urllib.request.Request(
-                url, headers={"User-Agent": "ssd-temp-monitor"})
+            req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 if getattr(resp, "status", 200) != 200:
                     raise OSError(f"HTTP {resp.status} from {url}")

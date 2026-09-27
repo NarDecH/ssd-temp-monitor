@@ -76,7 +76,20 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
-  <h2><span class="ver-badge">v1.25.6</span> <span class="date">27 กันยายน 2026</span></h2>
+  <h2><span class="ver-badge">v1.25.7</span> <span class="date">27 กันยายน 2026</span></h2>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>🔑 <strong>GitHub token (ตัวเลือก) เลี่ยง rate limit</strong> — ตั้ง <code>github_token</code> ใน <code>config.json</code> เพื่อเพิ่มโควตา API — ส่งเป็น Bearer เฉพาะ API calls ไม่แนบตอนดาวน์โหลด asset และไม่เคยถูกเขียนลง log</li>
+    <li>⏰ <strong>workflow Stability รายวัน</strong> — cron 04:00 น. (เวลาไทย): รัน test suite เต็ม + ตรวจ latest release ครบ ≥5 assets — พังเมื่อไหร่เปิด issue พร้อม dedupe ให้ปัญหาไม่จมเงียบ ๆ</li>
+  </ul>
+
+  <h3><span class="pill fix-pill">Measurements</span></h3>
+  <ul>
+    <li>📊 <strong>startup latency จาก log จริง</strong> — watchdog-spawned: 1.24.8 ≈ 1–84 วิ (n=2), 1.25.2 ≈ 1–12 วิ (n=2) — ตัวอย่างน้อยเกินสรุป แต่ไม่มีหลักฐานว่ารุ่นใหม่เปิดช้าลง (การวัดเชิงสถิติต้องมี startup event ที่มี ms เอง)</li>
+  </ul>
+
+  <h2><span class="ver-badge old">v1.25.6</span> <span class="date">27 กันยายน 2026</span></h2>
 
   <h3><span class="pill add-pill">Added</span></h3>
   <ul>

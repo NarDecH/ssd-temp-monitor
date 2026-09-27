@@ -3,6 +3,30 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.25.7] — 2026-09-27
+
+### Added
+
+- 🔑 **GitHub token (ตัวเลือก) เลี่ยง rate limit** — ตั้ง `github_token` ใน
+  `%APPDATA%\SSDTempMonitor\config.json` (ปล่อยว่าง = anonymous เหมือนเดิม)
+  เพิ่มโควตา API จาก ~60 เป็น 5000 ครั้ง/ชม. ต่อ IP ที่ถูกจำกัด — token ถูก
+  ส่งเป็น Bearer **เฉพาะ API calls** (การดาวน์โหลด asset ไม่แนบ เพื่อไม่ให้
+  token หลุดไปอยู่ใน log ฝั่ง CDN) และ**ไม่เคยถูกเขียนลง event log**
+- ⏰ **workflow `Stability` รายวัน** — cron 04:00 น. (เวลาไทย): รัน test
+  suite เต็ม + ตรวจว่า latest release ถูก publish ครบ ≥5 assets — ถ้าพัง
+  เปิด issue พร้อม dedupe (comment ต่อ issue เดิมในวันที่พังซ้ำ) ให้
+  ปัญหาไม่จมเงียบ ๆ (เกณฑ์ 24 ชม. ฝั่งเครื่องผู้ใช้ยังใช้
+  `tools/stability_report.ps1` ตามเดิม)
+
+### Measurements
+
+- 📊 **startup latency จาก log จริง (ตัวอย่างน้อย อ่านพอเป็นคร่าว ๆ)** —
+  watchdog-spawned cold start: 1.24.8 ≈ 1–84 วิ (n=2), 1.25.2 ≈ 1–12 วิ
+  (n=2) — ต่างกันไม่ชัดจากตัวอย่างเท่านี้ และช่องว่าง timestamp 1 วินาที
+  ทำให้วัดยาก (spawn และ startup จับคู่เพดาน 90 วิ) สรุป: **ไม่มีหลักฐาน
+  ว่ารุ่นใหม่เปิดช้าลง** — การวัดเชิงสถิติต้องมี startup event ที่มี ms
+  เอง (เป็นงานอนาคต)
+
 ## [1.25.6] — 2026-09-27
 
 ### Added
