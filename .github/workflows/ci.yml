@@ -59,13 +59,13 @@ jobs:
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" setup.iss
 
       - name: Upload exe artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ssd_temp_monitor-exe
           path: dist/ssd_temp_monitor.exe
 
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ssd_temp_monitor-setup
           path: installer/ssd_temp_monitor_setup.exe
@@ -117,7 +117,7 @@ jobs:
 
       - name: Upload E2E evidence on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: watchdog-e2e-logs
           path: e2e-logs/
