@@ -3,6 +3,30 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.25.5] — 2026-09-27
+
+### Added
+
+- 🔎 **Settings เห็นผู้ถือ mutex แปลกปลอมล่าสุด** — แถวใหม่ในหน้าตั้งค่า
+  แสดงเวลาของ event `mutex_suspect` ล่าสุด (เขียว "ไม่เคย" = ปกติ / ส้ม
+  พร้อมปุ่มเปิด event log) — ผู้ใช้เห็นสาเหตุของ dialog "already running"
+  ได้ทันทีไม่ต้องไล่ไฟล์เอง
+- 🧪 **เมนู "ทดสอบ Watchdog ด้วยตัวเอง"** — รัน `tools/e2e_watchdog_test.ps1`
+  (จำลอง crash → ต้องถูกปลุก / marker → ต้องเงียบ; ใช้ task โคลน ไม่แตะ
+  task จริง และเก็บกวาดเอง) แล้วรายงานผลผ่าน dialog พร้อมบันทึก event
+  `watchdog_selftest`
+- 📈 **telemetry ของ updater** — ทุก update check บันทึก event `update_check`
+  (ผล: no_release / up_to_date / broken_skipped / update_available + ms)
+  และ `fetch_with_retry` บันทึก `fetch_retry` / `fetch_failed` ต่อครั้ง —
+  เห็นแนวโน้ม DNS flake ย้อนหลังจาก event log ได้
+
+### Tests
+
+- +10 tests: อ่านบรรทัด `mutex_suspect` ใหม่สุด/ไม่มี, wiring ของ Settings
+  row + ปุ่มเปิด log, เมนู self-test watchdog + verdict dialog, telemetry
+  flow จริง (fetch_retry / fetch_failed ตามจังหวะเครือข่าย), และคำแปล
+  ครบ 4 ภาษาทุก key ใหม่
+
 ## [1.25.4] — 2026-09-27
 
 ### Added

@@ -76,7 +76,21 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
-  <h2><span class="ver-badge">v1.25.4</span> <span class="date">27 กันยายน 2026</span></h2>
+  <h2><span class="ver-badge">v1.25.5</span> <span class="date">27 กันยายน 2026</span></h2>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>🔎 <strong>Settings เห็นผู้ถือ mutex แปลกปลอมล่าสุด</strong> — แถวใหม่ในหน้าตั้งค่าแสดงเวลาของ event <code>mutex_suspect</code> ล่าสุด (เขียว "ไม่เคย" = ปกติ / ส้ม พร้อมปุ่มเปิด event log) — เห็นสาเหตุของ dialog "already running" ได้ทันที</li>
+    <li>🧪 <strong>เมนู "ทดสอบ Watchdog ด้วยตัวเอง"</strong> — รัน E2E (จำลอง crash → ต้องถูกปลุก / marker → ต้องเงียบ; ใช้ task โคลน ไม่แตะ task จริง) แล้วรายงานผลผ่าน dialog พร้อม event <code>watchdog_selftest</code></li>
+    <li>📈 <strong>telemetry ของ updater</strong> — event <code>update_check</code> ต่อการเช็ค (ผล + ms) และ <code>fetch_retry</code>/<code>fetch_failed</code> ต่อ network step — เห็นแนวโน้ม DNS flake ย้อนหลัง</li>
+  </ul>
+
+  <h3><span class="pill test-pill">Tests</span></h3>
+  <ul>
+    <li>+10 tests — อ่านบรรทัด <code>mutex_suspect</code> ใหม่สุด/ไม่มี, wiring ของ Settings row + ปุ่มเปิด log, เมนู self-test watchdog, telemetry flow จริง, คำแปลครบ 4 ภาษา</li>
+  </ul>
+
+  <h2><span class="ver-badge old">v1.25.4</span> <span class="date">27 กันยายน 2026</span></h2>
 
   <h3><span class="pill add-pill">Added</span></h3>
   <ul>

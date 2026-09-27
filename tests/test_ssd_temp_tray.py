@@ -3768,3 +3768,140 @@ class TestForeignMutexSelfCheck:
         # a duplicate start must never count ITSELF as the real instance
         assert "ProcessId -ne" in src and "os.getpid()" in src
         assert "CREATE_NO_WINDOW" in src  # never flash a console window
+
+
+# ---------------------------------------------------------------------------
+# v1.25.5: suspect surfacing in Settings, watchdog self-test, update telemetry
+# ---------------------------------------------------------------------------
+class TestMutexSuspectSurfacing:
+    """The Settings dialog shows WHEN a foreign process last held the
+    AppMutex (newest mutex_suspect line) and opens the event log."""
+
+    def test_settings_shows_suspect_row_and_log_button(self):
+        src = (PROJECT_ROOT / "ssd_temp_tray.py").read_text(encoding="utf-8")
+        assert 'tr("settings.mutex_suspect")' in src
+        assert 'tr("settings.mutex_open_log")' in src
+        assert "_refresh_mutex_suspect" in src
+        assert "_last_mutex_suspect()" in src
+        # reads the log OFF the tk thread (same pattern as the task probe)
+        probe_idx = src.index("def _refresh_mutex_suspect")
+        assert "threading.Thread(target=work" in src[probe_idx:probe_idx + 1400]
+
+    def test_last_mutex_suspect_reads_newest_line(self, tmp_path,
+                                                   monkeypatch):
+        log = tmp_path / "ssd_temp_monitor.log"
+        log.write_text(
+            "2026-09-27 10:00:00,000 INFO startup version=x\n"
+            "2026-09-27 11:00:00,000 INFO mutex_suspect old one\n"
+            "2026-09-27 12:00:00,000 INFO startup y\n"
+            "2026-09-27 13:00:00,000 INFO mutex_suspect newest one\n",
+            encoding="utf-8")
+        monkeypatch.setattr(m, "LOG_FILE", str(log))
+        line = m._last_mutex_suspect()
+        assert line is not None and "newest one" in line
+
+    def test_last_mutex_suspect_none_when_absent(self, tmp_path,
+                                                 monkeypatch):
+        log = tmp_path / "ssd_temp_monitor.log"
+        log.write_text("2026-09-27 10:00:00,000 INFO startup\n",
+                       encoding="utf-8")
+        monkeypatch.setattr(m, "LOG_FILE", str(log))
+        assert m._last_mutex_suspect() is None
+
+    def test_suspect_keys_all_languages(self):
+        old = m.SETTINGS.get("language")
+        try:
+            for lang in ("en", "th", "ja", "zh"):
+                m.SETTINGS["language"] = lang
+                for key in ("settings.mutex_suspect",
+                            "settings.mutex_open_log",
+                            "mutex.suspect.none",
+                            "mutex.suspect.found"):
+                    assert m.tr(key) != key, (lang, key)
+        finally:
+            m.SETTINGS["language"] = old
+
+
+class TestWatchdogSelfTestButton:
+    """A tray-menu button runs tools/e2e_watchdog_test.ps1 (which clones
+    the task and never touches the real one) and reports the verdict."""
+
+    def test_menu_item_and_runner_wired(self):
+        src = (PROJECT_ROOT / "ssd_temp_tray.py").read_text(encoding="utf-8")
+        assert 'tr("menu.wdtest")' in src
+        assert "run_watchdog_selftest_ui" in src
+        assert "e2e_watchdog_test.ps1" in src
+
+    def test_runner_reports_verdict_and_never_blocks(self):
+        import inspect
+        src = inspect.getsource(m.App.run_watchdog_selftest_ui)
+        assert "threading.Thread(target=work, daemon=True)" in src
+        assert "log_event(" in src
+        assert "MessageBoxW" in src  # verdict dialog
+
+    def test_wdtest_keys_all_languages(self):
+        old = m.SETTINGS.get("language")
+        try:
+            for lang in ("en", "th", "ja", "zh"):
+                m.SETTINGS["language"] = lang
+                for key in ("menu.wdtest", "wdtest.title", "wdtest.pass",
+                            "wdtest.fail"):
+                    assert m.tr(key) != key, (lang, key)
+        finally:
+            m.SETTINGS["language"] = old
+
+
+class TestUpdateCheckTelemetry:
+    """Every completed update check logs one event with its outcome and
+    duration; retries and failures of every network step are logged by
+    fetch_with_retry so DNS-flake trends are visible afterwards."""
+
+    def test_check_updates_logs_outcome_and_duration(self):
+        import inspect
+        src = inspect.getsource(m.App._check_updates)
+        assert "update_check" in src
+        assert "outcome=" in src
+        assert "ms=int((time.time() - t0) * 1000)" in src
+        for outcome in ("no_release", "up_to_date", "broken_skipped",
+                        "update_available"):
+            assert f'outcome="{outcome}"' in src
+
+    def test_fetch_retry_helper_logs_retry_and_failure(self):
+        import inspect
+        src = inspect.getsource(m.fetch_with_retry)
+        assert "fetch_retry" in src
+        assert "fetch_failed" in src
+
+    def test_telemetry_events_flow(self, monkeypatch, caplog):
+        """A failing fetch logs fetch_failed; one that needs a retry
+        before succeeding logs fetch_retry."""
+        calls = {"n": 0}
+
+        def flaky(req, timeout=10):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OSError("dns flake")
+            return type("R", (), {"read": lambda self: b'{}',
+                                  "status": 200,
+                                  "__enter__": lambda self: self,
+                                  "__exit__": lambda self, *a: False})()
+
+        monkeypatch.setattr(m.urllib.request, "urlopen", flaky)
+        monkeypatch.setattr(m.time, "sleep", lambda s: None)
+        # one retry consumed, then success -> fetch_retry
+        with caplog.at_level(logging.INFO, logger="ssd_temp_monitor"):
+            m.fetch_with_retry("https://x/SHA256SUMS.txt", attempts=3,
+                               delay=0)
+        assert calls["n"] == 2
+        assert "fetch_retry" in caplog.text
+
+        # always down -> fetch_failed, bounded attempts
+        def down(req, timeout=10):
+            raise OSError("offline")
+
+        monkeypatch.setattr(m.urllib.request, "urlopen", down)
+        with caplog.at_level(logging.INFO, logger="ssd_temp_monitor"):
+            with pytest.raises(OSError):
+                m.fetch_with_retry("https://x/SHA256SUMS.txt", attempts=3,
+                                   delay=0)
+        assert "fetch_failed" in caplog.text

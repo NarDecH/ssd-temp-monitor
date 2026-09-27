@@ -392,6 +392,12 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   (integration test จริง: holder ตัวปลอมถือ mutex → duplicate ต้อง log
   mutex_suspect ที่ระบุ holder ก่อน dialog; test env ใช้
   SSD_TEMP_DATA_DIR / SSD_TEMP_MUTEX_NAME / SSD_TEMP_COUNT_MARKER)
+- **แผนเฝ้าเสถียรภาพ v1.25.5 (24 ชม.)** — หลังปล่อยรุ่น ให้เช็ควันรุ่งขึ้น:
+  (1) event log ไม่มี `mutex_suspect`/`poll_error`/`tray_loop_error` ใหม่
+  (2) watchdog.log มีแค่ tick ปกติ (ไม่มี spawn ซ้ำใน 1 นาที)
+  (3) event `update_check` ตัวใหม่มาครบทุก 6 ชม. (ตรง interval) ไม่มี
+  `fetch_failed` ยกเว้น DNS flake ชัดเจน — เกณฑ์ผ่าน = 24 ชม. เต็มโดยไม่
+  มี event สถานะผิดปกติใด ๆ และประวัติ 24 ชม. เขียนต่อเนื่องไม่มีช่องว่าง
 - **negative test ต้องรอ "ตัวตายตายจริง" ก่อน sample ครั้งแรก** — E2E เคส
   marker-suppress FAIL บน CI ใน 0 วิ ทั้งที่ watchdog เงียบจริง เพราะ (1)
   `Wait-AppCount 0 15` เป็น no-op (`count >= 0` จริงเสมอ → คืนทันที)

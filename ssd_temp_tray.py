@@ -46,7 +46,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.25.4"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.25.5"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -92,6 +92,27 @@ WATCHDOG_TASK_NAME = "SSDTempMonitor Watchdog"
 # Decision log written by tools\watchdog.ps1 (restarts, guard skips,
 # spawn failures - never the healthy no-op minutes).
 WATCHDOG_LOG_FILE = os.path.join(DATA_DIR, "watchdog.log")
+
+
+def _last_mutex_suspect():
+    """Return the newest ``mutex_suspect`` event line, or None.
+
+    Reads the rotating event log (and its .1 part) backwards so the
+    Settings dialog can show the user WHEN a foreign process last held
+    the AppMutex and WHICH command line was sampled. Never raises.
+    """
+    for path in (LOG_FILE, LOG_FILE + ".1"):
+        try:
+            if not os.path.isfile(path):
+                continue
+            with open(path, encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+            for ln in reversed(lines):
+                if "mutex_suspect" in ln:
+                    return ln.rstrip()
+        except OSError:
+            continue
+    return None
 
 
 def _open_watchdog_log(app):
@@ -554,9 +575,20 @@ STRINGS = {
         "menu.reset_stats": "Reset statistics",
         "menu.log": "Error log",
         "menu.watchdog_log": "Watchdog log",
+        "menu.wdtest": "Self-test watchdog",
         "notify.watchdog_log_missing":
             "No watchdog log yet - it appears after the first restart or "
             "skip event.",
+        "settings.mutex_suspect": "Last foreign mutex holder:",
+        "settings.mutex_open_log": "Open event log",
+        "mutex.suspect.none": "never (healthy)",
+        "mutex.suspect.found": "{when} - see event log",
+        "wdtest.title": "Watchdog self-test",
+        "wdtest.pass": ("Watchdog chain OK: the task restarted the app after "
+                        "a simulated crash, and the exit marker kept it "
+                        "quiet. Test task and marker were cleaned up."),
+        "wdtest.fail": ("Watchdog self-test FAILED - details below. The "
+                        "real watchdog task was not modified."),
         "win.log": "SSD Temperature - Error log",
         "log.filter": "Show:",
         "log.filter.all": "all",
@@ -742,6 +774,7 @@ STRINGS = {
         "menu.reset_stats": "ล้างสถิติ",
         "menu.log": "บันทึกข้อผิดพลาด",
         "menu.watchdog_log": "บันทึกการทำงานของ Watchdog",
+        "menu.wdtest": "ทดสอบ Watchdog ด้วยตัวเอง",
         "notify.watchdog_log_missing":
             "ยังไม่มี watchdog log — จะเกิดหลังเหตุการณ์แรก "
             "(ปลุกกลับ / ข้ามงาน)",
@@ -861,6 +894,15 @@ STRINGS = {
         "common.cancel": "ยกเลิก",
         "common.copy": "คัดลอก",
         "selftest.title": "ทดสอบระบบอัปเดต",
+        "settings.mutex_suspect": "ผู้ถือ mutex แปลกปลอมล่าสุด:",
+        "settings.mutex_open_log": "เปิดบันทึกการทำงาน",
+        "mutex.suspect.none": "ไม่เคย (ปกติ)",
+        "mutex.suspect.found": "{when} - ดูในบันทึกการทำงาน",
+        "wdtest.title": "ทดสอบ Watchdog",
+        "wdtest.pass": ("ห่วงโซ่ Watchdog ปกติ: task ปลุกแอปกลับหลังจำลอง crash "
+                        "และ marker กันปลุกทำงานถูกต้อง ทดสอบแล้วเก็บกวาดสะอาด"),
+        "wdtest.fail": ("ทดสอบ Watchdog ไม่ผ่าน - ดูรายละเอียดด้านล่าง "
+                        "(task จริงไม่ถูกแตะ)"),
         "selftest.pass": (
             "ผ่านทั้งหมด ({n}/{n} รายการ)\n\n"
             "เปรียบเทียบเวอร์ชัน · เลือกไฟล์ release · ตรวจ checksum\n"
@@ -927,6 +969,7 @@ STRINGS = {
         "menu.reset_stats": "統計をリセット",
         "menu.log": "エラーログ",
         "menu.watchdog_log": "ウォッチドッグログ",
+        "menu.wdtest": "ウォッチドッグ自己テスト",
         "notify.watchdog_log_missing":
             "ウォッチドッグログはまだありません。",
         "win.log": "SSD Temperature - エラーログ",
@@ -1045,6 +1088,15 @@ STRINGS = {
         "common.cancel": "キャンセル",
         "common.copy": "コピー",
         "selftest.title": "更新システムの自己テスト",
+        "settings.mutex_suspect": "最後の不正ミューテックス保持者:",
+        "settings.mutex_open_log": "イベントログを開く",
+        "mutex.suspect.none": "なし (正常)",
+        "mutex.suspect.found": "{when} - イベントログを参照",
+        "wdtest.title": "ウォッチドッグ自己テスト",
+        "wdtest.pass": ("ウォッチドッグ正常: クラッシュ模擬後にタスクがアプリを復帰させ、"
+                        "終了マーカーも正しく機能しました。テスト後は清掃済みです。"),
+        "wdtest.fail": ("ウォッチドッグ自己テストに失敗 - 下記の詳細を確認 "
+                        "(実際のタスクは未変更)"),
         "selftest.pass": ("すべて合格 ({n}/{n} 項目)\n\n"
                           "バージョン比較 · リリース資産選択 · チェックサム検証\n"
                           "更新 shim (環境変数分離 + 分離再起動)\n\n"
@@ -1109,6 +1161,7 @@ STRINGS = {
         "menu.reset_stats": "重置统计",
         "menu.log": "错误日志",
         "menu.watchdog_log": "看护日志",
+        "menu.wdtest": "看护自检",
         "notify.watchdog_log_missing": "暂无看护日志。",
         "win.log": "SSD Temperature - 错误日志",
         "log.filter": "显示:",
@@ -1225,6 +1278,14 @@ STRINGS = {
         "common.cancel": "取消",
         "common.copy": "复制",
         "selftest.title": "更新系统自检",
+        "settings.mutex_suspect": "最近的外来互斥锁占用者:",
+        "settings.mutex_open_log": "打开事件日志",
+        "mutex.suspect.none": "从未 (正常)",
+        "mutex.suspect.found": "{when} - 请查看事件日志",
+        "wdtest.title": "看护自检",
+        "wdtest.pass": ("看护链正常: 模拟崩溃后任务已重启应用，退出标记也正确生效，"
+                        "测试后已清理。"),
+        "wdtest.fail": ("看护自检失败 - 请查看下方详情 (真实任务未改动)"),
         "selftest.pass": ("全部通过 ({n}/{n} 项)\n\n"
                           "版本比较 · release 资产选择 · 校验和验证\n"
                           "更新 shim (环境隔离 + 分离重启)\n\n"
@@ -2365,8 +2426,14 @@ def fetch_with_retry(url, timeout=15, attempts=3, delay=2.0):
     minutes with no output). One unattended attempt must fail fast and
     loudly instead: a few short tries with a tiny backoff, then give up
     so the caller can print UPDATE-RESULT and exit.
+
+    Telemetry: every retry consumed and every total failure is logged
+    (``fetch_retry`` / ``fetch_failed``) so DNS-flake trends are visible
+    in the event log afterwards.
     """
     last_exc = None
+    used = 0
+    t0 = time.time()
     for attempt in range(attempts):
         try:
             req = urllib.request.Request(
@@ -2374,11 +2441,20 @@ def fetch_with_retry(url, timeout=15, attempts=3, delay=2.0):
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 if getattr(resp, "status", 200) != 200:
                     raise OSError(f"HTTP {resp.status} from {url}")
-                return resp.read()
+                data = resp.read()
+            if used:
+                # this call needed a retry before succeeding
+                log_event("fetch_retry", file=url.rsplit("/", 1)[-1][:60],
+                          used=used, ms=int((time.time() - t0) * 1000))
+            return data
         except Exception as exc:
+            used = attempt + 1
             last_exc = exc
             if attempt < attempts - 1:
                 time.sleep(delay * (attempt + 1))
+    log_event("fetch_failed", file=url.rsplit("/", 1)[-1][:60],
+              used=used, ms=int((time.time() - t0) * 1000),
+              err=str(last_exc)[:80])
     raise last_exc
 
 
@@ -3527,6 +3603,7 @@ class App:
             pystray.MenuItem(tr("menu.refresh"), _safe(self.refresh)),
             pystray.MenuItem(tr("menu.updates"), _safe(self.check_updates_now)),
             pystray.MenuItem(tr("menu.selftest"), _safe(self.run_update_selftest_ui)),
+            pystray.MenuItem(tr("menu.wdtest"), _safe(self.run_watchdog_selftest_ui)),
             pystray.MenuItem(tr("menu.restore"), _safe(self.restore_previous_version)),
             pystray.MenuItem(tr("menu.settings"), _safe(self.show_settings)),
             pystray.MenuItem(tr("menu.about"), _safe(self.show_about)),
@@ -3610,6 +3687,39 @@ class App:
         subprocess.Popen(["cmd", "/c", shim],
                          creationflags=subprocess.CREATE_NO_WINDOW, close_fds=True)
         self.quit()
+
+    def run_watchdog_selftest_ui(self, *_):
+        """Run the E2E watchdog test (clone task, kill, restart, marker)
+        and report the verdict. Reuses tools/e2e_watchdog_test.ps1 -
+        it never touches the real task and always cleans up. Needs the
+        installed watchdog task, so the button is hidden when absent."""
+        def work():
+            script = os.path.join(BASE_DIR, "tools", "e2e_watchdog_test.ps1")
+            ok, detail = False, ""
+            try:
+                out = subprocess.run(
+                    ["powershell", "-NoProfile", "-ExecutionPolicy",
+                     "Bypass", "-File", script],
+                    capture_output=True, timeout=420,
+                    creationflags=subprocess.CREATE_NO_WINDOW)
+                ok = out.returncode == 0
+                tail = (out.stdout.decode("utf-8", "replace")
+                        + out.stderr.decode("utf-8", "replace")).strip()
+                detail = tail[-600:] if tail else \
+                    ("exit code %d" % out.returncode)
+            except Exception as exc:
+                detail = repr(exc)
+            log_event("watchdog_selftest", ok=ok)
+            if ok:
+                body = tr("wdtest.pass")
+                icon = 0x40  # MB_ICONINFORMATION
+            else:
+                body = tr("wdtest.fail") + "\n\n" + detail
+                icon = 0x30  # MB_ICONWARNING
+            ctypes.windll.user32.MessageBoxW(
+                None, body, tr("wdtest.title"),
+                icon | 0x40000 | 0x10000)  # topmost | set foreground
+        threading.Thread(target=work, daemon=True).start()
 
     def run_update_selftest_ui(self, *_):
         """Run the update-pipeline self-test and show the result."""
@@ -4489,6 +4599,50 @@ class App:
 
         _refresh_watchdog_state()
 
+        # last foreign-mutex-holder event (mutex_suspect) + open the log
+        tk.Label(tab_general, text=tr("settings.mutex_suspect"),
+                 font=("Segoe UI", 10), anchor="w").grid(
+            row=14, column=0, sticky="w", pady=3)
+        suspect_lbl = tk.Label(tab_general, font=("Segoe UI", 9, "bold"),
+                               anchor="w", text="...")
+        suspect_lbl.grid(row=14, column=1, sticky="w", padx=(14, 0), pady=3)
+
+        def _open_event_log():
+            if os.path.isfile(LOG_FILE):
+                subprocess.Popen(["notepad.exe", LOG_FILE],
+                                 creationflags=subprocess.CREATE_NO_WINDOW)
+
+        tk.Button(tab_general, text=tr("settings.mutex_open_log"),
+                  font=("Segoe UI", 9), command=_open_event_log).grid(
+            row=14, column=1, sticky="e", padx=(0, 0))
+
+        def _refresh_mutex_suspect():
+            """Read the event log off the tk thread, show the newest hit."""
+            suspect_lbl.config(text="...", fg=UNKNOWN)
+
+            def work():
+                line = _last_mutex_suspect()
+
+                def done():
+                    try:
+                        if not line:
+                            suspect_lbl.config(
+                                text=tr("mutex.suspect.none"), fg=GREEN)
+                            return
+                        # "2026-09-27 16:15:25,928 INFO mutex_suspect ..."
+                        when = line.split(" INFO ")[0].split(",")[0]
+                        suspect_lbl.config(
+                            text=tr("mutex.suspect.found", when=when),
+                            fg=ORANGE)
+                    except tk.TclError:
+                        pass  # window closed while probing
+
+                self.tk_after(root, 0, done)
+
+            threading.Thread(target=work, daemon=True).start()
+
+        _refresh_mutex_suspect()
+
         # UI theme (dark/light) for windows and reports
         tk.Label(tab_general, text=tr("settings.ui_theme"),
                  font=("Segoe UI", 10), anchor="w").grid(
@@ -4984,7 +5138,11 @@ class App:
         """
         repo = SETTINGS.get("github_repo") or DEFAULT_SETTINGS["github_repo"]
         prerelease = bool(SETTINGS.get("update_channel") == "pre-release")
+        t0 = time.time()
         release = fetch_latest_release(repo, include_prereleases=prerelease)
+        # telemetry: one event per completed check with its outcome
+        log_event("update_check", outcome="no_release", manual=manual,
+                  ms=int((time.time() - t0) * 1000))
         if not release:
             if manual:
                 self._notify(tr("notify.no_update"),
@@ -4992,12 +5150,17 @@ class App:
             return
         url, version = select_release_asset(release, prefer_prerelease=prerelease)
         if not url or not is_newer_version(version):
+            log_event("update_check", outcome="up_to_date", manual=manual,
+                      ms=int((time.time() - t0) * 1000), remote=version or None)
             if manual:
                 self._notify(
                     tr("notify.latest", local=effective_version()),
                     tr("notify.title.update"))
             return
         if version_is_broken(version):
+            log_event("update_check", outcome="broken_skipped",
+                      manual=manual, ms=int((time.time() - t0) * 1000),
+                      remote=version)
             log_event("update_skipped_broken", remote=version)
             if manual:
                 self._notify(
@@ -5008,6 +5171,8 @@ class App:
             already = self._nagged_version == version
             self._pending_update = (url, version)
             self._nagged_version = version
+        log_event("update_check", outcome="update_available", manual=manual,
+                  ms=int((time.time() - t0) * 1000), remote=version)
         if not already:
             log_event("update_available", remote=version,
                       local=effective_version())
