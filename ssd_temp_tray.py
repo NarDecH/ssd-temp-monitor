@@ -46,7 +46,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.25.3"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.25.4"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -76,9 +76,11 @@ def _is_portable():
 BASE_DIR = (os.path.dirname(os.path.abspath(sys.executable))
             if getattr(sys, "frozen", False) else os.getcwd())
 DATA_DIR = (os.path.join(BASE_DIR, "portable_data") if _is_portable()
-            else os.path.join(os.environ.get("APPDATA",
-                                             os.path.expanduser("~")),
-                              "SSDTempMonitor"))
+            else os.environ.get("SSD_TEMP_DATA_DIR",
+                                os.path.join(
+                                    os.environ.get(
+                                        "APPDATA", os.path.expanduser("~")),
+                                    "SSDTempMonitor")))
 CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
 GEOMETRY_FILE = os.path.join(DATA_DIR, "window_geometry.json")
 # Written when the user quits from the tray menu: the external crash watchdog
@@ -1282,7 +1284,10 @@ GRAPH_Y_LO, GRAPH_Y_HI = 15, 95
 GRAPH_REFRESH_MS = 1000
 
 # ---- single instance ----
-MUTEX_NAME = "Local\\SSDTempMonitor_SingleInstance"
+# test/CI override: point the single-instance mutex at a different name
+# so integration tests can exercise the duplicate path in isolation
+MUTEX_NAME = os.environ.get("SSD_TEMP_MUTEX_NAME",
+                            "Local\\SSDTempMonitor_SingleInstance")
 
 _ICON_CACHE = {}
 
@@ -1292,22 +1297,26 @@ _ICON_CACHE = {}
 _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
 
-def _app_process_count() -> int:
-    """Count LIVE instances of the installed app exe (0 on any error).
+def _app_process_count(marker: str = "ssd_temp_monitor.exe") -> int:
+    """Count LIVE processes whose command line contains ``marker``.
 
-    Used by the foreign-mutex self-check: a taken AppMutex with zero app
-    processes means some non-app process is squatting on the mutex.
+    The current process is ALWAYS excluded - a duplicate start that just
+    failed to take the mutex would otherwise count itself and conclude
+    'a real instance holds it', hiding the foreign holder. The
+    foreign-mutex self-check uses this: a taken AppMutex with zero
+    matching processes means some non-app process is squatting on it.
     """
     try:
-        exe = "ssd_temp_monitor.exe"
+        safe = str(marker).replace("'", "''")
         out = subprocess.run(
-            [os.path.join(os.environ.get("SystemRoot", r"C:\Windows"),
-                          "System32", "tasklist.exe"),
-             "/FI", f"IMAGENAME eq {exe}", "/FO", "CSV", "/NH"],
-            capture_output=True, timeout=20,
+            ["powershell", "-NoProfile", "-Command",
+             "(Get-CimInstance Win32_Process | Where-Object "
+             "{ $_.ProcessId -ne " + str(os.getpid()) +
+             " -and $_.CommandLine -like '*" + safe + "*' }).Count"],
+            capture_output=True, timeout=30,
             creationflags=subprocess.CREATE_NO_WINDOW)
-        text = out.stdout.decode("utf-8", "replace").lower()
-        return text.count(exe.lower())
+        text = out.stdout.decode("utf-8", "replace").strip()
+        return int(text) if text.isdigit() else 0
     except Exception:
         return 0
 
@@ -1328,7 +1337,12 @@ def log_foreign_mutex_holder() -> None:
         try:
             if not taken:
                 return  # mutex free - nothing to diagnose
-            if _app_process_count() > 0:
+            # tests/CI override the marker via env so a concurrently
+            # running REAL app (different mutex) can never satisfy the
+            # 'a real instance holds it' shortcut for a test mutex
+            count_marker = os.environ.get("SSD_TEMP_COUNT_MARKER",
+                                          "ssd_temp_monitor.exe")
+            if _app_process_count(count_marker) > 0:
                 return  # a real instance holds it - normal
             procs = []
             try:

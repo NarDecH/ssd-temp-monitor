@@ -139,6 +139,26 @@
   </details>
 
   <details>
+    <summary>เปิดแอปแล้วขึ้น "already running" ทั้งที่ tray ไม่มีแอป — แปลว่าอะไร?</summary>
+    <div class="answer">
+      <p>แอปกันเปิดสำเนาที่สองด้วย named mutex ถ้าเจอว่า mutex ถูกถืออยู่
+      แต่<b>ไม่มีโปรเซสแอปมีชีวิตเลย</b> แปลว่ามีโปรเซสอื่น (เช่น pythonw
+      ที่รันแอปจากซอร์สค้าง, โปรแกรมที่ค้างหลังอัปเดต) กุม mutex ค้างไว้ —
+      กรณีนี้แอปจะบันทึก event <code>mutex_suspect</code> พร้อมรายชื่อ
+      โปรเซสต้องสงสัยไว้ใน event log ก่อนแสดงข้อความเสมอ (ตั้งแต่ v1.25.3)</p>
+      <p>วิธีตรวจต่อ: เปิด event log (เมนู tray → <b>เปิดบันทึกการทำงาน</b>)
+      แล้วหาบรรทัด <code>mutex_suspect</code> — samples ท้ายบรรทัดคือ
+      command line ของโปรเซสที่น่าสงสัย ปิดโปรเซสนั้นแล้วเปิดแอปใหม่
+      ถ้าอยากรู้ตัวถือ mutex ตัวจริง ใช้ Sysinternals:</p>
+      <pre>handle64.exe -a SSDTempMonitor_SingleInstance</pre>
+      <p>มันจะชี้ pid ของผู้ถือตรง ๆ (รันครั้งเดียวรับ EULA ก่อน)
+      อัปเดตเป็น v1.25.2+ ขึ้นไปแล้วกรณีนี้ไม่ควรเกิดซ้ำ — ซอมบี้
+      หลังกด Exit ถูกกำจัดด้วย hard-exit และ duplicate จาก watchdog
+      เด้งแบบเงียบไม่รบกวน</p>
+    </div>
+  </details>
+
+  <details>
     <summary>ใช้จาก USB stick ได้ไหม (โหมด portable)?</summary>
     <div class="answer">
       <p>ได้ — โหลด <code>portable.zip</code> จากหน้า

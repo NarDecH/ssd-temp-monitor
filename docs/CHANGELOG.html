@@ -76,7 +76,20 @@
   <p>ประวัติการเปลี่ยนแปลงทั้งหมดของโปรเจกต์ — รายละเอียดเชิงเทคนิคดูใน
   <a href="RESEARCH.html">RESEARCH.html</a></p>
 
-  <h2><span class="ver-badge">v1.25.3</span> <span class="date">27 กันยายน 2026</span></h2>
+  <h2><span class="ver-badge">v1.25.4</span> <span class="date">27 กันยายน 2026</span></h2>
+
+  <h3><span class="pill add-pill">Added</span></h3>
+  <ul>
+    <li>🧪 <strong>integration test จำลอง holder แปลกปลอมจริง</strong> — สคริปต์จริงเปิด mutex ค้างไว้ แล้วรันแอปเป็น duplicate จริง: ยืนยัน exit 2 เงียบ, event <code>mutex_suspect</code> ลง log ก่อน dialog, samples ระบุ holder ตัวจริง (เพิ่ม env override <code>SSD_TEMP_DATA_DIR</code> และ <code>SSD_TEMP_MUTEX_NAME</code> สำหรับทดสอบ/หลายอินสแตนซ์)</li>
+  </ul>
+
+  <h3><span class="pill fix-pill">Fixed</span></h3>
+  <ul>
+    <li>🕳️ <strong>blind spot ของ self-check: duplicate นับตัวเอง</strong> — duplicate ที่ล้มเหลวก็คือ <code>ssd_temp_monitor.exe</code> ที่มีชีวิต ตัวนับจึงคิดว่า "instance จริงถือ" และเงียบ — ตอนนี้นับ command line และตัด pid ตัวเองออกเสมอ</li>
+    <li>📖 FAQ: เพิ่มคำตอบ "already running ทั้งที่ tray ไม่มีแอป" — ความหมายของ <code>mutex_suspect</code> + วิธีใช้ handle64 หาตัวถือ mutex ตัวจริง</li>
+  </ul>
+
+  <h2><span class="ver-badge old">v1.25.3</span> <span class="date">27 กันยายน 2026</span></h2>
 
   <h3><span class="pill fix-pill">Fixed</span></h3>
   <ul>

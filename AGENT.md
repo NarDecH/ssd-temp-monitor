@@ -385,6 +385,13 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   `mutex_suspect` ทันทีที่ duplicate start เจอ mutex ถูกถือแต่ไม่มี
   โปรเซสแอปมีชีวิต (พร้อม sample command line ของ python/ssd_temp procs)
   ครั้งหน้าเจอกรณีนี้ อ่าน event log จบเลย ไม่ต้องล่าด้วย handle64 อีก
+- **ตัว duplicate นับตัวเอง = blind spot ของ self-check** — v1.25.4:
+  duplicate ที่แพ้ mutex ก็คือ `ssd_temp_monitor.exe` ที่มีชีวิต ถ้า
+  นับ "โปรเซสแอป" แบบ IMAGENAME ตัวมันเองจะเข้าเงื่อนไข "instance จริง
+  ถืออยู่" และเงียบหมด — นับ command line แล้วตัด pid ตัวเองออกเสมอ
+  (integration test จริง: holder ตัวปลอมถือ mutex → duplicate ต้อง log
+  mutex_suspect ที่ระบุ holder ก่อน dialog; test env ใช้
+  SSD_TEMP_DATA_DIR / SSD_TEMP_MUTEX_NAME / SSD_TEMP_COUNT_MARKER)
 - **negative test ต้องรอ "ตัวตายตายจริง" ก่อน sample ครั้งแรก** — E2E เคส
   marker-suppress FAIL บน CI ใน 0 วิ ทั้งที่ watchdog เงียบจริง เพราะ (1)
   `Wait-AppCount 0 15` เป็น no-op (`count >= 0` จริงเสมอ → คืนทันที)

@@ -3736,7 +3736,7 @@ class TestForeignMutexSelfCheck:
             return 1234
 
         monkeypatch.setattr(m._kernel32, "CreateMutexW", taken)
-        monkeypatch.setattr(m, "_app_process_count", lambda: 0)
+        monkeypatch.setattr(m, "_app_process_count", lambda *a, **k: 0)
         with caplog.at_level(logging.INFO, logger="ssd_temp_monitor"):
             m.log_foreign_mutex_holder()
         assert "mutex_suspect" in caplog.text
@@ -3747,7 +3747,7 @@ class TestForeignMutexSelfCheck:
             return 1234
 
         monkeypatch.setattr(m._kernel32, "CreateMutexW", taken)
-        monkeypatch.setattr(m, "_app_process_count", lambda: 2)
+        monkeypatch.setattr(m, "_app_process_count", lambda *a, **k: 2)
         with caplog.at_level(logging.INFO, logger="ssd_temp_monitor"):
             m.log_foreign_mutex_holder()
         assert "mutex_suspect" not in caplog.text
@@ -3762,9 +3762,9 @@ class TestForeignMutexSelfCheck:
             m.log_foreign_mutex_holder()
         assert "mutex_suspect" not in caplog.text
 
-    def test_app_process_count_filters_on_bare_exe_name(self):
+    def test_app_process_count_excludes_self_and_is_quiet(self):
         import inspect
         src = inspect.getsource(m._app_process_count)
-        # tasklist's IMAGENAME filter matches the bare file name only
-        assert "IMAGENAME eq" in src and "ssd_temp_monitor.exe" in src
+        # a duplicate start must never count ITSELF as the real instance
+        assert "ProcessId -ne" in src and "os.getpid()" in src
         assert "CREATE_NO_WINDOW" in src  # never flash a console window

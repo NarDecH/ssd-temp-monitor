@@ -3,6 +3,25 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.25.4] — 2026-09-27
+
+### Added
+
+- 🧪 **integration test จำลอง holder แปลกปลอมจริง** — สคริปต์จริงเปิด mutex
+  ชื่อจริงค้างไว้ แล้วรันแอปเป็น duplicate จริง: ยืนยัน exit code 2 เงียบ,
+  event `mutex_suspect` ลง log ก่อน dialog, และ samples ระบุ holder ตัวจริง
+  (ลูกเขียน log เข้า data dir ชั่วคราวผ่าน `SSD_TEMP_DATA_DIR` — เพิ่ม
+  env override ให้ `DATA_DIR` และ `MUTEX_NAME` สำหรับทดสอบ/หลายอินสแตนซ์)
+
+### Fixed
+
+- 🕳️ **blind spot ของ self-check: duplicate นับตัวเอง** — ตอน duplicate
+  start ล้มเหลว ตัวมันเองก็คือ `ssd_temp_monitor.exe` ที่มีชีวิต ตัวนับ
+ จึงเห็น "instance จริงถือ mutex" และเงียบทั้งที่ควรจับ holder แปลกปลอม —
+  ตอนนี้ `_app_process_count` นับ command line และ**ตัด pid ตัวเองออกเสมอ**
+- 📖 FAQ: เพิ่มคำตอบ "already running ทั้งที่ tray ไม่มีแอป" — ความหมายของ
+  event `mutex_suspect` + วิธีใช้ handle64 หาตัวถือ mutex ตัวจริง
+
 ## [1.25.3] — 2026-09-27
 
 ### Fixed
