@@ -3,6 +3,19 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/th/1.1.0/)
 เวอร์ชันตาม [SemVer](https://semver.org/lang/th/)
 
+## [1.25.9] — 2026-09-27
+
+### Added
+
+- 📈 **กราฟ startup latency ในหน้า Details** — บรรทัดใหม่แสดง sparkline
+  (ASCII) ของเวลาเปิดโปรแกรมล่าสุด 20 ครั้งพร้อม min/last (ms) — อ่านจาก
+  event `startup ... ms=` ตั้งแต่ 1.25.8 (log เก่าที่ไม่มี ms ถูกข้าม)
+- 🔧 **`tools/set_github_token.ps1`** — ตั้ง/ล้าง `github_token` ใน
+  `config.json` จากคอนโซลปกติ: prompt ซ่อนอินพุต (`-MaskInput`) รองรับ
+  `clear` และตรวจความยาวคร่าว ๆ — token ไม่เคยแสดงบนจอหรือลง log
+- 🤖 **dependabot (github-actions, รายเดือน)** — ให้ PR อัปเดตเวอร์ชัน
+  action ที่ pin ไว้เอง (ตารางเดือนละครั้ง สันติกับ workflow ที่รีวิวมือ)
+
 ## [1.25.8] — 2026-09-27
 
 ### Added

@@ -4043,3 +4043,67 @@ class TestStartupTelemetry:
         assert captured and "ms=" in captured[0]
         ms = int(captured[0].split("ms=")[1].split()[0])
         assert 0 <= ms < 30000
+
+
+class TestStartupLatencyGraph:
+    """Details shows the recent cold-start trend as an ASCII sparkline
+    built from startup events that carry ms (v1.25.8+)."""
+
+    def test_details_window_shows_trend_line(self):
+        src = (PROJECT_ROOT / "ssd_temp_tray.py").read_text(encoding="utf-8")
+        assert 'tr("details.startup_trend")' in src
+        assert "_startup_sparkline(startup_ms_history())" in src
+        assert "Consolas" in src  # monospace so bars align
+
+    def test_history_parses_recent_startup_events(self, tmp_path,
+                                                  monkeypatch):
+        log = tmp_path / "ssd_temp_monitor.log"
+        log.write_text(
+            "2026-09-27 10:00:00,000 INFO startup version=1.25.8 ms=350\n"
+            "2026-09-27 11:00:00,000 INFO startup version=1.25.8 ms=420\n"
+            "2026-09-27 12:00:00,000 INFO update_check outcome=up_to_date\n"
+            "2026-09-27 13:00:00,000 INFO startup version=1.25.7\n",
+            encoding="utf-8")
+        monkeypatch.setattr(m, "LOG_FILE", str(log))
+        h = m.startup_ms_history()
+        assert h == [(350, "09-27 10:00"), (420, "09-27 11:00")]
+
+    def test_sparkline_shape_and_annotations(self):
+        s = m._startup_sparkline([(100, "a"), (200, "b"), (400, "c")])
+        assert "min=100" in s and "last=400" in s and "(ms)" in s
+        bars = s.split("  ")[0]
+        assert len(bars) == 3 and set(bars) <= set("▁▂▃▄▅▆▇█")
+        assert bars[-1] == "█"          # the max sample is a full block
+        assert m._startup_sparkline([]) == ""
+
+    def test_trend_keys_all_languages(self):
+        old = m.SETTINGS.get("language")
+        try:
+            for lang in ("en", "th", "ja", "zh"):
+                m.SETTINGS["language"] = lang
+                assert m.tr("details.startup_trend") != \
+                    "details.startup_trend"
+        finally:
+            m.SETTINGS["language"] = old
+
+
+class TestTokenAndDependabotTooling:
+    """Token setup is user-run PowerShell (masked prompt, never logged);
+    dependabot keeps the pinned action versions current monthly."""
+
+    @staticmethod
+    def _read(*parts):
+        from pathlib import Path
+        return (Path(__file__).resolve().parents[1].joinpath(*parts)).read_text(
+            encoding="utf-8")
+
+    def test_token_helper_masks_input_and_supports_clear(self):
+        src = self._read("tools", "set_github_token.ps1")
+        assert "-MaskInput" in src
+        assert "clear" in src
+        assert "ConvertFrom-Json" in src and "ConvertTo-Json" in src
+
+    def test_dependabot_pins_actions_monthly(self):
+        yml = self._read(".github", "dependabot.yml")
+        assert "github-actions" in yml
+        assert "monthly" in yml

@@ -49,7 +49,7 @@ import pystray
 ICON_SIZE = 64
 
 # ---- auto-update (GitHub Releases) ----
-APP_VERSION = "1.25.8"        # keep in sync with setup.iss #define MyAppVersion
+APP_VERSION = "1.25.9"        # keep in sync with setup.iss #define MyAppVersion
 UPDATE_CHECK_INTERVAL = 6 * 3600  # fallback only; poll_loop reads SETTINGS
 
 GREEN = "#22c55e"
@@ -95,6 +95,48 @@ WATCHDOG_TASK_NAME = "SSDTempMonitor Watchdog"
 # Decision log written by tools\watchdog.ps1 (restarts, guard skips,
 # spawn failures - never the healthy no-op minutes).
 WATCHDOG_LOG_FILE = os.path.join(DATA_DIR, "watchdog.log")
+
+
+STARTUP_MS_RE = re.compile(
+    r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ INFO startup .*\bms=(\d+)")
+
+
+def startup_ms_history(limit=20):
+    """Recent cold-start latencies from the event log.
+
+    Returns a list of (millisecond, "MM-DD HH:MM") tuples, oldest first,
+    newest last (at most ``limit``). Empty when the log has no startup
+    events carrying ``ms`` (pre-1.25.8 logs). Never raises.
+    """
+    out = []
+    for path in (LOG_FILE, LOG_FILE + ".1"):
+        try:
+            if not os.path.isfile(path):
+                continue
+            with open(path, encoding="utf-8", errors="replace") as f:
+                for ln in f:
+                    m = STARTUP_MS_RE.match(ln)
+                    if m:
+                        when = m.group(1)[5:16]   # MM-DD HH:MM
+                        out.append((int(m.group(2)), when))
+        except OSError:
+            continue
+    return out[-limit:]
+
+
+def _startup_sparkline(samples, width=32):
+    """ASCII sparkline of startup_ms samples with min/last annotation.
+
+    Bars use ▁▂▃▄▅▆▇█ scaled to the max of the window; empty input →
+    empty string. Pure function - trivially testable.
+    """
+    if not samples:
+        return ""
+    ms = [s[0] for s in samples]
+    blocks = "▁▂▃▄▅▆▇█"
+    hi = max(ms) or 1
+    bars = "".join(blocks[min(7, int(m * 8 / hi))] for m in ms)
+    return f"{bars}  min={min(ms)} last={ms[-1]} (ms)"
 
 
 def _last_mutex_suspect():
@@ -642,6 +684,7 @@ STRINGS = {
                            "(check the system tray)."),
         "mb.title": "SSD Temp Monitor",
         "details.no_data": "No SSD temperature data (run as Administrator).",
+        "details.startup_trend": "Startup time (recent):",
         "rollback.title": "Update rolled back",
         "rollback.body": ("The update could not start. The previous version "
                           "has been restored and the failed release will be "
@@ -830,6 +873,7 @@ STRINGS = {
                            "(ดูที่ system tray)"),
         "mb.title": "SSD Temp Monitor",
         "details.no_data": "ไม่พบข้อมูลอุณหภูมิ (ต้องรันในสิทธิ์ Administrator)",
+        "details.startup_trend": "เวลาเปิดโปรแกรม (ล่าสุด):",
         "rollback.title": "ย้อนกลับการอัปเดตแล้ว",
         "rollback.body": ("การอัปเดตไม่สามารถเริ่มทำงานได้ ระบบจึงกลับไปใช้เวอร์ชันเดิม"
                           "และจะข้ามเวอร์ชันที่มีปัญหานี้ในการตรวจสอบครั้งถัดไป"),
@@ -1024,6 +1068,7 @@ STRINGS = {
                            "(タスクトレイを確認してください)。"),
         "mb.title": "SSD Temp Monitor",
         "details.no_data": "SSD 温度データがありません (管理者として実行)。",
+        "details.startup_trend": "起動時間 (最近):",
         "rollback.title": "アップデートをロールバックしました",
         "rollback.body": ("アップデートを開始できませんでした。以前のバージョンを復元し、"
                           "問題のあるリリースは今後スキップされます。"),
@@ -1215,6 +1260,7 @@ STRINGS = {
                            "(请查看系统托盘)。"),
         "mb.title": "SSD Temp Monitor",
         "details.no_data": "没有 SSD 温度数据 (请以管理员身份运行)。",
+        "details.startup_trend": "启动耗时 (最近):",
         "rollback.title": "更新已回滚",
         "rollback.body": ("无法启动更新。已恢复之前的版本，后续检查将跳过"
                           "这个有问题的版本。"),
@@ -4329,6 +4375,14 @@ class App:
         for text, color in lines:
             tk.Label(frame, text=text, font=("Segoe UI", 13, "bold"),
                      fg=color).pack(anchor="w", pady=2)
+        # startup-latency trend (last N cold starts, ASCII sparkline)
+        spark = _startup_sparkline(startup_ms_history())
+        if spark:
+            tk.Label(frame, text=tr("details.startup_trend"),
+                     font=("Segoe UI", 9), fg="#64748b",
+                     anchor="w").pack(anchor="w", pady=(10, 0))
+            tk.Label(frame, text=spark, font=("Consolas", 10),
+                     anchor="w").pack(anchor="w")
         tk.Button(frame, text=tr("common.close"), command=root.destroy,
                   font=("Segoe UI", 10)).pack(pady=(10, 0))
         root.protocol("WM_DELETE_WINDOW", root.destroy)

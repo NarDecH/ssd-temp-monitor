@@ -1,0 +1,12 @@
+# Keep the GitHub Actions pinned versions current. Monthly cadence:
+# workflows here are few and hand-reviewed, so a calm schedule beats noise.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "skip-release"
+    commit-message:
+      prefix: "ci"
