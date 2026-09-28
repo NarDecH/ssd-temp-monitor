@@ -4222,3 +4222,38 @@ class TestStartupTrendTool:
         s = mod.summarize(rows)["1.25.9"]
         assert s["n"] == 3 and s["min"] == 100 and s["max"] == 300
         assert s["avg"] == 200 and s["p95"] == 300
+
+
+class TestStabilityReportStartupCheck:
+    """stability_report.ps1 knows 'startup ms=' (P2 backlog): the latest
+    cold start is compared against 3x p95 of the previous samples in the
+    window. The finding is warn-only and can never change the exit code
+    (a slow start is a hint, not an app-health failure)."""
+
+    @staticmethod
+    def _read(*parts):
+        from pathlib import Path
+        return (Path(__file__).resolve().parents[1].joinpath(*parts)).read_text(
+            encoding="utf-8")
+
+    def test_parses_startup_ms_events_with_version(self):
+        src = self._read("tools", "stability_report.ps1")
+        assert "' INFO startup '" in src
+        assert "version=([\\w.]+).*ms=(\\d+)" in src
+        assert "3 * $p95" in src
+
+    def test_startup_finding_is_warn_only_never_fail(self):
+        src = self._read("tools", "stability_report.ps1")
+        block = src.split("---- 5) startup")[1].split("---- 2) watchdog")[0]
+        assert "warn  startup:" in block
+        # no Fail statement inside the startup check (the trailing
+        # "} else { Fail 'event log missing' }" line belongs to check 1)
+        assert not [l for l in block.splitlines()
+                    if l.strip().startswith("Fail ")]
+        assert "warn only" in src.split("---- 5) startup")[0]  # documented up top
+
+    def test_weekly_wrapper_appends_summary_and_passthrough_exit(self):
+        src = self._read("tools", "weekly_stability_check.ps1")
+        assert "stability_report.ps1" in src
+        assert "Add-Content" in src
+        assert "exit $exitCode" in src

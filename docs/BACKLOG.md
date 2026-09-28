@@ -1,5 +1,7 @@
 # Backlog
 
+> สถานะรวมฉบับย่อ: `docs/STATUS.md` · แผนรุ่นถัดไป: `docs/RELEASE_PLAN.md`
+
 ที่มา: ทบทวนเมื่อ 2026-09-27, สถานะล่าสุด 2026-09-28 (หลังวันปล่อย
 1.25.2→1.25.10) — โค้ดสแกน
 TODO/FIXME แล้ว**ไม่มีค้าง** รายการนี้คือทิศทางที่คุยกันใน conversation
@@ -42,8 +44,9 @@ TODO/FIXME แล้ว**ไม่มีค้าง** รายการนี�
   sparkline พอใช้ ถ้าอยากได้เส้นจริงค่อยทำ (แรงพอสมควร ผลตอบแทนต่ำ)
 - ~~telemetry สรุปรายสัปดาห์~~ ✅ เสร็จ (v1.25.10: section ใน weekly
   report นับ update_check/fetch_retry/fetch_failed/update_backoff 7 วัน)
-- **stability_report รู้จัก `startup ms=`** — เพิ่มเกณฑ์ "startup กลาง ๆ
-  หลุด p95 เกิน 3 เท่า = เตือน" เมื่อข้อมูลเริ่มเยอะ
+- ~~stability_report รู้จัก `startup ms=`~~ ✅ เสร็จ (2026-09-28: เกณฑ์ที่ 5
+  — latest เทียบ 3×p95 ของตัวอย่างก่อนหน้า = **warn-only** ไม่มีผล exit
+  code, มีเทสครอบสัญญา 400 passed)
 
 ## Parked — ตัดสินใจภายหลัง
 

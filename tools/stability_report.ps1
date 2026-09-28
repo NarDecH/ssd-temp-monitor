@@ -5,6 +5,8 @@
 #   3) update_check events present at the configured interval, with only
 #      clearly-explained fetch_failed entries
 #   4) the 24h history CSV has no gaps bigger than 5 minutes
+#   5) startup ms: latest cold start vs 3x p95 of previous samples
+#      (warn only - a regression hint, never a FAIL)
 # Exit code 0 = all green, 1 = findings (print them). No admin needed.
 param([int]$Hours = 24)
 
@@ -49,6 +51,32 @@ if (Test-Path $log) {
     }
   }
   if ($ff) { Write-Output ("note  fetch_failed x{0} (check err= fields: 403/DNS are external)" -f @($ff).Count) }
+
+  # ---- 5) startup ms: latest cold start vs 3x p95 (warn only, never FAIL) --
+  $startups = Select-String -Path $log -Pattern ' INFO startup ' | ForEach-Object {
+    if ($_.Line -match '^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*version=([\w.]+).*ms=(\d+)') {
+      $t = [datetime]::ParseExact($Matches[1], 'yyyy-MM-dd HH:mm:ss', $null)
+      if ($t -ge $since) {
+        [pscustomobject]@{ t = $t; ver = $Matches[2]; ms = [int]$Matches[3] }
+      }
+    }
+  }
+  if ($startups -and @($startups).Count -ge 3) {
+    $latest = @($startups | Sort-Object t | Select-Object -Last 1)[0]
+    $prev = @($startups | Where-Object { $_.t -lt $latest.t } | Sort-Object ms)
+    if ($prev.Count -ge 2) {
+      $p95 = $prev[[Math]::Ceiling(0.95 * $prev.Count) - 1].ms
+      if ($latest.ms -gt 3 * $p95) {
+        Write-Output ("warn  startup: latest {0} ms (v{1}) > 3x p95 {2} ms of {3} previous sample(s) - cold-start regression hint" -f $latest.ms, $latest.ver, $p95, $prev.Count)
+      } else {
+        Ok ("startup: latest {0} ms (v{1}) within 3x p95 {2} ms (n={3} prev)" -f $latest.ms, $latest.ver, $p95, $prev.Count)
+      }
+    } else {
+      Write-Output 'note  startup: too few ms= samples for the p95 check (needs >= 3)'
+    }
+  } else {
+    Write-Output 'note  startup: too few ms= samples for the p95 check (needs >= 3)'
+  }
 } else { Fail 'event log missing' }
 
 # ---- 2) watchdog: spawns must be >= 60 s apart ---------------------------
