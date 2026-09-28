@@ -170,6 +170,22 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
 - เวอร์ชันของแอปอ่านจาก VERSIONINFO ของ exe จริงผ่าน `effective_version()`
   — ห้าม hardcode ตัวเลขเทียบเอง; การตัดสิน "เวอร์ชันต่างกัน" ที่เชื่อถือได้
   คือ hash เท่านั้น (timestamp ของไฟล์ข้าม build อาจตรงกันเป๊ะ)
+- **เทอร์มินัล Git Bash + python.exe แบบ native มอง `/tmp` ไม่ตรงกัน** —
+  เขียนไฟล์ชั่วคราวไว้ที่ `/tmp/...` ใน Git Bash แล้วส่ง path เดียวกันให้
+  `python.exe` (native Windows) อ่าน = `FileNotFoundError` เสมอ เพราะ
+  `/tmp` เป็น mapping ของ MSYS เท่านั้น (สัญญาณ: curl ได้ HTTP 200
+  แต่ python หาไฟล์ไม่เจอ) วิธีที่ถูก: **pipe ข้อมูลตรง
+  `curl ... | python -c "... sys.stdin ..."` ไม่ผ่านไฟล์ชั่วคราว**
+  หรือถ้าจำเป็นต้องใช้ไฟล์ ให้เขียนลง path ที่ทั้งสองฝั่งเห็นตรงกัน
+  (relative path ใน repo)
+- **git identity หลุดหลัง Freebuff restart** — `git commit` โดน
+  "Author identity unknown ... Omit --global" อย่าไปแก้
+  `git config --global` (แตะ config ของเครื่องผู้ใช้โดยไม่จำเป็น)
+  ให้ commit แบบ inline ครั้งต่อครั้งแทน:
+  `git -c user.name="..." -c user.email="..." commit ...` โดยดึงค่าจาก
+  `git log -1 --format='%an <%ae>' <commit เดิม>` เพื่อให้ author
+  ตรงกับประวัติเดิมเป๊ะ
+
 
 ## บั๊กที่เคยเจอ (ต้องไม่กลับมา)
 
