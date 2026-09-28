@@ -28,8 +28,10 @@ TODO/FIXME แล้ว**ไม่มีค้าง** รายการนี�
   + watchdog.log + stability_report พร้อม test เฝ้า)
 - ~~stability gate ใน release.yml~~ ✅ เสร็จ (v1.25.10: non-blocking —
   อายุ release ก่อนหน้า < 7 วัน → ::warning:: hotfix ไม่ถูกบล็อก)
-- **dependabot รอบแรก** — พรุ่งนี้ขึ้นไปจะมี PR อัปเดต action versions
-  รีวิวและ merge ให้ CI ยังเขียว (ตารางรายเดือน ไม่รีบ)
+- ~~dependabot รอบแรก~~ ✅ เสร็จ (2026-09-28: merge squash ครบ 5 PR —
+  setup-python v7, gh-release v3, upload-artifact v7, github-script v9,
+  deploy-pages v5 — patch เป็น bump pin เท่านั้น CI บน main เขียวทุก job
+  รวม watchdog-e2e)
 
 ## P2 — โอกาส/ความสวยงาม
 
