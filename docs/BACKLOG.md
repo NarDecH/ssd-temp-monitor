@@ -14,9 +14,12 @@ TODO/FIXME แล้ว**ไม่มีค้าง** รายการนี�
   success ไม่มี issue ใหม่) และ `stability_report -Hours 24` ALL GREEN
   (event เดียวในหน้าต่างคือ mutex_suspect ของทีม debug เมื่อ 27 ก.ย.
   16:09-16:15 ซึ่งหลุดหน้าต่างเองหลัง ~16:15 ของวันที่ 28) —
-  ห้าม tag รุ่นใหม่ทับก่อนครบกำหนด เว้นแต่มีบั๊กจริง รัน
-  `tools\stability_report.ps1 -Hours 24` ทุกสัปดาห์ (หรือให้ Stability
-  workflow รายวันเป็นเสียงเตือน)
+  ห้าม tag รุ่นใหม่ทับก่อนครบกำหนด เว้นแต่มีบั๊กจริง (แผนรุ่นถัดไป +
+  checklist วันปล่อย: `docs/RELEASE_PLAN.md`) — ตั้งแต่ 2026-09-28
+  task "SSDTempMonitor Weekly Stability" รัน `tools\stability_report.ps1`
+  ให้ทุกจันทร์ 10:55 สรุปสะสมที่
+  `%LOCALAPPDATA%\SSDTempMonitor\weekly_stability_summary.txt`
+  (นอกจากนี้ Stability workflow รายวันยังเป็นเสียงเตือนฝั่ง GitHub)
 - **เก็บ startup_ms 1–2 สัปดาห์แล้ววิเคราะห์** — `python
   tools\startup_trend.py --days 14` (เพิ่มวันนี้) ตัวอย่างปัจจุบัน n=2
   (377, 236 ms) ยังสรุปไม่ได้ พอ n≥30 ต่อรุ่นค่อยตัดสินว่า cold-start
