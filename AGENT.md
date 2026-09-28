@@ -178,13 +178,25 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   `curl ... | python -c "... sys.stdin ..."` ไม่ผ่านไฟล์ชั่วคราว**
   หรือถ้าจำเป็นต้องใช้ไฟล์ ให้เขียนลง path ที่ทั้งสองฝั่งเห็นตรงกัน
   (relative path ใน repo)
+- **เรียก GitHub API หลาย call ติด ๆ กัน = อย่าใช้ curl ใน shell loop** —
+  DNS flake ถี่ขึ้นเรื่อย ๆ: call แรกผ่านแล้ว call ถัดไปโดน
+  `Could not resolve host: api.github.com` ทิ้งราว ๆ (loop for ต่อเนื่อง
+  พังเกลี้ยงทั้งชุดแต่ exit code อาจยัง 0) และ `urllib` ก็ read timeout
+  ได้เหมือนกัน วิธีที่ถูก: เขียนสคริปต์ python ชั่วคราว (เช่น
+  `_review_prs.py`) ที่ห่อทุก GET/PUT ด้วย retry + exponential backoff
+  (attempts ~6, delay เริ่ม 2s คูณ 2 จน cap 20s, timeout 20s ต่อ request)
+  จบงาน**ลบสคริปต์ทิ้งเสมอ** — และตรวจผลลัพธ์จากข้อมูลจริง ไม่ใช่ exit code
 - **git identity หลุดหลัง Freebuff restart** — `git commit` โดน
   "Author identity unknown ... Omit --global" อย่าไปแก้
   `git config --global` (แตะ config ของเครื่องผู้ใช้โดยไม่จำเป็น)
   ให้ commit แบบ inline ครั้งต่อครั้งแทน:
   `git -c user.name="..." -c user.email="..." commit ...` โดยดึงค่าจาก
   `git log -1 --format='%an <%ae>' <commit เดิม>` เพื่อให้ author
-  ตรงกับประวัติเดิมเป๊ะ
+  ตรงกับประวัติเดิมเป๊ะ · **ใช้กับทุก subcommand ที่สร้าง commit ไม่ใช่แค่
+  commit**: `git pull --rebase` (rebase replay commit ต้อง sign ใหม่ →
+  หยุดกลางทางพร้อม staged changes, แก้ต่อด้วย
+  `git -c ... rebase --continue` หรือ `git -c ... commit --no-edit`
+  แล้วค่อย continue), `merge`, `cherry-pick`
 
 
 ## บั๊กที่เคยเจอ (ต้องไม่กลับมา)
