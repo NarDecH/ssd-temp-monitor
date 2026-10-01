@@ -36,7 +36,7 @@ jobs:
             -e 's|href="README\.md"|href="./"|g' {} +
 
       - name: Setup Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
         with:
           enablement: true   # enable Pages on first run without manual setup
 
