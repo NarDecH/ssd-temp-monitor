@@ -106,6 +106,21 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
 - **รัน pytest ทุกครั้งที่แก้ logic** — `python -m pytest tests/ -v`
   (212 เคส รันได้โดยไม่ต้องมี admin/PowerShell/GUI; PowerShell ถูก
   monkeypatch ที่ `_run_powershell` เสมอ)
+- **เทสที่ตัดหน้าต่างด้วยวันนี้ ห้ามอัดวันที่ hard-code ใน fixture** —
+  `TestWeeklyReport._rows()` ฝังวันที่ "2026-09-17..23" ล็อกตาย เมื่อ
+  `build_weekly_report_html` ตัด cutoff ด้วย `today-7d` พอตก 1 ต.ค.
+  ข้อมูลทั้ง fixture ตกนอกหน้าต่างเป็นค่าว่าง → 2 เทสพังใน CI ทุกวันติด 6 วัน
+  (1-7 ต.ค. 2026 เปิด 6 issue `[stability]`) แก้น้อย-เกินจริง: fixture ต้อง
+  สร้างวันที่จาก `date.today() - timedelta(...)` เสมอ (คุ้มค่า commit 4807509)
+- **เทสที่วัดเวลาจริง (wall-clock) ต้องใช้เกณฑ์หลวม ๆ ไม่ใช่เก้อร่อนเข้าใกล้** —
+  `test_startup_ms_is_a_sane_integer` เคยกัปที่ `< 30000` มิลลิs เทียบกับเวลาจริง
+  ตั้งแต่ import โมดูล เทสที่ทำสเต็ปชุดเป็นเวลา 30+ วินาที (CI แท่น Windows 2025
+  ช้าใหม่) ทำให้ flake ทุกวัน (บันทึก 30716/30863 ms) แก้ 5be530b
+- **GitHub API จาก runner ต้องใส่ token ทุกครั้ง** — step
+  `Invoke-RestMethod /releases/latest` อนิจก้อย (unauth) บน IP แชร์ของ Azure
+  จะโดน rate-limit ตามสูตร 60 req/h/IP ราย ๆ ทำ step ตายแบบไม่มี output เลย
+  ทั้งที่ release จริงปกติ — ใส่ `Authorization = "Bearer ${{ github.token }}"
+  ทุก call ใน workflow (แก้ f861d91)
 - **เวอร์ชัน pre-release** — `_parse_version` เรียง `rc1 < rc2 < release`
   (มี 5 ชั้น: core + flag + rc number) ห้ามกลับไปตัด suffix แบบเดิม
   (ทำให้ช่องทาง pre-release ใช้ไม่ได้ — เคยเป็นบั๊กใน ≤1.13.x)
