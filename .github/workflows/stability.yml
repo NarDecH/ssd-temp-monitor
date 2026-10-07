@@ -38,8 +38,12 @@ jobs:
         id: release
         shell: pwsh
         run: |
-          $r = Invoke-RestMethod -Uri `
-            'https://api.github.com/repos/${{ github.repository }}/releases/latest'
+          # Authenticated request: from shared Azure runner IPs the
+          # unauthenticated 60 req/h/IP limit is routinely exhausted, and
+          # an IP-rate-limited Invoke-RestMethod throws -> the step dies
+          # with no output (broke this cron 2026-10-01..10 every day).
+          $r = Invoke-RestMethod -Headers @{ Authorization = "Bearer ${{ github.token }}" } `
+            -Uri 'https://api.github.com/repos/${{ github.repository }}/releases/latest'
           Write-Output "tag=$($r.tag_name) draft=$($r.draft) assets=$($r.assets.Count)"
           if ($r.draft) { Write-Output '::error::latest release is a draft'; exit 1 }
           if ($r.assets.Count -lt 5) {
