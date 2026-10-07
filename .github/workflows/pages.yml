@@ -41,7 +41,7 @@ jobs:
           enablement: true   # enable Pages on first run without manual setup
 
       - name: Upload site
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
