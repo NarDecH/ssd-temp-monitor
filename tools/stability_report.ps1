@@ -105,6 +105,21 @@ if (Test-Path $h24) {
     $p = $_.Split(',')
     if ($p.Count -ge 2 -and $p[0] -match '^\d+$') { [long]$p[0] }
   } | Sort-Object
+  if ($rows.Count -lt 2) {
+    # the app rewrites this file whole once a minute; a reader can hit the
+    # empty moment mid-rewrite (seen 2026-10-07 15:25). Retry briefly
+    # before declaring a FAIL - only a persistent blank is a real finding.
+    for ($retry = 1; $retry -le 4 -and $rows.Count -lt 2; $retry++) {
+      Start-Sleep -Milliseconds 500
+      $rows = Get-Content $h24 | ForEach-Object {
+        $p = $_.Split(',')
+        if ($p.Count -ge 2 -and $p[0] -match '^\d+$') { [long]$p[0] }
+      } | Sort-Object
+      if ($rows.Count -ge 2) {
+        Write-Output ("note  24h history: blank read (transient rewrite race) - retry #{0} found {1} row(s)" -f $retry, $rows.Count)
+      }
+    }
+  }
   if ($rows.Count -ge 2) {
     $gaps = 0
     for ($i = 1; $i -lt $rows.Count; $i++) {

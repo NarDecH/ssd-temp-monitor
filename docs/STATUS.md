@@ -1,4 +1,4 @@
-# สถานะโปรเจกต์ (อัปเดตล่าสุด: 2026-09-28)
+# สถานะโปรเจกต์ (อัปเดตล่าสุด: 2026-10-07)
 
 สรุปสั้นสำหรับ "กลับมาหลังห่างหายไปนาน" — รายละเอียดเชิงลึกอยู่ที่
 `docs/BACKLOG.md` (งานค้าง/ทิศทาง), `docs/RELEASE_PLAN.md` (แผนรุ่นถัดไป),
@@ -20,13 +20,22 @@
 | Task "SSDTempMonitor Weekly Stability" (เครื่องนี้) | ทุกจันทร์ 10:55 | append สรุปที่ `%LOCALAPPDATA%\SSDTempMonitor\weekly_stability_summary.txt` |
 | แอป + watchdog บนเครื่อง | ต่อเนื่อง | event log / watchdog.log — อ่านเองได้จาก docs/FAQ |
 
-## สุขภาพล่าสุด (2026-09-28)
+## สุขภาพล่าสุด (2026-10-07)
 
-- stability report 18-24 ชม.: ALL GREEN (mutex_suspect รายการสุดท้ายเป็น
-  ของทีม debug 27 ก.ย. 16:09-16:15 — ไม่ใช่อาการแอป)
-- update_check 21 ครั้ง/วัน ปกติ (fetch_failed = 403/DNS ภายนอก)
-- startup baseline ของ v1.25.10: n=5, avg 236 ms, p95 262 ms
-  (ตั้งเกณฑ์เตือนถดถอยที่ >3× p95 แล้วใน stability_report — warn-only)
+- stability report 24 ชม. + 168 ชม.: ALL GREEN (event log / watchdog / update
+  check สม่ำเสมอกว่า 8 ครั้ง/6 ชม. / 24h history 1440 แถวไม่มี gap > 5 นาที)
+- **บทเรียน 6 วันที่พังแล้วแก้ (2026-10-01 → 07)**: cron Stability failed
+  เพราะ fixture ของ `TestWeeklyReport._rows()` ฝังวันที่ hard-coded
+  (2026-09-17..23) เทียบกับ cutoff `today-7d` — พอข้าม 1 ต.ค. ข้อมูลจอ
+  fixture ทั้งหมดตกนอกหน้าต่าง → `build_weekly_report_html` ว่าง → 2 เทสพัง
+  ใน CI ทุกวัน แก้แล้ว fixture คำนวณวันแบบ NOW-relative → 401 passed บนเครื่อง
+  (พิสูจน์ workflow เขียวอีกชั้นด้วย dispatch หลัง push — ปิด 6 issue `[stability]`
+  ด้วยข้อความ root cause)
+- **บทเรียน 2: transient blank ของ 24h CSV** — แอปเขียนทับทั้งไฟล์ด้วย
+  `open(w)` ครั้ง/นาที มีหน้าต่าง ms ที่ไฟล์ว่าง (เจอจริง 15:25 รอบแรก).
+  `stability_report` เพิ่ม retry 1 s ก่อน FAIL เมื่อไฟล์ว่าง (จะพิสูจน์อีกครั้งรอบถัดไป)
+- startup baseline ยังน้อย: v1.25.10 n=5, avg 236 ms, p95 262 ms
+  (ต้อง n≥30 ต่อรุ่น — ประเมินว่า n≈30 (~ 3-4 วัน) ก่อนวันครบหน้าต่าง 26-27 ต.ค.)
 
 ## dependabot
 

@@ -2194,9 +2194,16 @@ class TestDailyHealth:
 # ---------------------------------------------------------------------------
 class TestWeeklyReport:
     def _rows(self):
+        """Dates must be NOW-relative: build_weekly_report_html cuts the
+        window against today, so hard-coded dates turn the fixture stale
+        once the calendar moves past them (broke the stability cron for
+        6 days straight in October 2026)."""
+        import datetime as _dt
         rows = []
+        today = _dt.date.today()
         for day in range(7):
-            rows.append({"date": f"2026-09-{17 + day}", "time": "12:00",
+            d = today - _dt.timedelta(days=6 - day)
+            rows.append({"date": d.isoformat(), "time": "12:00",
                          "model": "M1", "bus": "NVMe",
                          "temp_c": str(35 + day), "wear_pct": str(day),
                          "read_errors": "0", "uncorrected": "0"})
@@ -4257,3 +4264,14 @@ class TestStabilityReportStartupCheck:
         assert "stability_report.ps1" in src
         assert "Add-Content" in src
         assert "exit $exitCode" in src
+
+    def test_weekly_wrapper_default_hours_and_localappdata_only(self):
+        """The scheduled task must default to the full 7-day window and
+        write its cumulative summary ONLY under %LOCALAPPDATA% (the data
+        dir in %APPDATA% is the app's own; mixing them confuses tools
+        that read each one)."""
+        src = self._read("tools", "weekly_stability_check.ps1")
+        assert "[int]$Hours = 168" in src
+        # the one file write must target LOCALAPPDATA, never APPDATA
+        assert "Join-Path $env:LOCALAPPDATA" in src
+        assert "$env:APPDATA" not in src
