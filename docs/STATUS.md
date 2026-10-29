@@ -69,7 +69,8 @@
 ## สถานะ release (หน้าต่างครบแล้ว 29 ต.ค. — ปล่อยสัปดาห์แรก พ.ย. ตามแผน)
 
 - pre-flight ล่าสุด (วันนี้): cron success + ไม่มี issue ใหม่ ✅ / dependabot
-  ค้าง 0 ✅ / pytest 408 ✅ / startup n=5 ⏳ (ยังไม่ถึง 30 — เครื่องนี้
+  ค้าง 0 ✅ / **pytest 415** ✅ (+7 จากเมื่อเช้า: hard-kill 4 + wiring 3) /
+  startup n=5 ⏳ (ยังไม่ถึง 30 — เครื่องนี้
   รีสตาร์ต app ไม่บ่อย) / stability_report -Hours 168 = 2 finding ที่
   รู้สาเหตุและหมดอายุตามหน้าต่าง: (1) mutex_suspect 26 ต.ค. — app แก้แล้ว
   ไม่เขียน event ชนิดนี้กับ source-run holder อีก (~2 พ.ย. จึงออกนอกหน้าต่าง)
@@ -80,6 +81,29 @@
 - ตามแผน RELEASE_PLAN: **วันปล่อยเป้าหมายสัปดาห์แรก พ.ย.** (ห่างจากปลาย
   หน้าต่าง 2-3 วัน) — อย่า tag v1.25.11 ก่อน 168 ชม. เขียว + startup n เพิ่ม
 
+## งานล่าสุด (2026-10-29 ช่วงบ่าย)
+
+- **poll hang ปิดแล้วครบ**: `_run_powershell` เปลี่ยนเป็น `Popen` + เมื่อหมด
+  เวลา hard-kill ทั้ง process tree ด้วย `taskkill /F /T` — เพราะ CPython
+  issue #87512 (`run(timeout=)` บน Windows ยัง drain pipe รอบสองหลัง kill
+  ถ้า grandchild ค้างเปิด pipe ไว้ จะบล็อกต่อได้หลายนาที) เทสใหม่
+  `TestRunPowershellHardTimeout` วัดกับโปรเซสแขวนจริง: จบ < 15 วิ เสมอ
+- **tools/manual_selftest_watchdog_mutex.ps1 (ใหม่)** — สคริปต์ให้ผู้ใช้รัน
+  ทดสอบเองบนเครื่องตัวเองเวลา troubleshooting: 7 ซีนครบทุก path —
+  S1 fresh start (log INFO startup) / S2 duplicate ออกเงียบ exit 2 /
+  S3 จับ source-run holder ได้ / S4 ผู้ถือแปลกปลอม → log mutex_suspect
+  ที่ระบุชื่อ holder ก่อนออก exit 2 / S5 watchdog ไม่เขียน log เมื่อมี
+  instance มีชีวิต / S6 quit marker → "skip: quit marker" / S7 ว่างจริง →
+  spawn stub exe ทุกซีนทำงานใน isolated env (mutex/data dir/stub/plain)
+  **พิสูจน์แล้ว: 7/7 PASS จริงวันนี้ (รันจาก elevated PowerShell)**
+- watchdog.ps1 เพิ่ม hook 2 จุดรองรับ self-test: (1) `SSD_TEMP_WD_EXE` =
+  ชี้ stub exe (และปิด src-probe เมื่อใช้ stub) (2) เมื่อ
+  `SSD_TEMP_WD_DATA_DIR` ถูก set: หา watchdog_skip.flag **เฉพาะแค่ dir นั้น**
+  — แก้บั๊กเดิมที่ isolated ซีนไปชน marker ของ %APPDATA% เครื่องจริงแล้ว
+  skip ซะงัน
+- pytest: **415 passed** (+7 ตัวใหม่: hard-kill 4 + wiring manual script 3),
+  `py_compile` ผ่าน, PS-parser ทั้ง watchdog.ps1 และ manual selftest ผ่าน
+
 ## สถานะเดิม (2026-10-07)
 
-- python -m pytest = 401 passed แล้วตั้งแต่วันนั้น (ปัจจุบัน 408)
+- python -m pytest = 401 passed แล้วตั้งแต่วันนั้น (ปัจจุบัน 415)

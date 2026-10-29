@@ -24,12 +24,17 @@ $candidates = @(
     "C:\Program Files\SSD Temp Monitor\ssd_temp_monitor.exe"         # default install dir
 )
 $exe = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $exe) { $exe = $env:SSD_TEMP_WD_EXE }   # self-test hook: ManualTest
+                                                 # points the spawn at a stub
 if (-not $exe) { exit 0 }                        # not installed
 $procName = "ssd_temp_monitor"
 
 function Write-WdLog([string]$msg) {
     try {
-        $dir = Join-Path $env:APPDATA "SSDTempMonitor"
+        # manual/e2e hook: an isolated data dir keeps self-tests out of the
+        # real watchdog.log (same pattern as the app's SSD_TEMP_DATA_DIR)
+        $dir = $env:SSD_TEMP_WD_DATA_DIR
+        if (-not $dir) { $dir = Join-Path $env:APPDATA "SSDTempMonitor" }
         if (-not (Test-Path $dir)) {
             # fresh machine: the app creates this dir lazily on first run, but
             # the watchdog may want to log BEFORE that ever happened (CI,
@@ -65,11 +70,19 @@ if ($running) { exit 0 }                        # healthy - nothing to do
 # this log for a full day (seen 2026-10-28, since a pythonw instance
 # replaced the exe on this machine). A second live app is a second live
 # app - do not resurrect an already running one.
-$srcRunning = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-    Where-Object {
-        $_.Name -match '^(python|pythonw)' -and
-        $_.CommandLine -match 'ssd_temp_tray\.py'
-    }
+#
+# A stub exe from SSD_TEMP_WD_EXE means the caller is probing a controlled
+# environment in isolation - the production instance on the same machine
+# (different data dir AND mutex) must not collapse the scenario, so the
+# src probe is bypassed there.
+$srcRunning = $null
+if (-not $env:SSD_TEMP_WD_EXE) {
+    $srcRunning = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Name -match '^(python|pythonw)' -and
+            $_.CommandLine -match 'ssd_temp_tray\.py'
+        }
+}
 if ($srcRunning) { exit 0 }
 
 Write-WdLog "app not running - checking guards"
@@ -77,11 +90,20 @@ Write-WdLog "app not running - checking guards"
 # The app writes this marker when the user quits from the tray menu:
 # a deliberate exit is not a crash - do not resurrect. The marker is
 # removed again on the next successful app start.
+#
+# self-test isolation: when an explicit data dir is set (manual self-test,
+# CI-only use), the marker is looked up ONLY there - production paths must
+# never veto a controlled scenario (a real %APPDATA% marker on the same
+# machine silently turned the isolated S7 spawn test into a "skip").
 $appRoot = Split-Path -Parent $here
-$skipPaths = @(
-    (Join-Path $env:APPDATA "SSDTempMonitor\watchdog_skip.flag"),
-    (Join-Path $appRoot "portable_data\watchdog_skip.flag")
-)
+if ($env:SSD_TEMP_WD_DATA_DIR) {
+    $skipPaths = @((Join-Path $env:SSD_TEMP_WD_DATA_DIR "watchdog_skip.flag"))
+} else {
+    $skipPaths = @(
+        (Join-Path $env:APPDATA "SSDTempMonitor\watchdog_skip.flag"),
+        (Join-Path $appRoot "portable_data\watchdog_skip.flag")
+    )
+}
 foreach ($p in $skipPaths) {
     if (Test-Path $p) {
         Write-WdLog "skip: quit marker present ($p)"

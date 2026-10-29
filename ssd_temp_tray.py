@@ -1649,15 +1649,53 @@ PS_TEMPS = (
 )
 
 
-def _run_powershell(cmd):
+def _popen_hard_timeout(proc, timeout):
+    """communicate() with a timeout, then a HARD stop of the whole tree.
+
+    subprocess.run(timeout=...) is NOT bounded on Windows: after the
+    timeout kills the child it drains the pipes, and a child stuck inside
+    a kernel call (or a grandchild it spawned) keeps them open, so run()
+    blocks for minutes (seen 2026-10-29 09:40: one hung Get-CimInstance
+    inside read_temps stalled the poll loop AND the per-minute 24h
+    history rewrite - a false 24h-history FAIL). taskkill /F /T closes
+    every handle in the tree, so the drain finishes immediately.
+    Returns captured stdout (or "" on timeout/failure - _safe_temp and
+    the callers already treat an empty result as "no data").
+    """
     try:
-        return subprocess.run(
+        out, _ = proc.communicate(timeout=timeout)
+        return out or ""
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        if sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                capture_output=True, timeout=15,
+                creationflags=subprocess.CREATE_NO_WINDOW)
+        proc.kill()
+    except Exception:
+        pass
+    return ""
+
+
+def _run_powershell(cmd, timeout=30):
+    """Run a PowerShell snippet; stdout only, with a HARD timeout.
+
+    A hung shell can never stretch past ~timeout + kill seconds: on
+    expiry the whole process tree is taskkilled (_popen_hard_timeout)
+    instead of relying on the unbounded drain of subprocess.run.
+    Missing powershell (CI on Linux) or any spawn error returns "".
+    """
+    try:
+        proc = subprocess.Popen(
             ["powershell", "-NoProfile", "-NonInteractive", "-Command", cmd],
-            capture_output=True, text=True, timeout=30,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
             creationflags=subprocess.CREATE_NO_WINDOW,
-        ).stdout.strip()
+        )
     except Exception:
         return ""
+    return _popen_hard_timeout(proc, timeout).strip()
 
 
 def _safe_temp(raw):

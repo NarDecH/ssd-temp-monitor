@@ -479,6 +479,22 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   ต้อง dump หลักฐาน (watchdog.log tail) ลง job output เสมอ เพราะ artifact
   อาจ skip: `actions/upload-artifact` เข้าถึงได้เฉพาะไฟล์ใน workspace
   (log ใน %APPDATA% ต้อง Copy-Item เข้า workspace ก่อนอัปโหลด)
+- **`subprocess.run(timeout=)` บน Windows ไม่พอ — ต้อง hard-kill ตาม tree**
+  — CPython ที่หมด timeout จยัง drain pipe รอบสองหลังฆ่า (issue
+  #87512): ถ้า PowerShell ลูก/หลานตัวใด (WMI/Create ที่ spawn python ต่อ,
+  hung `Get-StorageReliabilityCounter`) ค้างเปิด stdio pipe ไว้
+  `run()` อาจบล็อกต่อได้หลายนาทีทั้งที่ timeout หมดไปแล้ว ตัวเรียก WS
+  ทุกตัวของแอปใช้ `Popen` + `taskkill /F /T` (แท็ก `/T` สำคัญ —
+  กรรมาชน) + enumerate ไดรนาหลัง kill; หลักฐาน: tests
+  `TestRunPowershellHardTimeout` วัดยูนิเวิร์ล-เรียล (hung `id at
+  `py` process) จบ < 15 วินาทีเสมอ
+- **เทอสรน watchdog/mutex ด้วยแอปจริงต้องรันจาก ELEVATED PowerShell** —
+  แอปไม่ใช้ admin จะถูก `relaunch_elevated()` → UAC แล้ว `sys.exit(0)`
+  การนัน holder ไม่เคยมีชีวิตเหลือให้ซิงเกิล-อินสแตนซ์ path อ้างอิง
+  ได้ (เจอจริงวันนี้: S2 exit=0, S3 SRC_HOLDER=False, "app2 did not
+  start" ทั้งที่ logic ถูกทั้งหมด) — tools/manual_selftest_watchdog_mutex.ps1
+  จึง preflight บังคับ elevation ไปเลย + UAC relaunch **ไม่ forward env**
+  พ่อรอแรกจยยก (แปลกดิจมิวมา: จชีวิตของคอมปอนทนก, เขียนไปแล้วใน main)
 
 ## สไตล์โค้ด
 

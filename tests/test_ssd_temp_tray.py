@@ -4370,3 +4370,133 @@ class TestStabilityReportWatchdogLeniency:
         assert "one-per-minute cadence" in head and "only warn" in head
         # the ok line reflects the new threshold, not the old 60 s
         assert "none tighter than" in src
+
+
+class TestRunPowershellHardTimeout:
+    """A hung PowerShell must never stall poll_loop: the timeout path
+    kills the WHOLE tree with taskkill /F /T (a stuck child keeps the
+    stdout pipe open, so subprocess.run's kill-then-drain blocked for
+    minutes - the 2026-10-29 09:40 stall that faked a 24h-history FAIL
+    by starving the per-minute history rewrite)."""
+
+    def test_timeout_hard_kills_tree(self, monkeypatch):
+        class FakeProc:
+            pid = 4242
+            killed = False
+
+            def communicate(self, timeout=None):
+                import subprocess as sp
+                raise sp.TimeoutExpired("powershell", timeout or 0)
+
+            def kill(self):
+                self.killed = True
+
+        fake = FakeProc()
+        recorded = {}
+
+        def fake_run(args, **kwargs):
+            recorded["args"] = args
+            return type("R", (), {"returncode": 0})()
+
+        monkeypatch.setattr(m.subprocess, "Popen", lambda *a, **k: fake)
+        monkeypatch.setattr(m.subprocess, "run", fake_run)
+        out = m._run_powershell("dummy", timeout=0.1)
+        assert out == ""
+        if sys.platform == "win32":
+            argl = list(recorded["args"])
+            assert argl[0] == "taskkill" and "/F" in argl and "/T" in argl
+            assert "4242" in argl
+        assert fake.killed is True
+
+    def test_clean_process_returns_stdout_and_does_not_kill(self, monkeypatch):
+        class FakeProc:
+            def communicate(self, timeout=None):
+                return "42", ""
+
+            def kill(self):
+                raise AssertionError("kill must not happen on success")
+
+        monkeypatch.setattr(m.subprocess, "Popen",
+                            lambda *a, **k: FakeProc())
+        assert m._run_powershell("dummy") == "42"
+
+    def test_spawn_error_returns_empty(self, monkeypatch):
+        def boom(*a, **k):
+            raise OSError("no powershell")
+
+        monkeypatch.setattr(m.subprocess, "Popen", boom)
+        assert m._run_powershell("dummy") == ""
+
+    @pytest.mark.skipif(sys.platform != "win32",
+                        reason="powershell only exists on Windows")
+    def test_real_hung_shell_stays_bounded(self):
+        start = time.monotonic()
+        out = m._run_powershell("Start-Sleep -Seconds 20", timeout=1)
+        elapsed = time.monotonic() - start
+        assert out == ""
+        assert elapsed < 15, "a hung shell must not stretch past timeout + kill overhead"
+
+
+class TestManualSelftestWiring:
+    """tools/manual_selftest_watchdog_mutex.ps1 (new 2026-10-29) must wire
+    every decision path a user can hit on a real machine: isolated env
+    (own mutex + data dir), duplicate-silent forensics, source-run
+    parity, and both watchdog skip and spawn paths, with a PASS/FAIL
+    line and a final verdict. The scenarios themselves are Windows-only
+    and side-effectful, so the suite asserts the wiring cheaply; the
+    script is the manual evidence when a user runs it."""
+
+    @staticmethod
+    def _read(*parts):
+        from pathlib import Path
+        return (Path(__file__).resolve().parents[1].joinpath(*parts)).read_text(
+            encoding="utf-8")
+
+    def test_isolated_universe_never_touches_production(self):
+        src = self._read("tools", "manual_selftest_watchdog_mutex.ps1")
+        assert "$env:SSD_TEMP_MUTEX_NAME" in src     # app env override
+        assert "$env:SSD_TEMP_DATA_DIR" in src       # app data-dir override
+        assert "$env:SSD_TEMP_WD_DATA_DIR" in src    # watchdog log override
+        assert "$env:SSD_TEMP_WD_EXE" in src         # stub-exe override
+        # never invoke the real task nor the real exe
+        assert "SSDTempMonitor Watchdog" not in src.split("troubleshooting:")[0] or \
+            "e2e_watchdog_test.ps1" in src
+
+    def test_covers_all_paths_and_verdict(self):
+        src = self._read("tools", "manual_selftest_watchdog_mutex.ps1")
+        for needle in ("S1 fresh-start", "S2 duplicate-silent",
+                       "S3 source-holder", "S4 foreign-holder",
+                       "S5 watchdog-noop", "S6 quit-marker",
+                       "S7 watchdog-spawns"):
+            assert needle in src, needle
+        assert "--duplicate-silent" in src          # silent duplicate path
+        assert "mutex_suspect" in src               # forensics asserted
+        assert "spawned app \\(pid" in src          # spawn decision asserted
+        assert "skip: quit marker" in src           # marker path asserted
+        assert "verdict:" in src                    # final summary exists
+        # PS 5.1 has no ternary - the script must not use one
+        assert '? "PASS"' not in src
+        # a Help switch exists so users can inspect usage blind
+        assert "[switch]$Help" in src and "exit 0" in src
+        # preflight requires elevation: a fresh non-admin start UAC-
+        # relaunches and exits 0, so no test instance stays alive
+        assert "ELEVATED PowerShell" in src and "IsInRole" in src
+
+    def test_watchdog_hooks_for_selftest(self):
+        src = self._read("tools", "watchdog.ps1")
+        exe_idx = src.index("$exe = $env:SSD_TEMP_WD_EXE")
+        bypass_idx = src.index("if (-not $env:SSD_TEMP_WD_EXE)")
+        srcprobe_idx = src.rindex("ssd_temp_tray")  # the probe is the last mention
+        log_idx = src.index("$env:SSD_TEMP_WD_DATA_DIR")
+        # stub override + probe bypass are set up BEFORE the src probe reads
+        assert exe_idx < bypass_idx
+        assert bypass_idx < srcprobe_idx
+        # the isolated data dir drives both the watchdog log and the
+        # skip-flag search, and when set the wd marker check must look
+        # ONLY there (production paths must never veto a scenario)
+        assert log_idx < src.index("watchdog_skip.flag")
+        assert src.count("SSD_TEMP_WD_DATA_DIR") >= 2
+        gate_idx = src.index("if ($env:SSD_TEMP_WD_DATA_DIR) {")
+        marker_idx = src.index("watchdog_skip.flag")
+        else_idx = src.index("} else {", gate_idx)
+        assert gate_idx < marker_idx < else_idx
