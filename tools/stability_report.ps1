@@ -91,7 +91,7 @@ if (Test-Path $wd) {
   if ($recent.Count -gt 1) {
     for ($i = 1; $i -lt $recent.Count; $i++) {
       if (($recent[$i] - $recent[$i - 1]).TotalSeconds -lt 60) {
-        Fail ("watchdog: spawn storm at {0} ({1:s} after previous)" -f $recent[$i], ($recent[$i] - $recent[$i - 1]).TotalSeconds)
+        Fail ("watchdog: spawn storm at {0} ({1:N0} s after previous)" -f $recent[$i].ToString('yyyy-MM-dd HH:mm:ss'), ($recent[$i] - $recent[$i - 1]).TotalSeconds)
       }
     }
   }

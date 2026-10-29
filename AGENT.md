@@ -121,6 +121,18 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   จะโดน rate-limit 60 req/h/IP บ่อยครั้ง step ตายแบบไม่มี output เลยทั้งที่
   release จริงปกติ — ใส่ `Authorization = "Bearer ${{ github.token }}"`
   ทุก call ใน workflow (commit f861d91)
+- **watchdog ต้องรู้จัก run-from-source ไม่งั้น spawn storm ต่อเนื่อง** —
+  probe `Get-Process ssd_temp_monitor` มองไม่เห็น `pythonw ssd_temp_tray.py`
+  บนเครื่อง dev → ตัดสินว่า app ตายและ spawn exe ใหม่ทุกนาที ทุก duplicate
+  ชน mutex ออกเงียบ (exit 2) → storm ต่อเนื่องเต็มวันและทำ stability_report
+  -Hours 168 พังไปอีกหลายวันหลังแก้ (เจอจริง 28-29 ต.ค.) — แก้เป็นเช็ค
+  `Win32_Process` ที่ Name เป็น python* และ cmdline มี ssd_temp_tray.py
+  ก่อนตัดสิน "app not running": ตัวที่สองที่รันอยู่ก็คือ app รันอยู่ ห้าม
+  ฟื้นซ้ำ (แก้ 2026-10-29)
+- **`-f` ของ PowerShell ห้ามใช้ TimeSpan specifier กับค่า double** —
+  `{1:s}` กับ `.TotalSeconds` โยน FormatError ทันที ทำให้ Fail() ไม่บันทึก
+  finding เพราะความพังเกิดตอนสร้างข้อความก่อนเข้าฟังก์ชัน — ใช้ `{1:N0}`
+  หรือ `{1:F0}` สำหรับเลขวินาที (แก้ stability_report.ps1 วันนี้)
 - **เวอร์ชัน pre-release** — `_parse_version` เรียง `rc1 < rc2 < release`
   (มี 5 ชั้น: core + flag + rc number) ห้ามกลับไปตัด suffix แบบเดิม
   (ทำให้ช่องทาง pre-release ใช้ไม่ได้ — เคยเป็นบั๊กใน ≤1.13.x)

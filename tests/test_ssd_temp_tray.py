@@ -3244,6 +3244,18 @@ class TestInstallerWatchdogWiring:
         assert "ssd_temp_monitor.exe" in src
         assert "C:\\Program Files\\SSD Temp Monitor" in src
 
+    def test_watchdog_treats_python_source_run_as_running(self):
+        """A run-from-repo instance appears as python/pythonw with
+        ssd_temp_tray.py on its command line, not as the exe process name.
+        If the probe misses it the watchdog respawned the exe every minute
+        while every duplicate hit the single-instance mutex and exited
+        quietly - a permanent spawn storm (2026-10-28 v1.25.10-era bug)."""
+        src = self._read("tools", "watchdog.ps1")
+        probe = src.index("ssd_temp_tray")
+        exit_guard = src.index("if ($srcRunning) { exit 0 }")            # the guard
+        log_or_spawn = src.index("Write-WdLog \"app not running")         # next decision stage
+        assert probe < exit_guard < log_or_spawn < src.index("Invoke-CimMethod")
+
     def test_watchdog_spawns_app_outside_task_job(self):
         """The watchdog runs inside the scheduled task's job object: an app
         started with Start-Process joins that job, the task stays 'Running'

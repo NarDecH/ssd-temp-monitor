@@ -1,4 +1,4 @@
-# สถานะโปรเจกต์ (อัปเดตล่าสุด: 2026-10-07)
+# สถานะโปรเจกต์ (อัปเดตล่าสุด: 2026-10-29)
 
 สรุปสั้นสำหรับ "กลับมาหลังห่างหายไปนาน" — รายละเอียดเชิงลึกอยู่ที่
 `docs/BACKLOG.md` (งานค้าง/ทิศทาง), `docs/RELEASE_PLAN.md` (แผนรุ่นถัดไป),
@@ -20,10 +20,17 @@
 | Task "SSDTempMonitor Weekly Stability" (เครื่องนี้) | ทุกจันทร์ 10:55 | append สรุปที่ `%LOCALAPPDATA%\SSDTempMonitor\weekly_stability_summary.txt` |
 | แอป + watchdog บนเครื่อง | ต่อเนื่อง | event log / watchdog.log — อ่านเองได้จาก docs/FAQ |
 
-## สุขภาพล่าสุด (2026-10-07)
+## สุขภาพล่าสุด (2026-10-29)
 
-- stability report 24 ชม. + 168 ชม.: ALL GREEN (event log / watchdog / update
-  check สม่ำเสมอกว่า 8 ครั้ง/6 ชม. / 24h history 1440 แถวไม่มี gap > 5 นาที)
+- cron Stability เขียวต่อเนื่องทุกวันพังตั้งแต่ 17 ต.ค. + dependabot รอบ 2
+  (4 PR) แล้ว rerun-พิสูจน์ว่า installer-test ตอน merge #8 เป็น infra flake
+  ไม่ใช่ regression — issue #16, #17 ปิดแล้วเพราะ stale
+- **watchdog spawn storm แก้แล้ว (วันนี้)**: pythonw ที่รัน ssd_temp_tray.py
+  หลอก "app not running" ให้ watchdog spawn exe ทุกนาที 28-29 ต.ค. แล้ว exe
+  ตัวใหม่ชน mutex ออกเงียบ; แก้ watchdog.ps1 ให้ถือว่า run-from-source เป็น
+  "app รันอยู่" + อัปเดต copy ใน install dir แล้ว — log เงียบตั้งแต่ 09:26 ปลุก
+- บั๊ก secondary ของ `stability_report.ps1` (format `{1:s}` บน double)
+  แก้แล้ว — ตอนนี้ report ชี้ finding จริงได้ถูกต้อง
 - **บทเรียน 6 วันที่พังแล้วแก้ (2026-10-01 → 07)**: cron Stability failed
   เพราะ fixture ของ `TestWeeklyReport._rows()` ฝังวันที่ hard-coded
   (2026-09-17..23) เทียบกับ cutoff `today-7d` — พอข้าม 1 ต.ค. ข้อมูลจอ
@@ -59,11 +66,17 @@
 | v1.25.9 | 2026-09-27 | FAQ อ่าน event log เอง |
 | v1.25.8 | 2026-09-27 | จุดเริ่มช่วงเก็บเสถียรภาพ (1.25.2→1.25.9 ในวันเดียว) |
 
-## สถานะ release (วันที่ 10 ของหน้าต่าง 30 วัน — 2026-10-07)
+## สถานะ release (หน้าต่างครบแล้ว 29 ต.ค. — ปล่อยสัปดาห์แรก พ.ย. ตามแผน)
 
-- pre-flight ของ v1.25.11 ยัง **ไม่ครบ** — ข้อที่พร้อม: pytest 401 ✅;
-  startup_trend n=5 ⏳ (ต้อง ≥30 ต่อรุ่น, คาดถึงวันครบหน้าต่าง 26-27 ต.ค.)
-- cron Stability เขียวแล้วหลังแก้ 3 root cause (48c223f / f861d91 /
-  5be530b) — รอบอัตโนมัติถัดไป 04:00 พรุ่งนี้ต้องยังเขียว
-- dependabot ข้อค้าง = 0 (รอบ 2: 4/4 merge วันนี้) ✅
-- ตามแผนปล่อย **สัปดาห์แรก พ.ย.** — ไม่มี hotfix ให้คิดเลยวันนี้
+- pre-flight ล่าสุด (วันนี้): cron success + ไม่มี issue ใหม่ ✅ / dependabot
+  ค้าง 0 ✅ / pytest 402 ✅ / startup n=5 ⏳ (ยังไม่ถึง 30 — คอขวดคือเครื่องนี้
+  รีสตาร์ต app ไม่บ่อย ไม่มีวันนี้จะถึง 30) / stability_report -Hours 168 ⏳
+  — watchdog storm 28-29 ต.ค. ยังค้างในหน้าต่าง จะหมดอายุ **ประมาณ 1-4 พ.ย.**
+  ก่อนข้อ 168 ชม. จะเขียวจริง
+- issue ที่ cron เปิดค้าง: #16, #17 ปิดหมดแล้ว (สรุปตอนนี้ข้อค้าง = 0)
+- ตามแผน RELEASE_PLAN: **วันปล่อยเป้าหมายสัปดาห์แรก พ.ย.** (ห่างจากปลาย
+  หน้าต่าง 2-3 วัน) — อย่า tag v1.25.11 ก่อน 168 ชม. เขียว + startup n เพิ่ม
+
+## สถานะเดิม (2026-10-07)
+
+- python -m pytest = 401 passed แล้วตั้งแต่วันนั้น (ปัจจุบัน 402)

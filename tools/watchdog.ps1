@@ -56,6 +56,22 @@ function Write-WdLog([string]$msg) {
 
 $running = Get-Process -Name $procName -ErrorAction SilentlyContinue
 if ($running) { exit 0 }                        # healthy - nothing to do
+
+# A run-from-repo instance (developer machine, e2e test) shows up as
+# python/pythonw with ssd_temp_tray.py on the command line - never as the
+# exe process name the probe above knows. Treating it as "dead" made the
+# watchdog respawn the exe every minute; every duplicate then hit the
+# single-instance mutex and quietly exited, leaving a spawn per minute in
+# this log for a full day (seen 2026-10-28, since a pythonw instance
+# replaced the exe on this machine). A second live app is a second live
+# app - do not resurrect an already running one.
+$srcRunning = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object {
+        $_.Name -match '^(python|pythonw)' -and
+        $_.CommandLine -match 'ssd_temp_tray\.py'
+    }
+if ($srcRunning) { exit 0 }
+
 Write-WdLog "app not running - checking guards"
 
 # The app writes this marker when the user quits from the tray menu:
