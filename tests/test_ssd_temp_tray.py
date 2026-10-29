@@ -3781,6 +3781,50 @@ class TestForeignMutexSelfCheck:
             m.log_foreign_mutex_holder()
         assert "mutex_suspect" not in caplog.text
 
+    def test_source_run_holder_is_normal(self, monkeypatch, caplog):
+        """A python/pythonw holder running ssd_temp_tray.py is a legitimate
+        app instance (dev machine) - the duplicate start must log NO
+        mutex_suspect, else stability_report FAILs on a healthy machine
+        (2026-10-26 event)."""
+        def taken(*a, **k):
+            ctypes.set_last_error(183)
+            return 1234
+
+        monkeypatch.setattr(m._kernel32, "CreateMutexW", taken)
+        monkeypatch.setattr(m, "_app_process_count", lambda *a, **k: 0)
+        monkeypatch.setattr(m, "_source_holder_running", lambda: True)
+        with caplog.at_level(logging.INFO, logger="ssd_temp_monitor"):
+            m.log_foreign_mutex_holder()
+        assert "mutex_suspect" not in caplog.text
+
+    def test_source_holder_probe_skips_self_matches_by_cmdline(self, monkeypatch):
+        lines = [
+            "4213|pythonw3.14t.exe C:\\_Project\\ssd_temp_monitor\\ssd_temp_tray.py",
+            f"{os.getpid()}|python -m pytest tests/",
+            "999|python other_tool.py",
+        ]
+        monkeypatch.setattr(m, "_run_powershell", lambda cmd: "\n".join(lines))
+        assert m._source_holder_running() is True        # pid 4213 matches
+        monkeypatch.setattr(m, "_run_powershell",
+                            lambda cmd: "\n".join(lines[1:]))
+        assert m._source_holder_running() is False       # self + unrelated
+
+    def test_source_holder_probe_fails_open_as_false(self, monkeypatch):
+        monkeypatch.setattr(m, "_run_powershell", lambda cmd: "")
+        assert m._source_holder_running() is False
+
+    def test_source_holder_probe_disabled_in_test_env(self, monkeypatch):
+        """With a test mutex/env override the probe must stay False even if
+        a real source-run instance lives on the machine - it holds a
+        different mutex universe and must never satisfy the shortcut."""
+        monkeypatch.setenv("SSD_TEMP_MUTEX_NAME", "test-mutex-e2e")
+        monkeypatch.setattr(m, "_run_powershell",
+                            lambda cmd: "4213|pythonw3.14t.exe ssd_temp_tray.py")
+        assert m._source_holder_running() is False
+        monkeypatch.delenv("SSD_TEMP_MUTEX_NAME")
+        monkeypatch.setenv("SSD_TEMP_DATA_DIR", "C:\\tmp\\e2e-data")
+        assert m._source_holder_running() is False
+
     def test_app_process_count_excludes_self_and_is_quiet(self):
         import inspect
         src = inspect.getsource(m._app_process_count)
@@ -4292,3 +4336,37 @@ class TestStabilityReportStartupCheck:
         # the one file write must target LOCALAPPDATA, never APPDATA
         assert "Join-Path $env:LOCALAPPDATA" in src
         assert "$env:APPDATA" not in src
+
+
+class TestStabilityReportWatchdogLeniency:
+    """Spawns 50-59 s apart are the scheduled task's own one-per-minute
+    cadence: each probe usually loses the single-instance mutex and exits
+    via --duplicate-silent (watchdog source-run blind spot, 2026-10-28/29).
+    Classify those as warn - the reliability verdict must not flip - and
+    keep FAIL only for a tight gap (< 50 s, multiple spawns in one tick)."""
+
+    @staticmethod
+    def _read(*parts):
+        from pathlib import Path
+        return (Path(__file__).resolve().parents[1].joinpath(*parts)).read_text(
+            encoding="utf-8")
+
+    def test_cadence_gap_warns_tight_gap_fails(self):
+        block = self._read("tools", "stability_report.ps1").split(
+            "---- 2) watchdog")[1].split("# ---- 4)")[0]
+        tight = block.index("-lt $cadenceFloor")
+        fail_idx = block.index("Fail (")
+        warn_idx = block.index("Warn (")
+        assert tight < fail_idx < warn_idx
+        assert "elseif ($gap -lt 60)" in block
+        assert "cadence spawn at" in block[warn_idx:block.index("}", warn_idx)]
+
+    def test_warn_never_counts_as_fail_and_is_documented(self):
+        src = self._read("tools", "stability_report.ps1")
+        warn_fn = src[src.index("function Warn($msg)"):]
+        warn_fn = warn_fn[:warn_fn.index("\n")]
+        assert "$script:fail" not in warn_fn        # warn never touches fail
+        head = src.split("param(")[0]
+        assert "one-per-minute cadence" in head and "only warn" in head
+        # the ok line reflects the new threshold, not the old 60 s
+        assert "none tighter than" in src

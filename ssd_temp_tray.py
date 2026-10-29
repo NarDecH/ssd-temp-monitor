@@ -1432,6 +1432,40 @@ def _app_process_count(marker: str = "ssd_temp_monitor.exe") -> int:
         return 0
 
 
+def _source_holder_running() -> bool:
+    """True when some OTHER python process runs the app from source.
+
+    A run-from-repo holder is legitimate: the process-name probe only
+    knows the installed exe, so without this check every duplicate start
+    on a dev machine logged ``mutex_suspect`` forever while nothing was
+    actually wrong (the 2026-10-28 blind spot also hit
+    tools/watchdog.ps1 the same way, mirrored fix). This instance's own
+    command line also mentions ssd_temp_tray.py, so it is excluded by
+    PID - the probe may only report the OTHER holder.
+    """
+    if os.environ.get("SSD_TEMP_MUTEX_NAME") or os.environ.get("SSD_TEMP_DATA_DIR"):
+        # test/CI: a concurrently running REAL app lives in a different
+        # mutex universe - it can never be "the holder" (same rule as the
+        # count_marker shortcut in log_foreign_mutex_holder)
+        return False
+    try:
+        out = _run_powershell(
+            "Get-CimInstance Win32_Process -Filter \"Name like '%python%'\" "
+            "-ErrorAction SilentlyContinue | "
+            "ForEach-Object { \"{0}|{1}\" -f $_.ProcessId, $_.CommandLine }")
+        for ln in out.splitlines():
+            pid, sep, cmd = ln.partition("|")
+            if not sep or not cmd.strip() or not pid.strip().isdigit():
+                continue
+            if int(pid) == os.getpid():
+                continue                       # this duplicate - by design
+            if "ssd_temp_tray.py" in cmd:
+                return True
+    except Exception:
+        pass
+    return False
+
+
 def log_foreign_mutex_holder() -> None:
     """Diagnose the invisible 'already running' culprit and log it.
 
@@ -1453,8 +1487,8 @@ def log_foreign_mutex_holder() -> None:
             # 'a real instance holds it' shortcut for a test mutex
             count_marker = os.environ.get("SSD_TEMP_COUNT_MARKER",
                                           "ssd_temp_monitor.exe")
-            if _app_process_count(count_marker) > 0:
-                return  # a real instance holds it - normal
+            if _app_process_count(count_marker) > 0 or _source_holder_running():
+                return  # a real instance (exe or source run) holds it - normal
             procs = []
             try:
                 out = subprocess.run(

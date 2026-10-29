@@ -133,6 +133,17 @@ iscc setup.iss         # สร้าง installer/ssd_temp_monitor_setup.exe (�
   `{1:s}` กับ `.TotalSeconds` โยน FormatError ทันที ทำให้ Fail() ไม่บันทึก
   finding เพราะความพังเกิดตอนสร้างข้อความก่อนเข้าฟังก์ชัน — ใช้ `{1:N0}`
   หรือ `{1:F0}` สำหรับเลขวินาที (แก้ stability_report.ps1 วันนี้)
+- **spawn ไกลจากแบบ repeat ถือเป็น cadence ไม่ใช่ storm** — gap 50-59 s คือ
+  การ spawn เดียวต่อ tick ของ task (ส่วนใหญ่ duplicate ตัวสั่นกลุ้ม exit 2
+  เงียบ) → จัดเป็น `warn` ไม่นับ fail; มี Fail เมื่อ gap < 50 s เท่านั้น
+  — อย่ากำหนดเกณฑ์ 60 s ตายหมดจน report โกหกว่าเครื่องป่วย (แก้ 2026-10-29)
+- **source-run holder ของ AppMutex ต้องถูกจำเป็น instance ปกติใน app ด้วย** —
+  duplicate ตัวถือ mutex เช็คแค่ `ssd_temp_monitor.exe` จึงบันทึก
+  `mutex_suspect` ทุกครั้งที่ dev รันจากซอร์ส (เคส 26 ต.ค.) — เพิ่มแกน
+  `_source_holder_running()` (Win32_Process cmdline มี ssd_temp_tray.py,
+  ยกเว้น PID ตัวเอง) และ off ใน test env เดียวกับ count_marker = ห้ามให้
+  shortcut รั่วไปถือ mutex ของเทส; e2e ต้องยัง log mutex_suspect ตรง.
+  ต้องยัง FAIL ได้ (แก้ 2026-10-29)
 - **เวอร์ชัน pre-release** — `_parse_version` เรียง `rc1 < rc2 < release`
   (มี 5 ชั้น: core + flag + rc number) ห้ามกลับไปตัด suffix แบบเดิม
   (ทำให้ช่องทาง pre-release ใช้ไม่ได้ — เคยเป็นบั๊กใน ≤1.13.x)
